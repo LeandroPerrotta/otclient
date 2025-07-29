@@ -232,16 +232,24 @@ set(framework_INCLUDE_DIRS ${framework_INCLUDE_DIRS}
     ${framework_INCLUDE_DIRS}
 )
 
-find_package(OpenSSL QUIET)
-
-if(NOT OPENSSL_FOUND)
-    find_package(GMP REQUIRED)
-    set(framework_LIBRARIES ${framework_LIBRARIES} ${GMP_LIBRARY})
-    set(framework_INCLUDE_DIRS ${framework_INCLUDE_DIRS} ${GMP_INCLUDE_DIR})
-    set(framework_DEFINITIONS ${framework_DEFINITIONS} -DUSE_GMP)
+# Force dynamic linking to avoid static library ZSTD issues
+if(BUILD_STATIC_LIBRARY)
+    set(CMAKE_FIND_LIBRARY_SUFFIXES ".a")
 else()
-    set(framework_LIBRARIES ${framework_LIBRARIES} ${OPENSSL_LIBRARIES})
+    set(CMAKE_FIND_LIBRARY_SUFFIXES ".so")
+endif()
+
+find_package(OpenSSL REQUIRED)
+
+# Explicitly use dynamic OpenSSL libraries to avoid ZSTD issues
+set(OPENSSL_SSL_LIBRARY "/usr/lib/x86_64-linux-gnu/libssl.so")
+set(OPENSSL_CRYPTO_LIBRARY "/usr/lib/x86_64-linux-gnu/libcrypto.so")
+
+if(EXISTS ${OPENSSL_SSL_LIBRARY} AND EXISTS ${OPENSSL_CRYPTO_LIBRARY})
+    set(framework_LIBRARIES ${framework_LIBRARIES} ${OPENSSL_SSL_LIBRARY} ${OPENSSL_CRYPTO_LIBRARY})
     set(framework_INCLUDE_DIRS ${framework_INCLUDE_DIRS} ${OPENSSL_INCLUDE_DIR})
+else()
+    message(FATAL_ERROR "Could not find OpenSSL dynamic libraries at ${OPENSSL_SSL_LIBRARY} and ${OPENSSL_CRYPTO_LIBRARY}")
 endif()
 
 if(CMAKE_BUILD_TYPE STREQUAL "Debug" OR CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")

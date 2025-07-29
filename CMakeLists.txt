@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.1)
+cmake_minimum_required(VERSION 3.16)
 project(otclient)
 
 set(VERSION "1.0.0")
@@ -8,6 +8,7 @@ option(FRAMEWORK_GRAPHICS "Use GRAPHICS " ON)
 option(FRAMEWORK_XML "Use XML " ON)
 option(FRAMEWORK_NET "Use NET " ON)
 option(FRAMEWORK_SQL "Use SQL" OFF)
+option(BUILD_STATIC_LIBRARY "Build using static libraries" OFF)
 
 include(src/framework/CMakeLists.txt)
 include(src/client/CMakeLists.txt)

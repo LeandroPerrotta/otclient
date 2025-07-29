@@ -270,9 +270,9 @@ void Crypt::rsaSetPrivateKey(const std::string& p, const std::string& q, const s
     mpz_mul(m_n, m_p, m_q);
 #else
 #if OPENSSL_VERSION_NUMBER < 0x10100005L
-    BN_dec2bn(&m_rsa->p, p.c_str());
-    BN_dec2bn(&m_rsa->q, q.c_str());
-    BN_dec2bn(&m_rsa->d, d.c_str());
+    BN_dec2bn(&m_rsa->p, p);
+    BN_dec2bn(&m_rsa->q, q);
+    BN_dec2bn(&m_rsa->d, d);
     // clear rsa cache
     if(m_rsa->_method_mod_p) {
         BN_MONT_CTX_free(m_rsa->_method_mod_p);
