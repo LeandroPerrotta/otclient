@@ -1,0 +1,9 @@
+MainWindow
+  id: webViewDemoWindow
+  !text: tr('WebView Demo')
+  size: 600 400
+  @onEscape: modules.client_webviewdemo.toggle()
+
+  UICEFWebView
+    id: demoWebView
+    anchors.fill: parent
