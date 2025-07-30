@@ -26,8 +26,12 @@ normally be displayed by the browser.
 ### Pending
 
 - [ ] Keyboard interaction with the component
+- [ ] Touchscreen interaction with the component
 - [ ] Implementation (bridge) of all available callbacks/methods in Lua also for JavaScript
-- [ ] Windows builds
+- [ ] Developer tools integration (F12 debugger)
+- [ ] Performance optimization (texture caching, frame rate control)
+- [ ] Code readibility (clean-code geeks happy)
+- [ ] Windows builds (vcpkg probably)
 
 ### What is OTClient?
 
