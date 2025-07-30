@@ -1,0 +1,9 @@
+Module
+  name: client_webviewdemo
+  description: Demonstration of UICEFWebView
+  author: Leandro Perrotta
+  website: https://github.com/edubart/otclient
+  sandboxed: true
+  scripts: [ webviewdemo ]
+  @onLoad: init()
+  @onUnload: terminate()

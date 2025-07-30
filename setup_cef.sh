@@ -59,44 +59,44 @@ echo ""
 
 # Check if CEF runtime is ready
 if [ -d "$CEF_RUNTIME_DIR" ] && [ -f "$CEF_RUNTIME_DIR/libcef.so" ] && [ -f "$CEF_RUNTIME_DIR/libcef_dll_wrapper.a" ]; then
-    echo "✅ CEF runtime already exists and is ready"
+    echo "[OK] CEF runtime already exists and is ready"
     echo "   Location: $CEF_RUNTIME_DIR"
     echo "   Libraries: $CEF_RUNTIME_DIR/libcef.so, $CEF_RUNTIME_DIR/libcef_dll_wrapper.a"
     
     # Always copy to local cef/ for distribution
-    echo "📋 Copying runtime files to ./cef/ for distribution..."
+    echo "[INFO] Copying runtime files to ./cef/ for distribution..."
     mkdir -p "./cef"
     cp "$CEF_RUNTIME_DIR"/* "./cef/" 2>/dev/null || true
     if [ -d "$CEF_RUNTIME_DIR/locales" ]; then
         cp -r "$CEF_RUNTIME_DIR/locales" "./cef/"
-        echo "✅ Locales directory copied to ./cef/"
+        echo "[OK] Locales directory copied to ./cef/"
     fi
-    echo "✅ Distribution files ready in ./cef/"
+    echo "[OK] Distribution files ready in ./cef/"
     
     exit 0
 fi
 
 # Check for required tools
 if ! command -v wget &> /dev/null; then
-    echo "❌ Error: wget is required but not installed"
+    echo "[ERROR] wget is required but not installed"
     echo "   Please install wget: sudo apt install wget"
     exit 1
 fi
 
 if ! command -v tar &> /dev/null; then
-    echo "❌ Error: tar is required but not installed"
+    echo "[ERROR] tar is required but not installed"
     echo "   Please install tar: sudo apt install tar"
     exit 1
 fi
 
 if ! command -v cmake &> /dev/null; then
-    echo "❌ Error: cmake is required but not installed"
+    echo "[ERROR] cmake is required but not installed"
     echo "   Please install cmake: sudo apt install cmake"
     exit 1
 fi
 
 if ! command -v make &> /dev/null; then
-    echo "❌ Error: make is required but not installed"
+    echo "[ERROR] make is required but not installed"
     echo "   Please install make: sudo apt install make"
     exit 1
 fi
@@ -104,7 +104,7 @@ fi
 # Check permissions for global installation
 if [ "$INSTALL_MODE" = "global" ]; then
     if [ "$EUID" -ne 0 ]; then
-        echo "❌ Error: Global installation requires sudo privileges"
+        echo "[ERROR] Global installation requires sudo privileges"
         echo "   Please run: sudo $0 --install"
         exit 1
     fi
@@ -112,20 +112,20 @@ fi
 
 # Download CEF if not exists
 if [ ! -f "$CEF_ARCHIVE" ]; then
-    echo "📥 Downloading CEF to /tmp (this may take a few minutes)..."
+    echo "[INFO] Downloading CEF to /tmp (this may take a few minutes)..."
     wget --progress=bar:force "$CEF_URL" -O "$CEF_ARCHIVE"
     
     if [ ! -f "$CEF_ARCHIVE" ]; then
-        echo "❌ Error: Failed to download CEF"
+        echo "[ERROR] Failed to download CEF"
         exit 1
     fi
-    echo "✅ CEF downloaded successfully"
+    echo "[OK] CEF downloaded successfully"
 else
-    echo "✅ CEF archive already exists in /tmp"
+    echo "[OK] CEF archive already exists in /tmp"
 fi
 
 # Extract CEF to runtime directory
-echo "📦 Extracting CEF to runtime directory..."
+echo "[INFO] Extracting CEF to runtime directory..."
 mkdir -p "$CEF_RUNTIME_DIR"
 cd "$CEF_RUNTIME_DIR"
 tar -xf "$CEF_ARCHIVE"
@@ -133,24 +133,24 @@ tar -xf "$CEF_ARCHIVE"
 # Find the extracted directory
 CEF_EXTRACTED_DIR=$(find . -maxdepth 1 -type d -name "cef_binary_*" | head -1)
 if [ -z "$CEF_EXTRACTED_DIR" ]; then
-    echo "❌ Error: Failed to extract CEF"
+    echo "[ERROR] Failed to extract CEF"
     exit 1
 fi
 
 # Move contents to runtime directory
-echo "📋 Moving CEF files to runtime directory..."
+echo "[INFO] Moving CEF files to runtime directory..."
 mv "$CEF_EXTRACTED_DIR"/* .
 rmdir "$CEF_EXTRACTED_DIR"
 
-echo "🧹 Cleaning up download..."
+echo "[INFO] Cleaning up download..."
 rm -f "$CEF_ARCHIVE"
-echo "✅ CEF extracted to runtime directory"
+echo "[OK] CEF extracted to runtime directory"
 
 cd - > /dev/null
 
 # Compile CEF wrapper if not exists
 if [ ! -f "$CEF_RUNTIME_DIR/Release/libcef_dll_wrapper.a" ]; then
-    echo "🔨 Compiling CEF wrapper library..."
+    echo "[INFO] Compiling CEF wrapper library..."
     
     # Go to CEF directory
     cd "$CEF_RUNTIME_DIR"
@@ -165,87 +165,87 @@ if [ ! -f "$CEF_RUNTIME_DIR/Release/libcef_dll_wrapper.a" ]; then
         make libcef_dll_wrapper -j4
         
         if [ $? -eq 0 ]; then
-            echo "✅ CEF wrapper compiled successfully"
+            echo "[OK] CEF wrapper compiled successfully"
             
             # Move wrapper to Release directory if it was created elsewhere
             if [ -f "libcef_dll_wrapper/libcef_dll_wrapper.a" ]; then
                 echo "   Moving wrapper to Release directory..."
                 cp libcef_dll_wrapper/libcef_dll_wrapper.a Release/
-                echo "✅ Wrapper moved to Release directory"
+                echo "[OK] Wrapper moved to Release directory"
             fi
         else
-            echo "❌ Error: Failed to compile CEF wrapper"
+            echo "[ERROR] Failed to compile CEF wrapper"
             exit 1
         fi
     else
-        echo "❌ Error: Failed to configure CEF"
+        echo "[ERROR] Failed to configure CEF"
         exit 1
     fi
     
     cd - > /dev/null
 else
-    echo "✅ CEF wrapper already exists"
+    echo "[OK] CEF wrapper already exists"
 fi
 
 # Verify all necessary files are in place
-echo "📋 Verifying CEF runtime files..."
+echo "[INFO] Verifying CEF runtime files..."
 if [ ! -d "$CEF_RUNTIME_DIR/Release" ]; then
-    echo "❌ Error: Release directory not found"
+    echo "[ERROR] Release directory not found"
     exit 1
 fi
 
 if [ ! -d "$CEF_RUNTIME_DIR/include" ]; then
-    echo "❌ Error: Include directory not found"
+    echo "[ERROR] Include directory not found"
     exit 1
 fi
 
 if [ ! -d "$CEF_RUNTIME_DIR/Resources" ]; then
-    echo "❌ Error: Resources directory not found"
+    echo "[ERROR] Resources directory not found"
     exit 1
 fi
 
-echo "✅ CEF runtime files verified"
+echo "[OK] CEF runtime files verified"
 
 # Set proper permissions for global installation
 if [ "$INSTALL_MODE" = "global" ]; then
-    echo "🔐 Setting permissions for global installation..."
+    echo "[INFO] Setting permissions for global installation..."
     chmod 755 "$CEF_RUNTIME_DIR"
     chmod 644 "$CEF_RUNTIME_DIR"/*.a
     chmod 755 "$CEF_RUNTIME_DIR"/*.so
     chmod 755 "$CEF_RUNTIME_DIR"/chrome-sandbox
-    echo "✅ Permissions set"
+    echo "[OK] Permissions set"
 fi
 
-echo "✅ CEF runtime files copied to $CEF_RUNTIME_DIR"
+echo "[OK] CEF runtime files copied to $CEF_RUNTIME_DIR"
 
 # Always copy to local cef/ for distribution (RUNTIME ONLY, no includes)
-echo "📋 Copying runtime files to ./cef/ for distribution..."
+echo "[INFO] Copying runtime files to ./cef/ for distribution..."
 mkdir -p "./cef"
 cp "$CEF_RUNTIME_DIR/Release/"* "./cef/" 2>/dev/null || true
 cp "$CEF_RUNTIME_DIR/Resources/"* "./cef/" 2>/dev/null || true
 if [ -d "$CEF_RUNTIME_DIR/Resources/locales" ]; then
     cp -r "$CEF_RUNTIME_DIR/Resources/locales" "./cef/"
-    echo "✅ Locales directory copied to ./cef/"
+    echo "[OK] Locales directory copied to ./cef/"
 fi
-echo "✅ Distribution files ready in ./cef/ (runtime only)"
+echo "[OK] Distribution files ready in ./cef/ (runtime only)"
 
 echo ""
-echo "🎯 CEF setup completed successfully!"
+echo "[SUCCESS] CEF setup completed successfully!"
 echo "   Install mode: ${INSTALL_MODE}"
 echo "   Runtime location: $CEF_RUNTIME_DIR"
 echo "   Libraries: $CEF_RUNTIME_DIR/libcef.so, $CEF_RUNTIME_DIR/libcef_dll_wrapper.a"
 echo "   Distribution: ./cef/"
 echo ""
-echo "📝 You can now compile OTClient with CEF support:"
+echo "[INFO] You can now compile OTClient with CEF support:"
 echo "   mkdir build && cd build"
 echo "   cmake -DUSE_CEF=ON .."
 echo "   make -j$(nproc)"
 echo ""
 if [ "$INSTALL_MODE" = "global" ]; then
-    echo "💡 Global installation complete! Other users can now compile OTClient with CEF."
+    echo "[INFO] Global installation complete! Other users can now compile OTClient with CEF."
 elif [ "$INSTALL_MODE" = "user" ]; then
-    echo "💡 User installation complete! CEF is available for your user account."
+    echo "[INFO] User installation complete! CEF is available for your user account."
 else
-    echo "💡 Local development setup complete! CEF is ready for development."
+    echo "[INFO] Local development setup complete! CEF is ready for development."
 fi
-echo "💡 Distribution files are ready in ./cef/" 
+echo "[INFO] Distribution files are ready in ./cef/" 
