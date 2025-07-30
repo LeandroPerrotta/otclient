@@ -167,6 +167,12 @@ void Application::exit()
 
 void Application::close()
 {
+#ifdef USE_CEF
+    // Shutdown CEF BEFORE closing the application
+    extern void ShutdownCEF();
+    ShutdownCEF();
+#endif
+
     if(!g_lua.callGlobalField<bool>("g_app", "onClose"))
         exit();
 }

@@ -1,0 +1,8 @@
+UIWebView < UIWidget
+  id: webview
+  size: 400 300
+  anchor: parent
+  margin: 10
+  background-color: #000000
+  border-color: #444444
+  border-width: 1 
