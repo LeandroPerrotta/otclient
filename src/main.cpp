@@ -61,7 +61,7 @@ bool InitializeCEF(int argc, const char* argv[]) {
     CefMainArgs main_args(argc, const_cast<char**>(argv));
     int exit_code = CefExecuteProcess(main_args, nullptr, nullptr);
     if (exit_code >= 0) {
-        return exit_code == 0;
+        std::exit(exit_code);
     }
 
     // Parse command line
@@ -208,19 +208,7 @@ void ShutdownCEF() {
         // Close all active WebViews first
         UICEFWebView::closeAllWebViews();
 
-        // Aguarde até que todos os browsers estejam realmente fechados
-        int tries = 0;
-        while (UICEFWebView::getActiveWebViewCount() > 0 && tries < 100) {
-            CefDoMessageLoopWork();
-            std::this_thread::sleep_for(std::chrono::milliseconds(500));
-            ++tries;
-        }
-
-        // Force more message loop cycles to ensure all subprocesses are handled
-        for (int i = 0; i < 50; ++i) {
-            CefDoMessageLoopWork();
-            std::this_thread::sleep_for(std::chrono::milliseconds(2000));
-        }
+        CefDoMessageLoopWork();
 
         g_logger.info("OTClient: All webviews closed... Shutting down CEF");
 
