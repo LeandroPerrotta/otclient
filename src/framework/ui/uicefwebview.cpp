@@ -24,6 +24,7 @@
 #include <framework/core/logger.h>
 #include <framework/graphics/graphics.h>
 #include <framework/graphics/image.h>
+#include <framework/platform/platformwindow.h>
 #include <unistd.h>
 #include <string>
 #include <vector>
@@ -49,6 +50,28 @@ extern bool g_cefInitialized;
 // Static member initialization
 std::vector<UICEFWebView*> UICEFWebView::s_activeWebViews;
 
+static int getCefModifiers()
+{
+    int mods = 0;
+
+    int keyMods = g_window.getKeyboardModifiers();
+    if (keyMods & Fw::KeyboardCtrlModifier)
+        mods |= EVENTFLAG_CONTROL_DOWN;
+    if (keyMods & Fw::KeyboardShiftModifier)
+        mods |= EVENTFLAG_SHIFT_DOWN;
+    if (keyMods & Fw::KeyboardAltModifier)
+        mods |= EVENTFLAG_ALT_DOWN;
+
+    if (g_window.isMouseButtonPressed(Fw::MouseLeftButton))
+        mods |= EVENTFLAG_LEFT_MOUSE_BUTTON;
+    if (g_window.isMouseButtonPressed(Fw::MouseRightButton))
+        mods |= EVENTFLAG_RIGHT_MOUSE_BUTTON;
+    if (g_window.isMouseButtonPressed(Fw::MouseMidButton))
+        mods |= EVENTFLAG_MIDDLE_MOUSE_BUTTON;
+
+    return mods;
+}
+
 // Simple CEF Client implementation
 class SimpleCEFClient : public CefClient, public CefRenderHandler {
 public:
@@ -60,8 +83,16 @@ public:
 
     virtual void GetViewRect(CefRefPtr<CefBrowser> browser, CefRect& rect) override {
         rect.x = rect.y = 0;
-        rect.width = 400;
-        rect.height = 300;
+        
+        // Use the actual widget size for CEF rendering
+        if (m_webview) {
+            Size widgetSize = m_webview->getSize();
+            rect.width = widgetSize.width();
+            rect.height = widgetSize.height();
+        } else {
+            rect.width = 600;  // Fallback size
+            rect.height = 400;
+        }
     }
 
     virtual void OnPaint(CefRefPtr<CefBrowser> browser,
@@ -69,8 +100,6 @@ public:
                         const RectList& dirtyRects,
                         const void* buffer,
                         int width, int height) override {
-        g_logger.info("UICEFWebView: OnPaint called - type: " + std::to_string(type) + ", size: " + std::to_string(width) + "x" + std::to_string(height));
-        
         if (m_webview) {
             // Capture browser reference on first paint
             if (!m_webview->m_browser) {
@@ -79,7 +108,6 @@ public:
             }
             
             if (type == PET_VIEW) {
-                g_logger.info("UICEFWebView: PET_VIEW paint - calling onCEFPaint");
                 m_webview->onCEFPaint(buffer, width, height);
             }
         }
@@ -91,21 +119,19 @@ private:
 };
 
 UICEFWebView::UICEFWebView()
-    : UIWebView(), m_browser(nullptr), m_client(nullptr), m_cefTexture(nullptr), m_textureCreated(false), m_lastWidth(0), m_lastHeight(0)
+    : UIWebView(), m_browser(nullptr), m_client(nullptr), m_cefTexture(nullptr), m_textureCreated(false), m_lastWidth(0), m_lastHeight(0), m_lastMousePos(0, 0)
 {
-    g_logger.info("UICEFWebView: Constructor called - CEF initialized: " + std::to_string(g_cefInitialized));
     setSize(Size(800, 600)); // Set initial size
+    setDraggable(true); // Enable dragging for scrollbar interaction
     s_activeWebViews.push_back(this);
-    g_logger.info("UICEFWebView: Added to active list. Total active: " + std::to_string(s_activeWebViews.size()));
 }
 
 UICEFWebView::UICEFWebView(UIWidgetPtr parent)
-    : UIWebView(parent), m_browser(nullptr), m_client(nullptr), m_cefTexture(nullptr), m_textureCreated(false), m_lastWidth(0), m_lastHeight(0)
+    : UIWebView(parent), m_browser(nullptr), m_client(nullptr), m_cefTexture(nullptr), m_textureCreated(false), m_lastWidth(0), m_lastHeight(0), m_lastMousePos(0, 0)
 {
-    g_logger.info("UICEFWebView: Constructor with parent called - CEF initialized: " + std::to_string(g_cefInitialized));
     setSize(Size(800, 600)); // Set initial size
+    setDraggable(true); // Enable dragging for scrollbar interaction
     s_activeWebViews.push_back(this);
-    g_logger.info("UICEFWebView: Added to active list. Total active: " + std::to_string(s_activeWebViews.size()));
 }
 
 UICEFWebView::~UICEFWebView()
@@ -212,19 +238,13 @@ bool UICEFWebView::loadHtmlInternal(const std::string& html, const std::string& 
 
 void UICEFWebView::onCEFPaint(const void* buffer, int width, int height)
 {
-    g_logger.info("UICEFWebView: Paint callback - " + std::to_string(width) + "x" + std::to_string(height));
-    
     // Convert BGRA to RGBA and create OTClient Texture
     if (buffer && width > 0 && height > 0) {
-        // Debug: Check first few pixels of CEF buffer
-        const uint8_t* bgra = static_cast<const uint8_t*>(buffer);
-        g_logger.info("UICEFWebView: CEF buffer first pixel BGRA: " + 
-                     std::to_string(bgra[0]) + "," + std::to_string(bgra[1]) + "," + 
-                     std::to_string(bgra[2]) + "," + std::to_string(bgra[3]));
-        
         // Allocate buffer for RGBA data
         std::vector<uint8_t> rgbaBuffer(width * height * 4);
-        
+
+        const uint8_t* bgra = static_cast<const uint8_t*>(buffer);        
+
         // Convert BGRA to RGBA
         for (int i = 0; i < width * height; ++i) {
             rgbaBuffer[i * 4 + 0] = bgra[i * 4 + 2]; // B -> R
@@ -245,23 +265,16 @@ void UICEFWebView::onCEFPaint(const void* buffer, int width, int height)
             m_lastWidth = width;
             m_lastHeight = height;
 
-            image->savePNG("cef_texture.png");
-            
-            g_logger.info("UICEFWebView: Created new texture (" + std::to_string(width) + "x" + std::to_string(height) + ") - Image size: " + std::to_string(image->getSize().width()) + "x" + std::to_string(image->getSize().height()));
+            g_logger.info("UICEFWebView: Created new texture (" + std::to_string(width) + "x" + std::to_string(height) + ")");
         } else {
             // Update existing texture
             ImagePtr image = ImagePtr(new Image(Size(width, height), 4));
             memcpy(image->getPixelData(), rgbaBuffer.data(), rgbaBuffer.size());
             m_cefTexture->uploadPixels(image);
-            
-            g_logger.info("UICEFWebView: Updated existing texture (" + std::to_string(width) + "x" + std::to_string(height) + ")");
         }
         
-        // Set widget size to match texture
-        setSize(Size(width, height));
+        // Don't override widget size - let Lua control it
         setVisible(true);
-        
-        g_logger.info("UICEFWebView: Texture updated successfully");
     }
 }
 
@@ -285,33 +298,119 @@ void UICEFWebView::onBrowserCreated(CefRefPtr<CefBrowser> browser)
 
 void UICEFWebView::drawSelf(Fw::DrawPane drawPane)
 {
-    //g_logger.info("UICEFWebView: drawSelf called - textureCreated: " + std::to_string(m_textureCreated) + ", texture: " + (m_cefTexture ? "valid" : "null"));
-    
+    // Render only CEF content - no UIWidget background
     if (m_textureCreated && m_cefTexture) {
-        // Debug texture info
-        // g_logger.info("UICEFWebView: Texture ID: " + std::to_string(m_cefTexture->getId()) + ", Size: " + std::to_string(m_cefTexture->getWidth()) + "x" + std::to_string(m_cefTexture->getHeight()));
-        
-        // Debug widget info
         Rect rect = getRect();
-        // g_logger.info("UICEFWebView: Widget rect: " + std::to_string(rect.x()) + "," + std::to_string(rect.y()) + " " + std::to_string(rect.width()) + "x" + std::to_string(rect.height()));
-        // g_logger.info("UICEFWebView: Widget visible: " + std::to_string(isVisible()) + ", enabled: " + std::to_string(isEnabled()));
         
-        // // Test: Draw a solid blue background first to verify rendering pipeline
-        //g_painter->setColor(Color::blue);
-        g_painter->drawFilledRect(rect);
-        // g_logger.info("UICEFWebView: Drew blue background for testing");
-        
-        // // Render the CEF texture using OTClient's graphics system
+        // Render the CEF texture using OTClient's graphics system
         g_painter->setOpacity(1.0);
-        
         g_painter->drawTexturedRect(rect, m_cefTexture);
-        
-        //g_logger.info("UICEFWebView: Rendering CEF texture (" + std::to_string(rect.width()) + "x" + std::to_string(rect.height()) + ") - Texture ID: " + std::to_string(m_cefTexture->getId()));
     } else {
-        // Fallback to default rendering with visible background
-        // UIWidget::drawSelf(drawPane);
-        g_logger.info("UICEFWebView: Using fallback rendering (red background)");
+        // Fallback to UIWidget background when no CEF texture is available
+        UIWidget::drawSelf(drawPane);
     }
+}
+
+bool UICEFWebView::onMousePress(const Point& mousePos, Fw::MouseButton button)
+{
+    if (m_browser) {
+        CefRefPtr<CefBrowserHost> host = m_browser->GetHost();
+        if (host) {
+            CefMouseEvent event;
+            Point localPos = mousePos - getPosition();
+            event.x = localPos.x;
+            event.y = localPos.y;
+            event.modifiers = getCefModifiers();
+
+            CefBrowserHost::MouseButtonType btnType = MBT_LEFT;
+            if (button == Fw::MouseRightButton)
+                btnType = MBT_RIGHT;
+            else if (button == Fw::MouseMidButton)
+                btnType = MBT_MIDDLE;
+
+            host->SendMouseClickEvent(event, btnType, false, 1);
+        }
+    }
+
+    return UIWidget::onMousePress(mousePos, button);
+}
+
+bool UICEFWebView::onMouseRelease(const Point& mousePos, Fw::MouseButton button)
+{
+    if (m_browser) {
+        CefRefPtr<CefBrowserHost> host = m_browser->GetHost();
+        if (host) {
+            CefMouseEvent event;
+            Point localPos = mousePos - getPosition();
+            event.x = localPos.x;
+            event.y = localPos.y;
+            event.modifiers = getCefModifiers();
+
+            CefBrowserHost::MouseButtonType btnType = MBT_LEFT;
+            if (button == Fw::MouseRightButton)
+                btnType = MBT_RIGHT;
+            else if (button == Fw::MouseMidButton)
+                btnType = MBT_MIDDLE;
+
+            host->SendMouseClickEvent(event, btnType, true, 1);
+        }
+    }
+
+    return UIWidget::onMouseRelease(mousePos, button);
+}
+
+bool UICEFWebView::onMouseMove(const Point& mousePos, const Point& mouseMoved)
+{
+    if (m_browser) {
+        CefRefPtr<CefBrowserHost> host = m_browser->GetHost();
+        if (host) {
+            CefMouseEvent event;
+            Point localPos = mousePos - getPosition();
+            event.x = localPos.x;
+            event.y = localPos.y;
+            m_lastMousePos = localPos;
+            event.modifiers = getCefModifiers();
+            bool leave = !containsPoint(mousePos);
+            host->SendMouseMoveEvent(event, leave);
+        }
+    }
+
+    return UIWidget::onMouseMove(mousePos, mouseMoved);
+}
+
+bool UICEFWebView::onMouseWheel(const Point& mousePos, Fw::MouseWheelDirection direction)
+{
+    if (m_browser) {
+        CefRefPtr<CefBrowserHost> host = m_browser->GetHost();
+        if (host) {
+            CefMouseEvent event;
+            Point localPos = mousePos - getPosition();
+            event.x = localPos.x;
+            event.y = localPos.y;
+            event.modifiers = getCefModifiers();
+
+            int deltaY = direction == Fw::MouseWheelUp ? 120 : -120;
+            host->SendMouseWheelEvent(event, 0, deltaY);
+        }
+    }
+
+    return UIWidget::onMouseWheel(mousePos, direction);
+}
+
+void UICEFWebView::onHoverChange(bool hovered)
+{
+    if (!hovered && m_browser) {
+        CefRefPtr<CefBrowserHost> host = m_browser->GetHost();
+        if (host) {
+            CefMouseEvent event;
+            event.x = m_lastMousePos.x;
+            event.y = m_lastMousePos.y;
+            event.modifiers = getCefModifiers();
+            host->SendMouseMoveEvent(event, true);
+        }
+    }
+
+    UIWidget::onHoverChange(hovered);
 }
 
 // Event handlers with correct signatures

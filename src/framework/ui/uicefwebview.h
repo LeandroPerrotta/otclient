@@ -33,6 +33,13 @@ public:
     void onTitleChanged(const std::string& title) override;
     void onJavaScriptCallback(const std::string& name, const std::string& data) override;
 
+    // Mouse input handlers
+    bool onMousePress(const Point& mousePos, Fw::MouseButton button) override;
+    bool onMouseRelease(const Point& mousePos, Fw::MouseButton button) override;
+    bool onMouseMove(const Point& mousePos, const Point& mouseMoved) override;
+    bool onMouseWheel(const Point& mousePos, Fw::MouseWheelDirection direction) override;
+    void onHoverChange(bool hovered) override;
+
 protected:
     void createWebView() override;
     void loadUrlInternal(const std::string& url) override;
@@ -51,6 +58,7 @@ private:
     bool m_textureCreated;
     int m_lastWidth;
     int m_lastHeight;
+    Point m_lastMousePos;
     
     // Static tracking of all active WebViews
     static std::vector<UICEFWebView*> s_activeWebViews;
