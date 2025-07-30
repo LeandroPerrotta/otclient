@@ -14,19 +14,21 @@ if webview then
     webview:setEnabled(true)
     print("✅ Parent definido como rootWidget e widget visível")
     
-    -- Definir tamanho
+    -- Definir tamanho (retângulo centralizado)
     local screenSize = g_window.getSize()
-    webview:setSize({width = screenSize.width, height = screenSize.height})
+    local webviewWidth = 600   -- Largura do WebView
+    local webviewHeight = 400  -- Altura do WebView
+    webview:setSize({width = webviewWidth, height = webviewHeight})
     print("Novo tamanho:", webview:getSize())
     
-    -- Posicionar
-    local x = 0
-    local y = 0
+    -- Posicionar centralizado
+    local x = (screenSize.width - webviewWidth) / 2
+    local y = (screenSize.height - webviewHeight) / 2
     webview:setPosition({x = x, y = y})
-    print("Posição definida:", x, y)
+    print("Posição centralizada:", x, y)
     
     -- Forçar redraw
-    webview:setBackgroundColor('#ac0000')
+    webview:setBackgroundColor('#a200ca')
     print("✅ Background vermelho definido")
     
     -- Testar carregamento de HTML
