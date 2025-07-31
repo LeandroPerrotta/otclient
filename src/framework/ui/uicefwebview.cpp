@@ -413,6 +413,78 @@ void UICEFWebView::onHoverChange(bool hovered)
     UIWidget::onHoverChange(hovered);
 }
 
+bool UICEFWebView::onKeyDown(uchar keyCode, int keyboardModifiers)
+{
+    if (m_browser) {
+        CefRefPtr<CefBrowserHost> host = m_browser->GetHost();
+        if (host) {
+            CefKeyEvent event;
+            event.type = KEYEVENT_RAWKEYDOWN;
+            event.modifiers = getCefModifiers();
+            event.windows_key_code = keyCode;
+            event.native_key_code = keyCode;
+            host->SendKeyEvent(event);
+        }
+    }
+
+    return UIWidget::onKeyDown(keyCode, keyboardModifiers);
+}
+
+bool UICEFWebView::onKeyPress(uchar keyCode, int keyboardModifiers, int autoRepeatTicks)
+{
+    if (m_browser && autoRepeatTicks > 0) {
+        CefRefPtr<CefBrowserHost> host = m_browser->GetHost();
+        if (host) {
+            CefKeyEvent event;
+            event.type = KEYEVENT_RAWKEYDOWN;
+            event.modifiers = getCefModifiers();
+            event.windows_key_code = keyCode;
+            event.native_key_code = keyCode;
+            host->SendKeyEvent(event);
+        }
+    }
+
+    return UIWidget::onKeyPress(keyCode, keyboardModifiers, autoRepeatTicks);
+}
+
+bool UICEFWebView::onKeyText(const std::string& keyText)
+{
+    if (m_browser && !keyText.empty()) {
+        CefRefPtr<CefBrowserHost> host = m_browser->GetHost();
+        if (host) {
+            for (char ch : keyText) {
+                CefKeyEvent event;
+                event.type = KEYEVENT_CHAR;
+                event.modifiers = getCefModifiers();
+                event.character = ch;
+                event.unmodified_character = ch;
+                event.windows_key_code = static_cast<int>(static_cast<unsigned char>(ch));
+                event.native_key_code = event.windows_key_code;
+                host->SendKeyEvent(event);
+            }
+        }
+    }
+
+    return UIWidget::onKeyText(keyText);
+}
+
+bool UICEFWebView::onKeyUp(uchar keyCode, int keyboardModifiers)
+{
+    if (m_browser) {
+        CefRefPtr<CefBrowserHost> host = m_browser->GetHost();
+        if (host) {
+            CefKeyEvent event;
+            event.type = KEYEVENT_KEYUP;
+            event.modifiers = getCefModifiers();
+            event.windows_key_code = keyCode;
+            event.native_key_code = keyCode;
+            host->SendKeyEvent(event);
+        }
+    }
+
+    return UIWidget::onKeyUp(keyCode, keyboardModifiers);
+}
+
 // Event handlers with correct signatures
 void UICEFWebView::onLoadStarted() {}
 void UICEFWebView::onLoadFinished(bool success) {}

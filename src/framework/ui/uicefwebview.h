@@ -40,6 +40,12 @@ public:
     bool onMouseWheel(const Point& mousePos, Fw::MouseWheelDirection direction) override;
     void onHoverChange(bool hovered) override;
 
+    // Keyboard input handlers
+    bool onKeyText(const std::string& keyText) override;
+    bool onKeyDown(uchar keyCode, int keyboardModifiers) override;
+    bool onKeyPress(uchar keyCode, int keyboardModifiers, int autoRepeatTicks) override;
+    bool onKeyUp(uchar keyCode, int keyboardModifiers) override;    
+
 protected:
     void createWebView() override;
     void loadUrlInternal(const std::string& url) override;
