@@ -48,14 +48,14 @@ Texture::Texture(const Size& size)
     setupFilters();
 }
 
-Texture::Texture(const ImagePtr& image, bool buildMipmaps, bool compress)
+Texture::Texture(const ImagePtr& image, bool buildMipmaps, bool compress, bool bgra)
 {
     m_id = 0;
     m_time = 0;
 
     createTexture();
 
-    uploadPixels(image, buildMipmaps, compress);
+    uploadPixels(image, buildMipmaps, compress, bgra);
 }
 
 Texture::~Texture()
@@ -68,7 +68,7 @@ Texture::~Texture()
         glDeleteTextures(1, &m_id);
 }
 
-void Texture::uploadPixels(const ImagePtr& image, bool buildMipmaps, bool compress)
+void Texture::uploadPixels(const ImagePtr& image, bool buildMipmaps, bool compress, bool bgra)
 {
     if(!setupSize(image->getSize(), buildMipmaps))
         return;
@@ -85,11 +85,11 @@ void Texture::uploadPixels(const ImagePtr& image, bool buildMipmaps, bool compre
     if(buildMipmaps) {
         int level = 0;
         do {
-            setupPixels(level++, glImage->getSize(), glImage->getPixelData(), glImage->getBpp(), compress);
+            setupPixels(level++, glImage->getSize(), glImage->getPixelData(), glImage->getBpp(), compress, bgra);
         } while(glImage->nextMipmap());
         m_hasMipmaps = true;
     } else
-        setupPixels(0, glImage->getSize(), glImage->getPixelData(), glImage->getBpp(), compress);
+        setupPixels(0, glImage->getSize(), glImage->getPixelData(), glImage->getBpp(), compress, bgra);
 
     setupWrap();
     setupFilters();
@@ -224,12 +224,12 @@ void Texture::setupTranformMatrix()
     }
 }
 
-void Texture::setupPixels(int level, const Size& size, uchar* pixels, int channels, bool compress)
+void Texture::setupPixels(int level, const Size& size, uchar* pixels, int channels, bool compress, bool bgra)
 {
     GLenum format = 0;
     switch(channels) {
         case 4:
-            format = GL_RGBA;
+            format = bgra ? GL_BGRA : GL_RGBA;
             break;
         case 3:
             format = GL_RGB;

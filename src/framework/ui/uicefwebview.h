@@ -46,6 +46,9 @@ public:
     bool onKeyPress(uchar keyCode, int keyboardModifiers, int autoRepeatTicks) override;
     bool onKeyUp(uchar keyCode, int keyboardModifiers) override;    
 
+    // Geometry change handler for dynamic resizing
+    void onGeometryChange(const Rect& oldRect, const Rect& newRect) override;
+
 protected:
     void createWebView() override;
     void loadUrlInternal(const std::string& url) override;
@@ -58,6 +61,7 @@ private:
     CefRefPtr<CefBrowser> m_browser;
     CefRefPtr<CefClient> m_client;
     std::string m_pendingHtml; // Store HTML to load after browser creation
+    std::string m_pendingUrl;  // Store URL to load after browser creation
     
     // OTClient Texture for CEF rendering
     TexturePtr m_cefTexture;
