@@ -68,6 +68,9 @@ void Graphics::init()
     if(err != GLEW_OK)
         g_logger.fatal(stdext::format("Unable to init GLEW: %s", glewGetErrorString(err)));
 
+    if(!GLEW_VERSION_1_2 && !GLEW_EXT_bgra)
+        m_useBGRA = false;
+
     // overwrite framebuffer API if needed
     if(GLEW_EXT_framebuffer_object && !GLEW_ARB_framebuffer_object) {
         glGenFramebuffers = glGenFramebuffersEXT;
@@ -152,6 +155,8 @@ bool Graphics::parseOption(const std::string& option)
         m_useNonPowerOfTwoTextures = false;
     else if(option == "-no-clamp-to-edge")
         m_useClampToEdge = false;
+    else if(option == "-no-bgra")
+        m_useBGRA = false;    
     else if(option == "-no-backbuffer-cache")
         m_cacheBackbuffer = false;
     else if(option == "-opengl1")
@@ -369,6 +374,17 @@ bool Graphics::canUseClampToEdge()
     if(!GLEW_VERSION_1_2)
         return false;
     return m_useClampToEdge;
+#endif
+}
+
+bool Graphics::canUseBGRA()
+{
+#ifdef OPENGL_ES
+    return m_useBGRA;
+#else
+    if(!GLEW_VERSION_1_2 && !GLEW_EXT_bgra)
+        return false;
+    return m_useBGRA;
 #endif
 }
 

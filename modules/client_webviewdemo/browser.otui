@@ -1,0 +1,27 @@
+Panel
+  id: browserPanel
+  border: 1 white
+  fill: parent
+  margin: 4
+
+  TextEdit
+    id: urlEdit
+    anchors.left: parent.left
+    anchors.top: parent.top
+    anchors.right: loadButton.left
+    margin-right: 4
+    !text: 'https://'
+
+  Button
+    id: loadButton
+    !text: tr('Go')
+    width: 40
+    anchors.right: parent.right
+    anchors.top: parent.top
+
+  UICEFWebView
+    id: browserWebView
+    anchors.left: parent.left
+    anchors.top: urlEdit.bottom
+    anchors.bottom: parent.bottom
+    anchors.right: parent.right

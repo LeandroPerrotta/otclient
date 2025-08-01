@@ -22,6 +22,7 @@
 
 #include "uicefwebview.h"
 #include <framework/core/logger.h>
+#include <framework/core/clock.h>
 #include <framework/graphics/graphics.h>
 #include <framework/graphics/image.h>
 #include <framework/platform/platformwindow.h>
@@ -219,7 +220,6 @@ public:
         if (m_webview) {
             // Capture browser reference on first paint
             if (!m_webview->m_browser) {
-                g_logger.info("UICEFWebView: First paint - capturing browser reference");
                 m_webview->onBrowserCreated(browser);
             }
             
@@ -314,10 +314,10 @@ void UICEFWebView::loadUrlInternal(const std::string& url)
 
     if (!m_browser) {
         createWebView();
-        if (!m_browser) {
-            g_logger.error("Cannot load URL: browser not created");
-            return;
-        }
+        // Store URL to load when browser is ready
+        m_pendingUrl = url;
+        g_logger.info("UICEFWebView: Browser creation in progress, URL will be loaded when ready");
+        return;
     }
 
     g_logger.info("UICEFWebView: Loading URL: " + url);
@@ -354,42 +354,35 @@ bool UICEFWebView::loadHtmlInternal(const std::string& html, const std::string& 
 
 void UICEFWebView::onCEFPaint(const void* buffer, int width, int height)
 {
-    // Convert BGRA to RGBA and create OTClient Texture
     if (buffer && width > 0 && height > 0) {
-        // Allocate buffer for RGBA data
-        std::vector<uint8_t> rgbaBuffer(width * height * 4);
+        const bool useBGRA = g_graphics.canUseBGRA();
+        ImagePtr image;
 
-        const uint8_t* bgra = static_cast<const uint8_t*>(buffer);        
-
-        // Convert BGRA to RGBA
-        for (int i = 0; i < width * height; ++i) {
-            rgbaBuffer[i * 4 + 0] = bgra[i * 4 + 2]; // B -> R
-            rgbaBuffer[i * 4 + 1] = bgra[i * 4 + 1]; // G -> G
-            rgbaBuffer[i * 4 + 2] = bgra[i * 4 + 0]; // R -> B
-            rgbaBuffer[i * 4 + 3] = bgra[i * 4 + 3]; // A -> A
-        }
-        
-        // Create or update OTClient Texture
-        if (!m_textureCreated || width != m_lastWidth || height != m_lastHeight) {
-            // Create new Image from RGBA data
-            ImagePtr image = ImagePtr(new Image(Size(width, height), 4));
+        if (!useBGRA) {
+            std::vector<uint8_t> rgbaBuffer(width * height * 4);
+            const uint8_t* bgra = static_cast<const uint8_t*>(buffer);
+            for (int i = 0; i < width * height; ++i) {
+                rgbaBuffer[i * 4 + 0] = bgra[i * 4 + 2];
+                rgbaBuffer[i * 4 + 1] = bgra[i * 4 + 1];
+                rgbaBuffer[i * 4 + 2] = bgra[i * 4 + 0];
+                rgbaBuffer[i * 4 + 3] = bgra[i * 4 + 3];
+            }
+            image = ImagePtr(new Image(Size(width, height), 4));
             memcpy(image->getPixelData(), rgbaBuffer.data(), rgbaBuffer.size());
-            
-            // Create new Texture
-            m_cefTexture = TexturePtr(new Texture(image));
+        } else {
+            image = ImagePtr(new Image(Size(width, height), 4));
+            memcpy(image->getPixelData(), buffer, width * height * 4);
+        }
+
+        if (!m_textureCreated || width != m_lastWidth || height != m_lastHeight) {
+            m_cefTexture = TexturePtr(new Texture(image, false, false, useBGRA));
             m_textureCreated = true;
             m_lastWidth = width;
             m_lastHeight = height;
-
-            g_logger.info("UICEFWebView: Created new texture (" + std::to_string(width) + "x" + std::to_string(height) + ")");
         } else {
-            // Update existing texture
-            ImagePtr image = ImagePtr(new Image(Size(width, height), 4));
-            memcpy(image->getPixelData(), rgbaBuffer.data(), rgbaBuffer.size());
-            m_cefTexture->uploadPixels(image);
+            m_cefTexture->uploadPixels(image, false, false, useBGRA);
         }
-        
-        // Don't override widget size - let Lua control it
+
         setVisible(true);
     }
 }
@@ -409,6 +402,15 @@ void UICEFWebView::onBrowserCreated(CefRefPtr<CefBrowser> browser)
         }
         
         m_pendingHtml.clear();
+    }
+
+    if (!m_pendingUrl.empty()) {
+        g_logger.info("UICEFWebView: Loading pending URL: " + m_pendingUrl);
+        CefRefPtr<CefFrame> frame = m_browser->GetMainFrame();
+        if (frame) {
+            frame->LoadURL(m_pendingUrl);
+        }
+        m_pendingUrl.clear();
     }
 }
 
@@ -608,6 +610,33 @@ void UICEFWebView::onLoadFinished(bool success) {}
 void UICEFWebView::onUrlChanged(const std::string& url) {}
 void UICEFWebView::onTitleChanged(const std::string& title) {}
 void UICEFWebView::onJavaScriptCallback(const std::string& name, const std::string& data) {}
+
+void UICEFWebView::onGeometryChange(const Rect& oldRect, const Rect& newRect)
+{
+    // Call parent implementation first
+    UIWidget::onGeometryChange(oldRect, newRect);
+    
+    // Check if size actually changed
+    if (oldRect.size() != newRect.size()) {
+        g_logger.info("UICEFWebView: Size changed from " + 
+                     std::to_string(oldRect.width()) + "x" + std::to_string(oldRect.height()) + 
+                     " to " + std::to_string(newRect.width()) + "x" + std::to_string(newRect.height()));
+        
+        // Notify CEF browser about the size change
+        if (m_browser) {
+            CefRefPtr<CefBrowserHost> host = m_browser->GetHost();
+            if (host) {
+                host->WasResized();
+                g_logger.info("UICEFWebView: Notified CEF browser about size change");
+            }
+        }
+        
+        // Reset texture state to force recreation
+        m_textureCreated = false;
+        m_lastWidth = 0;
+        m_lastHeight = 0;
+    }
+}
 
 // Static methods for managing all WebViews
 void UICEFWebView::closeAllWebViews() {

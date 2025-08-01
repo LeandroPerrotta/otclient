@@ -1,6 +1,9 @@
 local webViewWindow
 local webViewButton
 local webView
+local browserWebView
+local urlEdit
+local webViewTabBar
 
 local html = [[
 <!DOCTYPE html>
@@ -157,10 +160,45 @@ local html = [[
 function init()
   webViewWindow = g_ui.displayUI('webviewdemo')
   webViewWindow:hide()
-  webView = webViewWindow:getChildById('demoWebView')
+
+  webViewTabBar = webViewWindow:getChildById('webViewTabBar')
+  webViewTabBar:setContentWidget(webViewWindow:getChildById('webViewTabContent'))
+
+  local demoPanel = g_ui.loadUI('demo')
+  webView = demoPanel:getChildById('demoWebView')
   if webView then
     webView:loadHtml(html)
   end
+  webViewTabBar:addTab(tr('Demo'), demoPanel)
+
+  local browserPanel = g_ui.loadUI('browser')
+
+  webViewTabBar:addTab(tr('Browser'), browserPanel)
+
+  --browserWebView = 
+  urlEdit = browserPanel:getChildById('urlEdit')
+  local loadButton = browserPanel:getChildById('loadButton')
+  if loadButton then
+
+    loadButton.onClick = function()
+      local url = urlEdit:getText()
+      
+      if url and url ~= '' then
+
+        if(not browserWebView) then
+            browserWebView = browserPanel:getChildById('browserWebView')
+        end
+        
+        browserWebView:loadUrl(url)
+      end
+    end
+  else
+    print("Load button not found")
+  end
+  if urlEdit then
+    urlEdit.onReturnPressed = function() loadButton.onClick() end
+  end
+
   webViewButton = modules.client_topmenu.addLeftButton('webViewDemoButton', tr('WebView Demo'), '/images/topbuttons/terminal', toggle)
 end
 
