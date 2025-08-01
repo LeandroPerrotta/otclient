@@ -27,6 +27,10 @@ public:
     static void closeAllWebViews();
     static size_t getActiveWebViewCount();
 
+    static void setAllWindowlessFrameRate(int fps);
+
+    void setWindowlessFrameRate(int fps);
+
     // Event handlers
     void onLoadStarted() override;
     void onLoadFinished(bool success) override;

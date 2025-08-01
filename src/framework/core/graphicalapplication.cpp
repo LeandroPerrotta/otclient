@@ -38,6 +38,7 @@
 
 #ifdef USE_CEF
 #include "include/cef_app.h"
+#include <framework/ui/uicefwebview.h>
 #endif
 
 GraphicalApplication g_app;

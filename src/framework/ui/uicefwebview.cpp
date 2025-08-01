@@ -23,6 +23,7 @@
 #include "uicefwebview.h"
 #include <framework/core/logger.h>
 #include <framework/core/clock.h>
+#include <framework/core/graphicalapplication.h>
 #include <framework/graphics/graphics.h>
 #include <framework/graphics/image.h>
 #include <framework/platform/platformwindow.h>
@@ -286,6 +287,11 @@ void UICEFWebView::createWebView()
     // Browser settings
     CefBrowserSettings browser_settings;
     g_logger.info("UICEFWebView: Browser settings configured");
+
+    int maxFps = g_app.getForegroundPaneMaxFps();
+    if (maxFps <= 0)
+        maxFps = 60;
+    browser_settings.windowless_frame_rate = maxFps;
 
     // Window info for off-screen rendering
     CefWindowInfo window_info;
@@ -705,6 +711,26 @@ void UICEFWebView::closeAllWebViews() {
 
 size_t UICEFWebView::getActiveWebViewCount() {
     return s_activeWebViews.size();
+}
+
+void UICEFWebView::setWindowlessFrameRate(int fps)
+{
+    if (fps <= 0)
+        fps = 60;
+
+    if (m_browser) {
+        CefRefPtr<CefBrowserHost> host = m_browser->GetHost();
+        if (host)
+            host->SetWindowlessFrameRate(fps);
+    }
+}
+
+void UICEFWebView::setAllWindowlessFrameRate(int fps)
+{
+    for (auto* webview : s_activeWebViews) {
+        if (webview)
+            webview->setWindowlessFrameRate(fps);
+    }
 }
 
 #endif // USE_CEF 

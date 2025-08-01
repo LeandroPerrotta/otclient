@@ -696,6 +696,7 @@ void Application::registerLuaFunctions()
         g_logger.info("Creating UICEFWebView instance");
         return UICEFWebViewPtr(new UICEFWebView()); 
     });
+    g_lua.bindClassStaticFunction<UICEFWebView>("setAllWindowlessFrameRate", &UICEFWebView::setAllWindowlessFrameRate);
 
     g_lua.bindClassMemberFunction<UICEFWebView>("loadUrl", &UICEFWebView::loadUrl);
     g_lua.bindClassMemberFunction<UICEFWebView>("loadHtml", &UICEFWebView::loadHtml);
