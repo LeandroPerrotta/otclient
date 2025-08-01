@@ -253,3 +253,29 @@ void Texture::setupPixels(int level, const Size& size, uchar* pixels, int channe
 
     glTexImage2D(GL_TEXTURE_2D, level, internalFormat, size.width(), size.height(), 0, format, GL_UNSIGNED_BYTE, pixels);
 }
+
+void Texture::updateSubPixels(const Rect& rect, const uchar* pixels, int channels, bool bgra)
+{
+    if(m_id == 0 || !pixels)
+        return;
+
+    bind();
+
+    GLenum format = 0;
+    switch(channels) {
+        case 4:
+            format = bgra ? GL_BGRA : GL_RGBA;
+            break;
+        case 3:
+            format = GL_RGB;
+            break;
+        case 2:
+            format = GL_LUMINANCE_ALPHA;
+            break;
+        case 1:
+            format = GL_LUMINANCE;
+            break;
+    }
+
+    glTexSubImage2D(GL_TEXTURE_2D, 0, rect.x(), rect.y(), rect.width(), rect.height(), format, GL_UNSIGNED_BYTE, pixels);
+}

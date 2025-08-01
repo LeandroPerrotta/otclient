@@ -224,7 +224,7 @@ public:
             }
             
             if (type == PET_VIEW) {
-                m_webview->onCEFPaint(buffer, width, height);
+                m_webview->onCEFPaint(buffer, width, height, dirtyRects);
             }
         }
     }
@@ -235,7 +235,7 @@ private:
 };
 
 UICEFWebView::UICEFWebView()
-    : UIWebView(), m_browser(nullptr), m_client(nullptr), m_cefTexture(nullptr), m_textureCreated(false), m_lastWidth(0), m_lastHeight(0), m_lastMousePos(0, 0)
+    : UIWebView(), m_browser(nullptr), m_client(nullptr), m_cefTexture(nullptr), m_cefImage(nullptr), m_textureCreated(false), m_lastWidth(0), m_lastHeight(0), m_lastMousePos(0, 0)
 {
     setSize(Size(800, 600)); // Set initial size
     setDraggable(true); // Enable dragging for scrollbar interaction
@@ -243,7 +243,7 @@ UICEFWebView::UICEFWebView()
 }
 
 UICEFWebView::UICEFWebView(UIWidgetPtr parent)
-    : UIWebView(parent), m_browser(nullptr), m_client(nullptr), m_cefTexture(nullptr), m_textureCreated(false), m_lastWidth(0), m_lastHeight(0), m_lastMousePos(0, 0)
+    : UIWebView(parent), m_browser(nullptr), m_client(nullptr), m_cefTexture(nullptr), m_cefImage(nullptr), m_textureCreated(false), m_lastWidth(0), m_lastHeight(0), m_lastMousePos(0, 0)
 {
     setSize(Size(800, 600)); // Set initial size
     setDraggable(true); // Enable dragging for scrollbar interaction
@@ -352,39 +352,71 @@ bool UICEFWebView::loadHtmlInternal(const std::string& html, const std::string& 
     return true;
 }
 
-void UICEFWebView::onCEFPaint(const void* buffer, int width, int height)
+void UICEFWebView::onCEFPaint(const void* buffer, int width, int height, const CefRenderHandler::RectList& dirtyRects)
 {
-    if (buffer && width > 0 && height > 0) {
-        const bool useBGRA = g_graphics.canUseBGRA();
-        ImagePtr image;
+    if (!buffer || width <= 0 || height <= 0)
+        return;
 
-        if (!useBGRA) {
-            std::vector<uint8_t> rgbaBuffer(width * height * 4);
-            const uint8_t* bgra = static_cast<const uint8_t*>(buffer);
-            for (int i = 0; i < width * height; ++i) {
-                rgbaBuffer[i * 4 + 0] = bgra[i * 4 + 2];
-                rgbaBuffer[i * 4 + 1] = bgra[i * 4 + 1];
-                rgbaBuffer[i * 4 + 2] = bgra[i * 4 + 0];
-                rgbaBuffer[i * 4 + 3] = bgra[i * 4 + 3];
-            }
-            image = ImagePtr(new Image(Size(width, height), 4));
-            memcpy(image->getPixelData(), rgbaBuffer.data(), rgbaBuffer.size());
-        } else {
-            image = ImagePtr(new Image(Size(width, height), 4));
-            memcpy(image->getPixelData(), buffer, width * height * 4);
-        }
+    const bool useBGRA = g_graphics.canUseBGRA();
+    
+    // Debug: Log paint info
+    g_logger.info("UICEFWebView: Paint received - size: " + std::to_string(width) + "x" + std::to_string(height) + 
+                  ", dirty rects: " + std::to_string(dirtyRects.size()) + 
+                  ", useBGRA: " + std::string(useBGRA ? "true" : "false"));
 
-        if (!m_textureCreated || width != m_lastWidth || height != m_lastHeight) {
-            m_cefTexture = TexturePtr(new Texture(image, false, false, useBGRA));
-            m_textureCreated = true;
-            m_lastWidth = width;
-            m_lastHeight = height;
-        } else {
-            m_cefTexture->uploadPixels(image, false, false, useBGRA);
-        }
-
-        setVisible(true);
+    // Create or resize image if needed
+    if (!m_cefImage || m_cefImage->getSize() != Size(width, height)) {
+        g_logger.info("UICEFWebView: Creating/resizing image to " + std::to_string(width) + "x" + std::to_string(height));
+        m_cefImage = ImagePtr(new Image(Size(width, height), 4));
+        m_textureCreated = false; // Force texture recreation
     }
+
+    const uint8_t* bgra = static_cast<const uint8_t*>(buffer);
+    uint8_t* dest = m_cefImage->getPixelData();
+
+    // TEMPORARY: Always do full update to test if incremental rendering is the problem
+    g_logger.info("UICEFWebView: TEMPORARY - Always doing full update");
+    
+    // Copy function for a single rectangle
+    auto copyRect = [&](int x, int y, int w, int h) {
+        for (int row = 0; row < h; ++row) {
+            const uint8_t* srcRow = bgra + ((y + row) * width + x) * 4;
+            uint8_t* dstRow = dest + ((y + row) * width + x) * 4;
+            
+            if (useBGRA) {
+                // Direct copy if BGRA is supported
+                memcpy(dstRow, srcRow, w * 4);
+            } else {
+                // Convert BGRA to RGBA
+                for (int col = 0; col < w; ++col) {
+                    dstRow[col*4 + 0] = srcRow[col*4 + 2]; // R = B
+                    dstRow[col*4 + 1] = srcRow[col*4 + 1]; // G = G
+                    dstRow[col*4 + 2] = srcRow[col*4 + 0]; // B = R
+                    dstRow[col*4 + 3] = srcRow[col*4 + 3]; // A = A
+                }
+            }
+        }
+    };
+
+    // Always do full update for now
+    copyRect(0, 0, width, height);
+
+    // Update texture
+    if (!m_textureCreated || width != m_lastWidth || height != m_lastHeight) {
+        // Create new texture
+        g_logger.info("UICEFWebView: Creating new texture");
+        m_cefTexture = TexturePtr(new Texture(m_cefImage, false, false, useBGRA));
+        m_textureCreated = true;
+        m_lastWidth = width;
+        m_lastHeight = height;
+    } else {
+        // Full texture update
+        g_logger.info("UICEFWebView: Full texture update");
+        Rect upRect(0, 0, width, height);
+        m_cefTexture->updateSubPixels(upRect, dest, 4, useBGRA);
+    }
+
+    setVisible(true);
 }
 
 void UICEFWebView::onBrowserCreated(CefRefPtr<CefBrowser> browser)

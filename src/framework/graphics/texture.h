@@ -34,6 +34,7 @@ public:
     virtual ~Texture();
 
     void uploadPixels(const ImagePtr& image, bool buildMipmaps = false, bool compress = false, bool bgra = false);
+    void updateSubPixels(const Rect& rect, const uchar* pixels, int channels = 4, bool bgra = false);
     void bind();
     void copyFromScreen(const Rect& screenRect);
     virtual bool buildHardwareMipmaps();
