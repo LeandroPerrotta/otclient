@@ -352,68 +352,82 @@ bool UICEFWebView::loadHtmlInternal(const std::string& html, const std::string& 
     return true;
 }
 
-void UICEFWebView::onCEFPaint(const void* buffer, int width, int height, const CefRenderHandler::RectList& dirtyRects)
+void UICEFWebView::onCEFPaint(const void* buffer, int width, int height,
+                              const CefRenderHandler::RectList& dirtyRects)
 {
     if (!buffer || width <= 0 || height <= 0)
         return;
 
     const bool useBGRA = g_graphics.canUseBGRA();
-    
-    // Debug: Log paint info
-    g_logger.info("UICEFWebView: Paint received - size: " + std::to_string(width) + "x" + std::to_string(height) + 
-                  ", dirty rects: " + std::to_string(dirtyRects.size()) + 
-                  ", useBGRA: " + std::string(useBGRA ? "true" : "false"));
 
-    // Create or resize image if needed
+    // Cria ou redimensiona a imagem em cache
     if (!m_cefImage || m_cefImage->getSize() != Size(width, height)) {
-        g_logger.info("UICEFWebView: Creating/resizing image to " + std::to_string(width) + "x" + std::to_string(height));
         m_cefImage = ImagePtr(new Image(Size(width, height), 4));
-        m_textureCreated = false; // Force texture recreation
+        m_textureCreated = false;
     }
 
     const uint8_t* bgra = static_cast<const uint8_t*>(buffer);
     uint8_t* dest = m_cefImage->getPixelData();
 
-    // TEMPORARY: Always do full update to test if incremental rendering is the problem
-    g_logger.info("UICEFWebView: TEMPORARY - Always doing full update");
-    
-    // Copy function for a single rectangle
+    // Função utilitária para copiar um retângulo do buffer CEF para a imagem dest
     auto copyRect = [&](int x, int y, int w, int h) {
         for (int row = 0; row < h; ++row) {
             const uint8_t* srcRow = bgra + ((y + row) * width + x) * 4;
             uint8_t* dstRow = dest + ((y + row) * width + x) * 4;
-            
+
             if (useBGRA) {
-                // Direct copy if BGRA is supported
                 memcpy(dstRow, srcRow, w * 4);
             } else {
-                // Convert BGRA to RGBA
+                // Conversão BGRA→RGBA caso BGRA não seja suportado pela API gráfica
                 for (int col = 0; col < w; ++col) {
-                    dstRow[col*4 + 0] = srcRow[col*4 + 2]; // R = B
-                    dstRow[col*4 + 1] = srcRow[col*4 + 1]; // G = G
-                    dstRow[col*4 + 2] = srcRow[col*4 + 0]; // B = R
-                    dstRow[col*4 + 3] = srcRow[col*4 + 3]; // A = A
+                    dstRow[col*4 + 0] = srcRow[col*4 + 2];
+                    dstRow[col*4 + 1] = srcRow[col*4 + 1];
+                    dstRow[col*4 + 2] = srcRow[col*4 + 0];
+                    dstRow[col*4 + 3] = srcRow[col*4 + 3];
                 }
             }
         }
     };
 
-    // Always do full update for now
-    copyRect(0, 0, width, height);
+    // Copia as áreas modificadas do buffer CEF para a imagem local
+    if (dirtyRects.empty()) {
+        copyRect(0, 0, width, height);
+    } else {
+        for (const auto& r : dirtyRects) {
+            copyRect(r.x, r.y, r.width, r.height);
+        }
+    }
 
-    // Update texture
+    // (re)Cria a textura se necessário
     if (!m_textureCreated || width != m_lastWidth || height != m_lastHeight) {
-        // Create new texture
-        g_logger.info("UICEFWebView: Creating new texture");
         m_cefTexture = TexturePtr(new Texture(m_cefImage, false, false, useBGRA));
         m_textureCreated = true;
         m_lastWidth = width;
         m_lastHeight = height;
     } else {
-        // Full texture update
-        g_logger.info("UICEFWebView: Full texture update");
-        Rect upRect(0, 0, width, height);
-        m_cefTexture->updateSubPixels(upRect, dest, 4, useBGRA);
+        if (dirtyRects.empty()) {
+            // imagem completa: pode usar dest diretamente porque stride == width
+            Rect full(0, 0, width, height);
+            m_cefTexture->updateSubPixels(full, dest, 4, useBGRA);
+        } else {
+            // retângulos sujos: precisamos criar um buffer temporário contíguo
+            for (const auto& r : dirtyRects) {
+                Rect upRect(r.x, r.y, r.width, r.height);
+
+                // buffer contíguo para o sub‑retângulo
+                std::vector<uint8_t> temp(r.width * r.height * 4);
+                const size_t bytesPerRow = r.width * 4;
+
+                for (int row = 0; row < r.height; ++row) {
+                    const uint8_t* srcRow = dest + ((r.y + row) * width + r.x) * 4;
+                    uint8_t* dstRow = temp.data() + row * bytesPerRow;
+                    memcpy(dstRow, srcRow, bytesPerRow);
+                }
+
+                // envia a região com stride correto
+                m_cefTexture->updateSubPixels(upRect, temp.data(), 4, useBGRA);
+            }
+        }
     }
 
     setVisible(true);
