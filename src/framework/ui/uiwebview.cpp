@@ -274,6 +274,7 @@ void UIWebView::loadUrlInternal(const std::string& url)
 bool UIWebView::loadHtmlInternal(const std::string& html, const std::string& baseUrl)
 {
     g_logger.warning("UIWebView: Cannot load HTML, no WebView engine available");
+    return false;
 }
 
 void UIWebView::executeJavaScriptInternal(const std::string& script)

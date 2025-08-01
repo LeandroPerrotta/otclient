@@ -7,6 +7,7 @@
 #include "include/cef_client.h"
 #include "include/cef_render_handler.h"
 #include <framework/graphics/texture.h>
+#include <framework/graphics/image.h>
 
 // Forward declaration
 class SimpleCEFClient;
@@ -19,7 +20,7 @@ public:
     virtual ~UICEFWebView();
 
     // CEF-specific methods
-    void onCEFPaint(const void* buffer, int width, int height);
+    void onCEFPaint(const void* buffer, int width, int height, const CefRenderHandler::RectList& dirtyRects);
     void onBrowserCreated(CefRefPtr<CefBrowser> browser);
     
     // Static methods for managing all WebViews
@@ -65,6 +66,7 @@ private:
     
     // OTClient Texture for CEF rendering
     TexturePtr m_cefTexture;
+    ImagePtr m_cefImage;
     bool m_textureCreated;
     int m_lastWidth;
     int m_lastHeight;
