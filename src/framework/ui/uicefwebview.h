@@ -58,6 +58,7 @@ protected:
     void createWebView() override;
     void loadUrlInternal(const std::string& url) override;
     bool loadHtmlInternal(const std::string& html, const std::string& baseUrl) override;
+    void executeJavaScriptInternal(const std::string& script) override;
     void drawSelf(Fw::DrawPane drawPane) override;
 
 private:

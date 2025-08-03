@@ -740,6 +740,7 @@ void Application::registerLuaFunctions()
         return 0;
     });
     g_lua.bindClassMemberFunction<UICEFWebView>("unregisterJavaScriptCallback", &UICEFWebView::unregisterJavaScriptCallback);
+    g_lua.bindClassMemberFunction<UICEFWebView>("sendToJavaScript", &UICEFWebView::sendToJavaScript);
 #endif
 
     // UITextEdit
