@@ -67,4 +67,9 @@ class CustomDropdown {
 
 document.addEventListener('DOMContentLoaded', () => {
   const dropdown = new CustomDropdown(document.getElementById('customDropdown'));
+  sendToLua('greet', 'Hello from JS!');
+});
+
+registerLuaCallback('greet', (msg) => {
+  console.log('Lua says:', msg);
 });
