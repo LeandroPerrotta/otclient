@@ -33,6 +33,7 @@
 #include <unordered_map>
 #include <algorithm>
 #include <cstring>
+#include <memory>
 
 #ifdef USE_CEF
 #include <include/cef_app.h>
@@ -41,6 +42,8 @@
 #include <include/cef_browser.h>
 #include <include/cef_request_handler.h>
 #include <include/cef_resource_request_handler.h>
+#include <include/cef_life_span_handler.h>
+#include <include/wrapper/cef_message_router.h>
 #include <include/wrapper/cef_helpers.h>
 #include <include/cef_frame.h>
 #include "include/cef_parser.h"
@@ -197,54 +200,79 @@ static std::u16string cp1252ToUtf16(const std::string& text)
 }
 
 // Simple CEF Client implementation
-class SimpleCEFClient : public CefClient, public CefRenderHandler, public CefRequestHandler {
-    public:
-        SimpleCEFClient(UICEFWebView* webview) : m_webview(webview) {}
-    
-        virtual CefRefPtr<CefRenderHandler> GetRenderHandler() override { return this; }
-    
-        virtual CefRefPtr<CefRequestHandler> GetRequestHandler() override { return this; }
-    
-        CefRefPtr<CefResourceRequestHandler> GetResourceRequestHandler(
-            CefRefPtr<CefBrowser> browser,
-            CefRefPtr<CefFrame> frame,
-            CefRefPtr<CefRequest> request,
-            bool is_navigation,
-            bool is_download,
-            const CefString& request_initiator,
-            bool& disable_default_handling) override {
-            std::string url = request->GetURL();
-            if (url.rfind("otclient://", 0) == 0) {
-                return new CefPhysFsResourceRequestHandler();
-            }
-            return nullptr;
-        }
+class SimpleCEFClient : public CefClient,
+                        public CefRenderHandler,
+                        public CefRequestHandler {
+public:
+    explicit SimpleCEFClient(UICEFWebView* webview) : m_webview(webview) {
+        CefMessageRouterConfig config;
+        config.js_query_function = "luaCallback";
+        config.js_cancel_function = "luaCallbackCancel";
+        m_messageRouter = CefMessageRouterBrowserSide::Create(config);
+        m_routerHandler = std::make_unique<LuaCallbackHandler>(m_webview);
+        m_messageRouter->AddHandler(m_routerHandler.get(), false);
+    }
 
-    virtual void GetViewRect(CefRefPtr<CefBrowser> browser, CefRect& rect) override {
+    CefRefPtr<CefRenderHandler> GetRenderHandler() override { return this; }
+    CefRefPtr<CefRequestHandler> GetRequestHandler() override { return this; }
+    CefRefPtr<CefResourceRequestHandler> GetResourceRequestHandler(
+        CefRefPtr<CefBrowser> browser,
+        CefRefPtr<CefFrame> frame,
+        CefRefPtr<CefRequest> request,
+        bool is_navigation,
+        bool is_download,
+        const CefString& request_initiator,
+        bool& disable_default_handling) override {
+        std::string url = request->GetURL();
+        if (url.rfind("otclient://", 0) == 0 ||
+            url.rfind("http://otclient/", 0) == 0 ||
+            url.rfind("https://otclient/", 0) == 0) {
+            return new CefPhysFsResourceRequestHandler();
+        }
+        return nullptr;
+    }
+
+    bool OnProcessMessageReceived(CefRefPtr<CefBrowser> browser,
+                                  CefRefPtr<CefFrame> frame,
+                                  CefProcessId source_process,
+                                  CefRefPtr<CefProcessMessage> message) override {
+        if (m_messageRouter &&
+            m_messageRouter->OnProcessMessageReceived(browser, frame, source_process, message))
+            return true;
+        return false;
+    }
+
+    bool OnBeforeBrowse(CefRefPtr<CefBrowser> browser,
+                        CefRefPtr<CefFrame> frame,
+                        CefRefPtr<CefRequest> request,
+                        bool user_gesture,
+                        bool is_redirect) override {
+        if (m_messageRouter)
+            m_messageRouter->OnBeforeBrowse(browser, frame);
+        return false;
+    }
+
+    void GetViewRect(CefRefPtr<CefBrowser> browser, CefRect& rect) override {
         rect.x = rect.y = 0;
-        
-        // Use the actual widget size for CEF rendering
         if (m_webview) {
             Size widgetSize = m_webview->getSize();
             rect.width = widgetSize.width();
             rect.height = widgetSize.height();
         } else {
-            rect.width = 600;  // Fallback size
+            rect.width = 600;
             rect.height = 400;
         }
     }
 
-    virtual void OnPaint(CefRefPtr<CefBrowser> browser,
-                        PaintElementType type,
-                        const RectList& dirtyRects,
-                        const void* buffer,
-                        int width, int height) override {
+    void OnPaint(CefRefPtr<CefBrowser> browser,
+                 PaintElementType type,
+                 const RectList& dirtyRects,
+                 const void* buffer,
+                 int width, int height) override {
         if (m_webview) {
-            // Capture browser reference on first paint
             if (!m_webview->m_browser) {
                 m_webview->onBrowserCreated(browser);
             }
-            
             if (type == PET_VIEW) {
                 m_webview->onCEFPaint(buffer, width, height, dirtyRects);
             }
@@ -252,7 +280,47 @@ class SimpleCEFClient : public CefClient, public CefRenderHandler, public CefReq
     }
 
 private:
+    class LuaCallbackHandler : public CefMessageRouterBrowserSide::Handler {
+    public:
+        explicit LuaCallbackHandler(UICEFWebView* webview) : m_webview(webview) {}
+
+        bool OnQuery(CefRefPtr<CefBrowser> browser,
+                     CefRefPtr<CefFrame> frame,
+                     int64 query_id,
+                     const CefString& request,
+                     bool persistent,
+                     CefRefPtr<Callback> callback) override {
+            CefRefPtr<CefValue> value = CefParseJSON(request, JSON_PARSER_RFC);
+            if (value && value->GetType() == VTYPE_DICTIONARY) {
+                CefRefPtr<CefDictionaryValue> dict = value->GetDictionary();
+                std::string name = dict->GetString("name");
+                std::string data;
+                if (dict->HasKey("data")) {
+                    CefRefPtr<CefValue> dataValue = dict->GetValue("data");
+                    data = CefWriteJSON(dataValue, JSON_WRITER_DEFAULT).ToString();
+                }
+                if (m_webview && !name.empty()) {
+                    m_webview->onJavaScriptCallback(name, data);
+                    callback->Success("");
+                    return true;
+                }
+            }
+            callback->Failure(0, "Invalid request");
+            return true;
+        }
+
+        void OnQueryCanceled(CefRefPtr<CefBrowser> browser,
+                             CefRefPtr<CefFrame> frame,
+                             int64 query_id) override {}
+
+    private:
+        UICEFWebView* m_webview;
+    };
+
     UICEFWebView* m_webview;
+    CefRefPtr<CefMessageRouterBrowserSide> m_messageRouter;
+    std::unique_ptr<LuaCallbackHandler> m_routerHandler;
+
     IMPLEMENT_REFCOUNTING(SimpleCEFClient);
 };
 
@@ -377,6 +445,15 @@ bool UICEFWebView::loadHtmlInternal(const std::string& html, const std::string& 
     m_browser->GetMainFrame()->LoadURL(dataUri);
 
     return true;
+}
+
+void UICEFWebView::executeJavaScriptInternal(const std::string& script)
+{
+    if (!g_cefInitialized || !m_browser)
+        return;
+    CefRefPtr<CefFrame> frame = m_browser->GetMainFrame();
+    if (frame)
+        frame->ExecuteJavaScript(script, frame->GetURL(), 0);
 }
 
 void UICEFWebView::onCEFPaint(const void* buffer, int width, int height,
@@ -682,7 +759,9 @@ void UICEFWebView::onLoadStarted() {}
 void UICEFWebView::onLoadFinished(bool success) {}
 void UICEFWebView::onUrlChanged(const std::string& url) {}
 void UICEFWebView::onTitleChanged(const std::string& title) {}
-void UICEFWebView::onJavaScriptCallback(const std::string& name, const std::string& data) {}
+void UICEFWebView::onJavaScriptCallback(const std::string& name, const std::string& data) {
+    UIWebView::onJavaScriptCallback(name, data);
+}
 
 void UICEFWebView::onGeometryChange(const Rect& oldRect, const Rect& newRect)
 {

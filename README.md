@@ -25,6 +25,7 @@ normally be displayed by the browser.
 - [x] Keyboard interaction with the component
 - [x] Performance optimization (texture caching, frame rate control)
 - [x] Integrate webviews with otclient filesystem through otclient://
+- [x] Basic integration through callbacks between Lua and JS
 
 ### Pending
 
