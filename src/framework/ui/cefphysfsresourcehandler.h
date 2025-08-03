@@ -5,6 +5,7 @@
 #include <include/cef_resource_handler.h>
 #include <include/cef_resource_request_handler.h>
 #include <include/cef_request.h>
+#include <include/cef_scheme.h>
 #include <string>
 
 class CefPhysFsResourceHandler : public CefResourceHandler {
@@ -32,6 +33,16 @@ public:
                                                      CefRefPtr<CefRequest> request) override;
 
     IMPLEMENT_REFCOUNTING(CefPhysFsResourceRequestHandler);
+};
+
+class CefPhysFsSchemeHandlerFactory : public CefSchemeHandlerFactory {
+public:
+    CefRefPtr<CefResourceHandler> Create(CefRefPtr<CefBrowser> browser,
+                                         CefRefPtr<CefFrame> frame,
+                                         const CefString& scheme_name,
+                                         CefRefPtr<CefRequest> request) override;
+
+    IMPLEMENT_REFCOUNTING(CefPhysFsSchemeHandlerFactory);
 };
 
 #endif // USE_CEF
