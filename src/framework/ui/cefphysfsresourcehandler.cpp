@@ -3,6 +3,7 @@
 #ifdef USE_CEF
 
 #include <framework/core/resourcemanager.h>
+#include <include/cef_scheme.h>
 #include <unordered_map>
 #include <algorithm>
 #include <cstring>
@@ -70,17 +71,42 @@ std::string CefPhysFsResourceHandler::getMimeType(const std::string& ext) {
     return "text/plain";
 }
 
+static std::string resolvePathFromUrl(const std::string& url) {
+    const std::string scheme = "otclient://";
+    const std::string httpHost = "http://otclient";
+    const std::string httpsHost = "https://otclient";
+
+    std::string path;
+    if (url.rfind(scheme, 0) == 0)
+        path = url.substr(scheme.size());
+    else if (url.rfind(httpHost, 0) == 0)
+        path = url.substr(httpHost.size());
+    else if (url.rfind(httpsHost, 0) == 0)
+        path = url.substr(httpsHost.size());
+
+    if (!path.empty() && path[0] != '/')
+        path.insert(path.begin(), '/');
+    return path;
+}
+
 CefRefPtr<CefResourceHandler> CefPhysFsResourceRequestHandler::GetResourceHandler(
     CefRefPtr<CefBrowser> /*browser*/,
     CefRefPtr<CefFrame> /*frame*/,
     CefRefPtr<CefRequest> request) {
-    std::string url = request->GetURL();
-    const std::string scheme = "otclient://";
-    if (url.rfind(scheme, 0) == 0) {
-        std::string path = url.substr(scheme.size());
+    const std::string path = resolvePathFromUrl(request->GetURL());
+    if (!path.empty())
         return new CefPhysFsResourceHandler(path);
-    }
     return nullptr;
 }
 
+CefRefPtr<CefResourceHandler> CefPhysFsSchemeHandlerFactory::Create(
+    CefRefPtr<CefBrowser> /*browser*/,
+    CefRefPtr<CefFrame> /*frame*/,
+    const CefString& /*scheme_name*/,
+    CefRefPtr<CefRequest> request) {
+    const std::string path = resolvePathFromUrl(request->GetURL());
+    if (!path.empty())
+        return new CefPhysFsResourceHandler(path);
+    return nullptr;
+}
 #endif // USE_CEF

@@ -27,6 +27,7 @@
 
 #ifdef USE_CEF
 #include <framework/ui/uicefwebview.h>
+#include <framework/ui/cefphysfsresourcehandler.h>
 #endif
 
 #ifdef USE_CEF
@@ -34,7 +35,10 @@
 #include "include/cef_client.h"
 #include "include/cef_browser.h"
 #include "include/cef_command_line.h"
+#include "include/cef_render_process_handler.h"
+#include "include/cef_scheme.h"
 #include "include/wrapper/cef_helpers.h"
+#include "include/wrapper/cef_message_router.h"
 #include <unistd.h>
 #include <limits.h>
 #include <dirent.h>
@@ -46,20 +50,61 @@
 // Global CEF state
 bool g_cefInitialized = false;
 
-// Simple CEF App for main process (identical to cefsimple)
-class OTClientCEFApp : public CefApp {
+// CEF App that also handles renderer side callbacks
+class OTClientCEFApp : public CefApp, public CefRenderProcessHandler {
 public:
     OTClientCEFApp() {}
 
+    void OnRegisterCustomSchemes(CefRawPtr<CefSchemeRegistrar> registrar) override {
+        registrar->AddCustomScheme("otclient",
+                                   CEF_SCHEME_OPTION_STANDARD |
+                                   CEF_SCHEME_OPTION_LOCAL |
+                                   CEF_SCHEME_OPTION_DISPLAY_ISOLATED);
+    }
+
+    CefRefPtr<CefRenderProcessHandler> GetRenderProcessHandler() override { return this; }
+
+    void OnContextCreated(CefRefPtr<CefBrowser> browser,
+                          CefRefPtr<CefFrame> frame,
+                          CefRefPtr<CefV8Context> context) override {
+        if (!m_messageRouter) {
+            CefMessageRouterConfig config;
+            config.js_query_function = "luaCallback";
+            config.js_cancel_function = "luaCallbackCancel";
+            m_messageRouter = CefMessageRouterRendererSide::Create(config);
+        }
+        m_messageRouter->OnContextCreated(browser, frame, context);
+    }
+
+    void OnContextReleased(CefRefPtr<CefBrowser> browser,
+                           CefRefPtr<CefFrame> frame,
+                           CefRefPtr<CefV8Context> context) override {
+        if (m_messageRouter)
+            m_messageRouter->OnContextReleased(browser, frame, context);
+    }
+
+    bool OnProcessMessageReceived(CefRefPtr<CefBrowser> browser,
+                                  CefRefPtr<CefFrame> frame,
+                                  CefProcessId source_process,
+                                  CefRefPtr<CefProcessMessage> message) override {
+        if (m_messageRouter &&
+            m_messageRouter->OnProcessMessageReceived(browser, frame, source_process, message))
+            return true;
+        return false;
+    }
+
 private:
+    CefRefPtr<CefMessageRouterRendererSide> m_messageRouter;
+
     IMPLEMENT_REFCOUNTING(OTClientCEFApp);
 };
 
 // Global CEF initialization function (simplified)
 bool InitializeCEF(int argc, const char* argv[]) {
-    // Handle CEF sub-processes
     CefMainArgs main_args(argc, const_cast<char**>(argv));
-    int exit_code = CefExecuteProcess(main_args, nullptr, nullptr);
+    CefRefPtr<OTClientCEFApp> app(new OTClientCEFApp);
+
+    int exit_code = CefExecuteProcess(main_args, app, nullptr);
     if (exit_code >= 0) {
         std::exit(exit_code);
     }
@@ -186,12 +231,12 @@ bool InitializeCEF(int argc, const char* argv[]) {
     CefString(&settings.resources_dir_path) = resourcesPath;
     CefString(&settings.locales_dir_path) = localesPath;
 
-    // Create CEF application
-    CefRefPtr<OTClientCEFApp> app(new OTClientCEFApp);
-
     g_logger.info("OTClient: Initializing CEF...");
-    bool result = CefInitialize(main_args, settings, app.get(), nullptr);
+    bool result = CefInitialize(main_args, settings, app, nullptr);
     if (result) {
+        CefRegisterSchemeHandlerFactory("otclient", "", new CefPhysFsSchemeHandlerFactory);
+        CefRegisterSchemeHandlerFactory("http", "otclient", new CefPhysFsSchemeHandlerFactory);
+        CefRegisterSchemeHandlerFactory("https", "otclient", new CefPhysFsSchemeHandlerFactory);
         g_cefInitialized = true;
         g_logger.info("OTClient: CEF initialized successfully");
     } else {

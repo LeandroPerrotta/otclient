@@ -33,7 +33,12 @@ function init()
         realPath = workDir .. "modules/" .. path
         print('fallback path: ' .. realPath)
     end
-    
+    webView:registerJavaScriptCallback('greet', function(raw)
+      print('JS says:', raw)
+    end)
+    webView:registerJavaScriptCallback('js_loaded', function()
+      webView:sendToJavaScript('greet', 'Hello from Lua!')
+    end)
     webView:loadUrl('otclient://webviews/demo/demo.html')
   end
   webViewTabBar:addTab(tr('Demo'), demoPanel)
