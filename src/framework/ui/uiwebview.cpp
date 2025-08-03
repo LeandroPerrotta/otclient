@@ -23,6 +23,7 @@
 #include "uiwebview.h"
 #include <framework/core/resourcemanager.h>
 #include <framework/core/application.h>
+#include <framework/luaengine/luainterface.h>
 
 UIWebView::UIWebView()
     : m_webViewHandle(nullptr)
@@ -50,6 +51,11 @@ UIWebView::UIWebView(UIWidgetPtr parent)
 
 UIWebView::~UIWebView()
 {
+    for (auto& pair : m_jsCallbacks) {
+        if (pair.second.luaRef != -1)
+            g_lua.unref(pair.second.luaRef);
+    }
+    m_jsCallbacks.clear();
     cleanupWebView();
 }
 
@@ -170,14 +176,52 @@ bool UIWebView::isLoading()
     return m_loading;
 }
 
-void UIWebView::registerJavaScriptCallback(const std::string& name, const std::function<void(const std::string&)>& callback)
+void UIWebView::registerJavaScriptCallback(const std::string& name,
+                                           const std::function<void(const std::string&)>& callback,
+                                           int luaRef)
 {
-    m_jsCallbacks[name] = callback;
+    JSCallback cb{callback, luaRef};
+    auto it = m_jsCallbacks.find(name);
+    if (it != m_jsCallbacks.end()) {
+        if (it->second.luaRef != -1)
+            g_lua.unref(it->second.luaRef);
+        it->second = cb;
+    } else {
+        m_jsCallbacks[name] = cb;
+    }
 }
 
 void UIWebView::unregisterJavaScriptCallback(const std::string& name)
 {
-    m_jsCallbacks.erase(name);
+    auto it = m_jsCallbacks.find(name);
+    if (it != m_jsCallbacks.end()) {
+        if (it->second.luaRef != -1)
+            g_lua.unref(it->second.luaRef);
+        m_jsCallbacks.erase(it);
+    }
+}
+
+void UIWebView::sendToJavaScript(const std::string& name, const std::string& data)
+{
+    auto escape = [](const std::string& in) {
+        std::string out;
+        out.reserve(in.size());
+        for (char c : in) {
+            switch (c) {
+            case '\\': out += "\\\\"; break;
+            case '"': out += "\\\""; break;
+            case '\n': out += "\\n"; break;
+            case '\r': out += "\\r"; break;
+            case '\t': out += "\\t"; break;
+            default: out += c; break;
+            }
+        }
+        return out;
+    };
+
+    std::string script = std::string("if(window.receiveFromLua){window.receiveFromLua({\"name\":\"") +
+        escape(name) + "\",\"data\":\"" + escape(data) + "\"});}";
+    executeJavaScriptInternal(script);
 }
 
 void UIWebView::onLoadStarted()
@@ -207,7 +251,7 @@ void UIWebView::onJavaScriptCallback(const std::string& name, const std::string&
 {
     auto it = m_jsCallbacks.find(name);
     if (it != m_jsCallbacks.end()) {
-        it->second(data);
+        it->second.callback(data);
     }
 }
 

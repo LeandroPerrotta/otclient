@@ -77,17 +77,15 @@ static std::string resolvePathFromUrl(const std::string& url) {
     const std::string httpsHost = "https://otclient";
 
     std::string path;
-    if (url.rfind(scheme, 0) == 0) {
+    if (url.rfind(scheme, 0) == 0)
         path = url.substr(scheme.size());
-    } else if (url.rfind(httpHost, 0) == 0) {
+    else if (url.rfind(httpHost, 0) == 0)
         path = url.substr(httpHost.size());
-        if (!path.empty() && path[0] == '/')
-            path.erase(0, 1);
-    } else if (url.rfind(httpsHost, 0) == 0) {
+    else if (url.rfind(httpsHost, 0) == 0)
         path = url.substr(httpsHost.size());
-        if (!path.empty() && path[0] == '/')
-            path.erase(0, 1);
-    }
+
+    if (!path.empty() && path[0] != '/')
+        path.insert(path.begin(), '/');
     return path;
 }
 
