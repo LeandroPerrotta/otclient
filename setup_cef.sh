@@ -210,9 +210,9 @@ echo "[OK] CEF runtime files verified"
 if [ "$INSTALL_MODE" = "global" ]; then
     echo "[INFO] Setting permissions for global installation..."
     chmod 755 "$CEF_RUNTIME_DIR"
-    chmod 644 "$CEF_RUNTIME_DIR"/*.a
-    chmod 755 "$CEF_RUNTIME_DIR"/*.so
-    chmod 755 "$CEF_RUNTIME_DIR"/chrome-sandbox
+    chmod 644 "$CEF_RUNTIME_DIR"/Release/*.a 2>/dev/null || true
+    chmod 755 "$CEF_RUNTIME_DIR"/Release/*.so 2>/dev/null || true
+    chmod 755 "$CEF_RUNTIME_DIR"/Release/chrome-sandbox 2>/dev/null || true
     echo "[OK] Permissions set"
 fi
 
