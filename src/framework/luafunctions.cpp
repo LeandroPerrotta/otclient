@@ -717,7 +717,28 @@ void Application::registerLuaFunctions()
     g_lua.bindClassMemberFunction<UICEFWebView>("canGoBack", &UICEFWebView::canGoBack);
     g_lua.bindClassMemberFunction<UICEFWebView>("canGoForward", &UICEFWebView::canGoForward);
     g_lua.bindClassMemberFunction<UICEFWebView>("isLoading", &UICEFWebView::isLoading);
-    g_lua.bindClassMemberFunction<UICEFWebView>("registerJavaScriptCallback", &UICEFWebView::registerJavaScriptCallback);
+    g_lua.registerClassMemberFunction<UICEFWebView>("registerJavaScriptCallback", [](LuaInterface* lua) -> int {
+        LuaObjectPtr obj = lua->toObject(1);
+        UICEFWebViewPtr webview = obj->static_self_cast<UICEFWebView>();
+        std::string name = lua->toString(2);
+        if (lua->isFunction(3)) {
+            lua->pushValue(3);
+            int ref = lua->ref();
+            webview->registerJavaScriptCallback(name,
+                [ref](const std::string& data) {
+                    g_lua.getRef(ref);
+                    if (g_lua.isFunction()) {
+                        int args = g_lua.polymorphicPush(data);
+                        int rets = g_lua.safeCall(args);
+                        g_lua.pop(rets);
+                    }
+                },
+                ref);
+        }
+        // clean up stack (object, name and optional function)
+        lua->pop(lua->stackSize());
+        return 0;
+    });
     g_lua.bindClassMemberFunction<UICEFWebView>("unregisterJavaScriptCallback", &UICEFWebView::unregisterJavaScriptCallback);
 #endif
 
