@@ -447,6 +447,15 @@ bool UICEFWebView::loadHtmlInternal(const std::string& html, const std::string& 
     return true;
 }
 
+void UICEFWebView::executeJavaScriptInternal(const std::string& script)
+{
+    if (!g_cefInitialized || !m_browser)
+        return;
+    CefRefPtr<CefFrame> frame = m_browser->GetMainFrame();
+    if (frame)
+        frame->ExecuteJavaScript(script, frame->GetURL(), 0);
+}
+
 void UICEFWebView::onCEFPaint(const void* buffer, int width, int height,
                               const CefRenderHandler::RectList& dirtyRects)
 {

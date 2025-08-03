@@ -201,6 +201,29 @@ void UIWebView::unregisterJavaScriptCallback(const std::string& name)
     }
 }
 
+void UIWebView::sendToJavaScript(const std::string& name, const std::string& data)
+{
+    auto escape = [](const std::string& in) {
+        std::string out;
+        out.reserve(in.size());
+        for (char c : in) {
+            switch (c) {
+            case '\\': out += "\\\\"; break;
+            case '"': out += "\\\""; break;
+            case '\n': out += "\\n"; break;
+            case '\r': out += "\\r"; break;
+            case '\t': out += "\\t"; break;
+            default: out += c; break;
+            }
+        }
+        return out;
+    };
+
+    std::string script = std::string("if(window.receiveFromLua){window.receiveFromLua({\"name\":\"") +
+        escape(name) + "\",\"data\":\"" + escape(data) + "\"});}";
+    executeJavaScriptInternal(script);
+}
+
 void UIWebView::onLoadStarted()
 {
     // Override in derived classes if needed

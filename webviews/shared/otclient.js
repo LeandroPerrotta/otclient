@@ -10,4 +10,17 @@ function sendToLua(name, data) {
   });
 }
 
+const luaCallbacks = {};
+
+window.registerLuaCallback = function (name, cb) {
+  luaCallbacks[name] = cb;
+};
+
+window.receiveFromLua = function (message) {
+  const handler = luaCallbacks[message.name];
+  if (handler) {
+    handler(message.data);
+  }
+};
+
 sendToLua('js_loaded');

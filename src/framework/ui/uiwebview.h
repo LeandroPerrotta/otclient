@@ -67,6 +67,7 @@ public:
                                     const std::function<void(const std::string&)>& callback,
                                     int luaRef = -1);
     void unregisterJavaScriptCallback(const std::string& name);
+    void sendToJavaScript(const std::string& name, const std::string& data);
     
     // Events
     virtual void onLoadStarted();
