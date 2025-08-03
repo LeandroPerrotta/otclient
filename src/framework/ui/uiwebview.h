@@ -63,7 +63,9 @@ public:
     bool isLoading();
     
     // JavaScript bridge
-    void registerJavaScriptCallback(const std::string& name, const std::function<void(const std::string&)>& callback);
+    void registerJavaScriptCallback(const std::string& name,
+                                    const std::function<void(const std::string&)>& callback,
+                                    int luaRef = -1);
     void unregisterJavaScriptCallback(const std::string& name);
     
     // Events
@@ -110,7 +112,11 @@ private:
     bool m_scrollable;
     bool m_loading;
     
-    std::map<std::string, std::function<void(const std::string&)>> m_jsCallbacks;
+    struct JSCallback {
+        std::function<void(const std::string&)> callback;
+        int luaRef;
+    };
+    std::map<std::string, JSCallback> m_jsCallbacks;
     
     void updateWebViewSize();
     void initializeWebView();
