@@ -463,6 +463,8 @@ if(FRAMEWORK_GRAPHICS)
         # CEF WebView (conditional)
         $<$<BOOL:${USE_CEF}>:${CMAKE_CURRENT_LIST_DIR}/ui/uicefwebview.cpp>
         $<$<BOOL:${USE_CEF}>:${CMAKE_CURRENT_LIST_DIR}/ui/uicefwebview.h>
+        $<$<BOOL:${USE_CEF}>:${CMAKE_CURRENT_LIST_DIR}/ui/cefphysfsresourcehandler.cpp>
+        $<$<BOOL:${USE_CEF}>:${CMAKE_CURRENT_LIST_DIR}/ui/cefphysfsresourcehandler.h>        
 
         # platform window
         ${CMAKE_CURRENT_LIST_DIR}/platform/platformwindow.cpp

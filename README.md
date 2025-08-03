@@ -22,14 +22,16 @@ normally be displayed by the browser.
 - [x] Basic HTML/CSS rendering
 - [x] CEF installation and compilation helpers
 - [x] Mouse interaction with the component
+- [x] Keyboard interaction with the component
+- [x] Performance optimization (texture caching, frame rate control)
+- [x] Integrate webviews with otclient filesystem through otclient://
 
 ### Pending
 
-- [ ] Keyboard interaction with the component
+- [ ] Dynamically build components to be expose for webviews on otclient://webviews
 - [ ] Touchscreen interaction with the component
 - [ ] Implementation (bridge) of all available callbacks/methods in Lua also for JavaScript
 - [ ] Developer tools integration (F12 debugger)
-- [ ] Performance optimization (texture caching, frame rate control)
 - [ ] Code readibility (clean-code geeks happy)
 - [ ] Windows builds (vcpkg probably)
 

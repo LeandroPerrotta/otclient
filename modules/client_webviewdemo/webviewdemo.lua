@@ -34,9 +34,7 @@ function init()
         print('fallback path: ' .. realPath)
     end
     
-
-    webView:loadComponent('demo', resolvePath)
-    --webView:loadUrl('file://'.. realPath .. '/demo.html')
+    webView:loadUrl('otclient://webviews/demo/demo.html')
   end
   webViewTabBar:addTab(tr('Demo'), demoPanel)
 

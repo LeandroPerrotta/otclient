@@ -31,15 +31,21 @@
 #include <string>
 #include <vector>
 #include <unordered_map>
+#include <algorithm>
+#include <cstring>
 
 #ifdef USE_CEF
 #include <include/cef_app.h>
 #include <include/cef_client.h>
 #include <include/cef_render_handler.h>
 #include <include/cef_browser.h>
+#include <include/cef_request_handler.h>
+#include <include/cef_resource_request_handler.h>
 #include <include/wrapper/cef_helpers.h>
+#include <include/cef_frame.h>
 #include "include/cef_parser.h"
 #include <GL/gl.h>
+#include "cefphysfsresourcehandler.h"
 
 std::string GetDataURI(const std::string& data, const std::string& mime_type) {
     return "data:" + mime_type + ";base64," +
@@ -191,13 +197,28 @@ static std::u16string cp1252ToUtf16(const std::string& text)
 }
 
 // Simple CEF Client implementation
-class SimpleCEFClient : public CefClient, public CefRenderHandler {
-public:
-    SimpleCEFClient(UICEFWebView* webview) : m_webview(webview) {}
-
-    virtual CefRefPtr<CefRenderHandler> GetRenderHandler() override {
-        return this;
-    }
+class SimpleCEFClient : public CefClient, public CefRenderHandler, public CefRequestHandler {
+    public:
+        SimpleCEFClient(UICEFWebView* webview) : m_webview(webview) {}
+    
+        virtual CefRefPtr<CefRenderHandler> GetRenderHandler() override { return this; }
+    
+        virtual CefRefPtr<CefRequestHandler> GetRequestHandler() override { return this; }
+    
+        CefRefPtr<CefResourceRequestHandler> GetResourceRequestHandler(
+            CefRefPtr<CefBrowser> browser,
+            CefRefPtr<CefFrame> frame,
+            CefRefPtr<CefRequest> request,
+            bool is_navigation,
+            bool is_download,
+            const CefString& request_initiator,
+            bool& disable_default_handling) override {
+            std::string url = request->GetURL();
+            if (url.rfind("otclient://", 0) == 0) {
+                return new CefPhysFsResourceRequestHandler();
+            }
+            return nullptr;
+        }
 
     virtual void GetViewRect(CefRefPtr<CefBrowser> browser, CefRect& rect) override {
         rect.x = rect.y = 0;
@@ -350,9 +371,9 @@ bool UICEFWebView::loadHtmlInternal(const std::string& html, const std::string& 
 
     g_logger.info("UICEFWebView: Loading HTML directly into browser");
     // Use a simple data URL with minimal encoding
-    std::string dataUri = GetDataURI(html, "text/html");
-    g_logger.info("UICEFWebView: Data URL length: " + std::to_string(html.length()));
-    g_logger.info("UICEFWebView: HTML content: " + html.substr(0, 100) + "...");
+        std::string dataUri = GetDataURI(html, "text/html");
+        g_logger.info("UICEFWebView: Data URL length: " + std::to_string(html.length()));
+        g_logger.info("UICEFWebView: HTML content: " + html.substr(0, 100) + "...");
     m_browser->GetMainFrame()->LoadURL(dataUri);
 
     return true;
