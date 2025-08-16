@@ -328,6 +328,14 @@ function EnterGame.doLogin()
                                 end })
 
   g_game.setClientVersion(clientVersion)
+  
+  -- HACK: this force server not recognize the client as otclient
+  -- in that way, it will not mismatch some protocol comunication.
+  -- Maybe it's not necessary in all distros, but is necessary in the
+  -- one I am using for testing (Nostalrius)
+  g_game.setCustomOs(5)
+
+
   g_game.setProtocolVersion(g_game.getClientProtocolVersion(clientVersion))
   g_game.chooseRsa(G.host)
 
