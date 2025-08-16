@@ -58,6 +58,9 @@ void ProtocolGame::onRecv(const InputMessagePtr& inputMessage)
     if(m_firstRecv) {
         m_firstRecv = false;
 
+        // Enable InputMessage logging for debugging
+        inputMessage->enableLogging("protocol_input.log");
+
         if(g_game.getFeature(Otc::GameMessageSizeCheck)) {
             int size = inputMessage->getU16();
             if(size != inputMessage->getUnreadSize()) {

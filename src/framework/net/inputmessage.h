@@ -63,6 +63,16 @@ public:
 
     bool eof() { return (m_readPos - m_headerPos) >= m_messageSize; }
 
+    // Debug logging methods
+    void enableLogging(const std::string& filename);
+    void disableLogging();
+    void logFunction(const std::string& functionName);
+    void logU8(uint8 value);
+    void logU16(uint16 value);
+    void logU32(uint32 value);
+    void logU64(uint64 value);
+    void logString(const std::string& value);
+
 protected:
     void reset();
     void fillBuffer(uint8 *buffer, uint16 size);
@@ -89,6 +99,10 @@ private:
     uint16 m_readPos;
     uint16 m_messageSize;
     uint8 m_buffer[BUFFER_MAXSIZE];
+    
+    // Debug logging members
+    std::ofstream m_logFile;
+    bool m_loggingEnabled = false;
 };
 
 #endif

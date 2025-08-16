@@ -49,3 +49,24 @@ function InputMessage:getPosition()
   position.z = self:getU8()
   return position
 end
+
+-- Debug logging functions
+function InputMessage:enableLogging(filename)
+    if not filename then
+        filename = "inputmessage_log_" .. os.time() .. ".log"
+    end
+    self:enableLogging(filename)
+end
+
+function InputMessage:disableLogging()
+    self:disableLogging()
+end
+
+function InputMessage:logFunction(functionName)
+    self:logFunction(functionName)
+end
+
+-- Helper function to log function context
+function InputMessage:logContext(functionName)
+    self:logFunction(functionName)
+end

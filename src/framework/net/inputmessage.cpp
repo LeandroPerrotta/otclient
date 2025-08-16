@@ -22,6 +22,8 @@
 
 #include "inputmessage.h"
 #include <framework/util/crypt.h>
+#include <fstream>
+#include <iostream>
 
 InputMessage::InputMessage()
 {
@@ -50,6 +52,11 @@ uint8 InputMessage::getU8()
     checkRead(1);
     uint8 v = m_buffer[m_readPos];
     m_readPos += 1;
+    
+    if (m_loggingEnabled) {
+        logU8(v);
+    }
+    
     return v;
 }
 
@@ -58,6 +65,11 @@ uint16 InputMessage::getU16()
     checkRead(2);
     uint16 v = stdext::readULE16(m_buffer + m_readPos);
     m_readPos += 2;
+    
+    if (m_loggingEnabled) {
+        logU16(v);
+    }
+    
     return v;
 }
 
@@ -66,6 +78,11 @@ uint32 InputMessage::getU32()
     checkRead(4);
     uint32 v = stdext::readULE32(m_buffer + m_readPos);
     m_readPos += 4;
+    
+    if (m_loggingEnabled) {
+        logU32(v);
+    }
+    
     return v;
 }
 
@@ -74,6 +91,11 @@ uint64 InputMessage::getU64()
     checkRead(8);
     uint64 v = stdext::readULE64(m_buffer + m_readPos);
     m_readPos += 8;
+    
+    if (m_loggingEnabled) {
+        logU64(v);
+    }
+    
     return v;
 }
 
@@ -83,7 +105,14 @@ std::string InputMessage::getString()
     checkRead(stringLength);
     char* v = (char*)(m_buffer + m_readPos);
     m_readPos += stringLength;
-    return std::string(v, stringLength);
+    
+    std::string result(v, stringLength);
+    
+    if (m_loggingEnabled) {
+        logString(result);
+    }
+    
+    return result;
 }
 
 double InputMessage::getDouble()
@@ -127,6 +156,7 @@ bool InputMessage::canRead(int bytes)
         return false;
     return true;
 }
+
 void InputMessage::checkRead(int bytes)
 {
     if(!canRead(bytes))
@@ -137,4 +167,78 @@ void InputMessage::checkWrite(int bytes)
 {
     if(bytes > BUFFER_MAXSIZE)
         throw stdext::exception("InputMessage max buffer size reached");
+}
+
+// Debug logging methods implementation
+void InputMessage::enableLogging(const std::string& filename)
+{
+    if (m_loggingEnabled) {
+        disableLogging();
+    }
+    
+    m_logFile.open(filename, std::ios::out | std::ios::trunc);
+    
+    if (m_logFile.is_open()) {
+        m_loggingEnabled = true;
+        std::cout << "InputMessage logging enabled: " << filename << std::endl;
+    } else {
+        std::cout << "Failed to open InputMessage log file: " << filename << std::endl;
+    }
+}
+
+void InputMessage::disableLogging()
+{
+    if (m_loggingEnabled && m_logFile.is_open()) {
+        m_logFile.close();
+        m_loggingEnabled = false;
+        std::cout << "InputMessage logging disabled" << std::endl;
+    }
+}
+
+void InputMessage::logFunction(const std::string& functionName)
+{
+    if (m_loggingEnabled && m_logFile.is_open()) {
+        m_logFile << "[" << functionName << "]" << std::endl;
+        m_logFile.flush();
+    }
+}
+
+void InputMessage::logU8(uint8 value)
+{
+    if (m_loggingEnabled && m_logFile.is_open()) {
+        m_logFile << "u8|" << (int)value << std::endl;
+        m_logFile.flush();
+    }
+}
+
+void InputMessage::logU16(uint16 value)
+{
+    if (m_loggingEnabled && m_logFile.is_open()) {
+        m_logFile << "u16|" << value << std::endl;
+        m_logFile.flush();
+    }
+}
+
+void InputMessage::logU32(uint32 value)
+{
+    if (m_loggingEnabled && m_logFile.is_open()) {
+        m_logFile << "u32|" << value << std::endl;
+        m_logFile.flush();
+    }
+}
+
+void InputMessage::logU64(uint64 value)
+{
+    if (m_loggingEnabled && m_logFile.is_open()) {
+        m_logFile << "u64|" << value << std::endl;
+        m_logFile.flush();
+    }
+}
+
+void InputMessage::logString(const std::string& value)
+{
+    if (m_loggingEnabled && m_logFile.is_open()) {
+        m_logFile << "string|" << value << std::endl;
+        m_logFile.flush();
+    }
 }
