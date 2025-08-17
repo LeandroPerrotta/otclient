@@ -41,6 +41,16 @@ g_modules.ensureModuleLoaded("gamelib")
 g_modules.autoLoadModules(499)
 g_modules.ensureModuleLoaded("client")
 
+-- Load login system conditionally
+useLoginHttp = true -- Global variable for login system choice
+if useLoginHttp then
+    g_modules.ensureModuleLoaded("client_http_entergame")
+else
+    -- Traditional login system
+    g_modules.ensureModuleLoaded("client_entergame")
+    g_modules.ensureModuleLoaded("client_serverlist")
+end
+
 -- game modules 500-999
 g_modules.autoLoadModules(999)
 g_modules.ensureModuleLoaded("game_interface")

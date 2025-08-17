@@ -297,7 +297,28 @@ private:
                 std::string data;
                 if (dict->HasKey("data")) {
                     CefRefPtr<CefValue> dataValue = dict->GetValue("data");
-                    data = CefWriteJSON(dataValue, JSON_WRITER_DEFAULT).ToString();
+                    switch (dataValue->GetType()) {
+                        case VTYPE_STRING:
+                            // String: usar diretamente
+                            data = dataValue->GetString();
+                            break;
+                        case VTYPE_INT:
+                            // Inteiro: converter para string
+                            data = std::to_string(dataValue->GetInt());
+                            break;
+                        case VTYPE_DOUBLE:
+                            // Double: converter para string
+                            data = std::to_string(dataValue->GetDouble());
+                            break;
+                        case VTYPE_BOOL:
+                            // Boolean: converter para string
+                            data = dataValue->GetBool() ? "true" : "false";
+                            break;
+                        default:
+                            // Para tipos complexos (array, object, null), usar JSON
+                            data = CefWriteJSON(dataValue, JSON_WRITER_DEFAULT).ToString();
+                            break;
+                    }
                 }
                 if (m_webview && !name.empty()) {
                     m_webview->onJavaScriptCallback(name, data);

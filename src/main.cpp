@@ -228,8 +228,28 @@ bool InitializeCEF(int argc, const char* argv[]) {
         return false;
     }
 
-    CefString(&settings.resources_dir_path) = resourcesPath;
-    CefString(&settings.locales_dir_path) = localesPath;
+    // Configure cache path in CEF directory
+    std::string cache_path = cef_root + "/cache";
+    
+    // Convert relative paths to absolute paths
+    char abs_cache_path[PATH_MAX];
+    char abs_resources_path[PATH_MAX];
+    char abs_locales_path[PATH_MAX];
+    
+    realpath(cache_path.c_str(), abs_cache_path);
+    realpath(resourcesPath.c_str(), abs_resources_path);
+    realpath(localesPath.c_str(), abs_locales_path);
+    
+    g_logger.info(stdext::format("OTClient: CEF cache path: %s", abs_cache_path));
+    
+    // Configure CEF settings for data persistence
+    CefString(&settings.cache_path) = abs_cache_path;
+    CefString(&settings.user_data_path) = abs_cache_path;
+    settings.persist_session_cookies = true;
+    settings.persist_user_preferences = true;
+
+    CefString(&settings.resources_dir_path) = abs_resources_path;
+    CefString(&settings.locales_dir_path) = abs_locales_path;
 
     g_logger.info("OTClient: Initializing CEF...");
     bool result = CefInitialize(main_args, settings, app, nullptr);
