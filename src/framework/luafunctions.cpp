@@ -81,6 +81,7 @@ void Application::registerLuaFunctions()
     g_lua.bindGlobalFunction("stringtoip", [](const std::string& v) { return stdext::string_to_ip(v); });
     g_lua.bindGlobalFunction("listSubnetAddresses", [](uint32 a, uint8 b) { return stdext::listSubnetAddresses(a, b); });
     g_lua.bindGlobalFunction("ucwords", [](std::string s) { return stdext::ucwords(s); });
+    g_lua.bindGlobalFunction("latin1_to_utf8", [](const std::string& s) { return stdext::latin1_to_utf8(s); });
 
     // Platform
     g_lua.registerSingletonClass("g_platform");
