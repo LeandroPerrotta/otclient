@@ -36,6 +36,20 @@ normally be displayed by the browser.
 - [ ] Code readibility (clean-code geeks happy)
 - [ ] Windows builds (vcpkg probably)
 
+### HTTP Login Component
+
+The HTTP Login component demonstrates WebView capabilities by replacing the traditional TCP login with HTTP-based authentication. It supports JWT tokens (if server supports) with fallback to username/password for the final game connection.
+
+**Requirements:**
+- [OTClient HTTP Login Server](https://github.com/LeandroPerrotta/otclient-http-login-server) (Node.js application)
+
+**Configuration:**
+- Enable/disable in `init.lua`: `useLoginHttp = true/false`
+- Configure API URL in `modules/client_http_entergame/http_entergame.lua`: `baseUrl = "https://your-api-url"`
+
+![HTTP Login Screenshot](images/httplogin_1.png "HTTP Login Component")
+![HTTP Login Screenshot](images/httplogin_2.png "Character Selection")
+
 ### What is OTClient?
 
 OTClient is an alternative Tibia client for usage with otserv. It aims to be complete and flexible,
