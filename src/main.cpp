@@ -39,16 +39,51 @@
 #include "include/cef_scheme.h"
 #include "include/wrapper/cef_helpers.h"
 #include "include/wrapper/cef_message_router.h"
+#ifdef _WIN32
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#include <libloaderapi.h>
+#include <io.h>
+#include <direct.h>
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#else
 #include <unistd.h>
-#include <limits.h>
 #include <dirent.h>
+#endif
+#include <limits.h>
 #include <vector>
 #include <string>
+#include <ctime>
 #endif
 
 #ifdef USE_CEF
 // Global CEF state
 bool g_cefInitialized = false;
+
+// Raw logger for early CEF initialization (no dependencies)
+void rawLogger(const char* message) {
+    FILE* log_file = fopen("cef.log", "a");
+    if (log_file) {
+        // Get current time
+        time_t now = time(0);
+        char* timestr = ctime(&now);
+        // Remove newline from timestr
+        if (timestr && strlen(timestr) > 0) {
+            timestr[strlen(timestr) - 1] = '\0';
+        }
+        
+        fprintf(log_file, "[%s] %s\n", timestr ? timestr : "unknown", message);
+        fflush(log_file);
+        fclose(log_file);
+    }
+    
+    // Also print to console
+    printf("[CEF] %s\n", message);
+    fflush(stdout);
+}
 
 // CEF App that also handles renderer side callbacks
 class OTClientCEFApp : public CefApp, public CefRenderProcessHandler {
@@ -101,6 +136,111 @@ private:
 
 // Global CEF initialization function (simplified)
 bool InitializeCEF(int argc, const char* argv[]) {
+
+#ifdef _WIN32
+    // 0) Early-subprocess exit
+    CefMainArgs main_args(GetModuleHandle(nullptr));
+    // Se este processo foi invocado como subprocesso do CEF, ele retorna >= 0.
+    // No binário principal, normalmente será -1; no helper será >= 0.
+    {
+        CefRefPtr<CefApp> dummyApp = nullptr; // use sua OTClientCEFApp se precisar.
+        const int code = CefExecuteProcess(main_args, dummyApp, nullptr);
+        if (code >= 0) {
+            // Somos um subprocesso: sair imediatamente.
+            std::exit(code);
+        }
+    }
+
+    // 1) Descobrir caminhos absolutos
+    auto getExeDirW = []() -> std::wstring {
+        wchar_t buf[MAX_PATH];
+        DWORD n = GetModuleFileNameW(nullptr, buf, MAX_PATH);
+        if (!n || n >= MAX_PATH) return L".";
+        std::wstring p(buf, n);
+        size_t pos = p.find_last_of(L"\\/");
+        return (pos == std::wstring::npos) ? L"." : p.substr(0, pos);
+    };
+
+    const std::wstring exeDir = getExeDirW();
+    const std::wstring cefDir = exeDir + L"\\cef";
+    const std::wstring localesDir = cefDir + L"\\locales";
+    const std::wstring cacheDir = cefDir + L"\\cache";
+    const std::wstring helperPath = cefDir + L"\\otclient_helper.exe";
+
+    // 2) Restringir/definir busca de DLLs (sem mexer em PATH e sem copiar DLLs)
+    {
+        HMODULE k32 = GetModuleHandleW(L"kernel32.dll");
+        auto pSetDefaultDllDirectories =
+            (BOOL (WINAPI*)(DWORD))GetProcAddress(k32, "SetDefaultDllDirectories");
+        auto pAddDllDirectory =
+            (PVOID (WINAPI*)(PCWSTR))GetProcAddress(k32, "AddDllDirectory");
+        auto pSetDllDirectoryW =
+            (BOOL (WINAPI*)(LPCWSTR))GetProcAddress(k32, "SetDllDirectoryW");
+
+        if (pSetDefaultDllDirectories && pAddDllDirectory) {
+            // Só System32 + diretórios adicionados
+            pSetDefaultDllDirectories(LOAD_LIBRARY_SEARCH_SYSTEM32 | LOAD_LIBRARY_SEARCH_USER_DIRS);
+            // Remove diretório atual do search path (opcional, ajuda a evitar conflitos)
+            if (pSetDllDirectoryW) pSetDllDirectoryW(L"");
+            // Adiciona .\cef
+            pAddDllDirectory(cefDir.c_str());
+        }
+        // Se não houver AddDllDirectory em máquinas muito antigas, como fallback:
+        // SetDllDirectoryW(cefDir.c_str());
+    }
+
+    // 3) Configuração de CEF
+    CefSettings settings;
+    settings.no_sandbox = true;
+    settings.windowless_rendering_enabled = true;
+    settings.multi_threaded_message_loop = false;
+
+    CefString(&settings.resources_dir_path)      = cefDir;      // .\cef
+    CefString(&settings.locales_dir_path)        = localesDir;  // .\cef\locales
+    CefString(&settings.cache_path)              = cacheDir;    // .\cef\cache
+    CefString(&settings.user_data_path)          = cacheDir;    // reusa cache p/ prefs/cookies
+    settings.persist_session_cookies             = true;
+    settings.persist_user_preferences            = true;
+
+    // Aponta para o helper dedicado dentro de .\cef
+    CefString(&settings.browser_subprocess_path) = helperPath;
+
+    // Verificar se arquivos críticos existem
+    std::wstring icuPath = cefDir + L"\\icudtl.dat";
+    if (GetFileAttributesW(icuPath.c_str()) == INVALID_FILE_ATTRIBUTES) {
+        rawLogger("ERROR: icudtl.dat NOT found in CEF directory!");
+        return false;
+    }
+    rawLogger("icudtl.dat found - CEF resources validated");
+
+    // (Opcional) switches que você quiser manter
+    {
+        CefRefPtr<CefCommandLine> cl = CefCommandLine::CreateCommandLine();
+        cl->InitFromArgv(argc, argv);
+        cl->AppendSwitch("disable-background-networking");
+        cl->AppendSwitch("disable-background-timer-throttling");
+        cl->AppendSwitch("disable-renderer-backgrounding");
+        cl->AppendSwitch("disable-backgrounding-occluded-windows");
+        cl->AppendSwitch("disable-ipc-flooding-protection");
+        cl->AppendSwitch("disable-features=TranslateUI");
+    }
+
+    // 4) Inicializa
+    CefRefPtr<CefApp> app = new OTClientCEFApp(); // ou nullptr se não usar handlers globais
+    if (!CefInitialize(main_args, settings, app, nullptr)) {
+        rawLogger("FAILED to initialize CEF!");
+        return false;
+    }
+
+    // 5) Registros opcionais (schemes, handlers, etc.)
+    CefRegisterSchemeHandlerFactory("otclient", "", new CefPhysFsSchemeHandlerFactory);
+    CefRegisterSchemeHandlerFactory("http",  "otclient", new CefPhysFsSchemeHandlerFactory);
+    CefRegisterSchemeHandlerFactory("https", "otclient", new CefPhysFsSchemeHandlerFactory);
+    g_cefInitialized = true;
+    rawLogger("CEF initialized and scheme handlers registered");
+
+    return true;
+#else
     CefMainArgs main_args(argc, const_cast<char**>(argv));
     CefRefPtr<OTClientCEFApp> app(new OTClientCEFApp);
 
@@ -262,25 +402,26 @@ bool InitializeCEF(int argc, const char* argv[]) {
     } else {
         g_logger.error("OTClient: Failed to initialize CEF");
     }
-    
+
     return result;
+#endif    
 }
 
 void ShutdownCEF() {
     if (g_cefInitialized) {
-        g_logger.info("OTClient: Starting CEF shutdown...");
+        rawLogger("Starting CEF shutdown...");
 
         // Close all active WebViews first
         UICEFWebView::closeAllWebViews();
 
         CefDoMessageLoopWork();
 
-        g_logger.info("OTClient: All webviews closed... Shutting down CEF");
+        rawLogger("All webviews closed... Shutting down CEF");
 
         // Shutdown CEF
         CefShutdown();
         g_cefInitialized = false;
-        g_logger.info("OTClient: CEF shutdown completed");
+        rawLogger("CEF shutdown completed");
     }
 }
 #else
@@ -292,11 +433,14 @@ void ShutdownCEF() {}
 
 int main(int argc, const char* argv[])
 {
-#ifdef USE_CEF
+#ifdef USE_CEF   
     // Initialize CEF FIRST, before anything else
     if (!InitializeCEF(argc, argv)) {
+        rawLogger("InitializeCEF returned FALSE - exiting");
         return 1;
     }
+    
+    rawLogger("InitializeCEF returned TRUE - continuing with application startup");    
 #endif
 
     std::vector<std::string> args(argv, argv + argc);
