@@ -1,3 +1,15 @@
+# Smart OGG finder that supports both vcpkg and system libraries
+
+# Detect if we're using vcpkg - if so, skip our custom finder entirely
+if(DEFINED CMAKE_TOOLCHAIN_FILE AND CMAKE_TOOLCHAIN_FILE MATCHES "vcpkg")
+    message(STATUS "OGG: vcpkg detected, skipping custom finder")
+    # Exit early and let vcpkg handle it via the standard CMake integration
+    return()
+endif()
+
+# Traditional system library search
+message(STATUS "OGG: Using system library search")
+
 # Try to find the OGG library
 #  OGG_FOUND - system has OGG
 #  OGG_INCLUDE_DIR - the OGG include directory

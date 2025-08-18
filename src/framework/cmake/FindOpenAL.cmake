@@ -1,7 +1,17 @@
-# Try to find the OPENAL library
+# Smart OpenAL finder that supports both vcpkg and system libraries
 #  OPENAL_FOUND - system has OPENAL
 #  OPENAL_INCLUDE_DIR - the OPENAL include directory
 #  OPENAL_LIBRARY - the OPENAL library
+
+# Detect if we're using vcpkg - if so, skip our custom finder entirely
+if(DEFINED CMAKE_TOOLCHAIN_FILE AND CMAKE_TOOLCHAIN_FILE MATCHES "vcpkg")
+    message(STATUS "OpenAL: vcpkg detected, skipping custom finder")
+    # Exit early and let vcpkg handle it via the standard CMake integration
+    return()
+endif()
+
+# Traditional system library search (Linux/macOS/manual installs)
+message(STATUS "OpenAL: Using system library search")
 
 SET(OPENAL_APPLE_PATHS ~/Library/Frameworks /Library/Frameworks)
 FIND_PATH(OPENAL_INCLUDE_DIR al.h PATH_SUFFIXES AL OpenAL PATHS ${OPENAL_APPLE_PATHS})
