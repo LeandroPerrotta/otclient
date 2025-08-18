@@ -82,9 +82,45 @@ client, instead OTClient was designed to be a combination of a framework and tib
 ### Compiling
 
 In short, if you need to compile OTClient, follow these tutorials:
-* [Compiling on Windows](https://github.com/edubart/otclient/wiki/Compiling-on-Windows)
 * [Compiling on Linux](https://github.com/edubart/otclient/wiki/Compiling-on-Linux)
 * [Compiling on OS X](https://github.com/edubart/otclient/wiki/Compiling-on-Mac-OS-X)
+
+### Windows Builds with vcpkg and Visual Studio 2022 (Updated)
+
+**Prerequisites:**
+- Visual Studio 2022 with v142 toolset (MSVC 2019 build tools)
+- CMake 3.16+
+- Git
+
+**Setup vcpkg:**
+```bash
+git clone https://github.com/Microsoft/vcpkg.git C:\vcpkg
+C:\vcpkg\bootstrap-vcpkg.bat
+setx VCPKG_ROOT C:\vcpkg
+```
+
+**Create v142 triplet:**
+```bash
+# Create C:\vcpkg\triplets\x64-windows-v142.cmake
+set(VCPKG_TARGET_ARCHITECTURE x64)
+set(VCPKG_CRT_LINKAGE dynamic)
+set(VCPKG_LIBRARY_LINKAGE dynamic)
+set(VCPKG_PLATFORM_TOOLSET v142)
+```
+
+**Install dependencies:**
+```bash
+vcpkg install --triplet=x64-windows-v142
+```
+
+**Build:**
+```bash
+mkdir build && cd build
+cmake .. -G "Visual Studio 17 2022" -A x64 -T v142 -DCMAKE_TOOLCHAIN_FILE="%VCPKG_ROOT%/scripts/buildsystems/vcpkg.cmake" -DVCPKG_TARGET_TRIPLET=x64-windows-v142
+cmake --build . --config RelWithDebInfo --parallel
+```
+
+**Note:** The v142 toolset is required for compatibility. VS 2022 defaults to v143 which has linking issues with this project.
 
 ### Build and run with Docker
 

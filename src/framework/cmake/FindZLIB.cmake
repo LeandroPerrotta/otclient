@@ -1,7 +1,17 @@
-# Try to find the ZLIB library
+# Smart ZLIB finder that supports both vcpkg and system libraries
 #  ZLIB_FOUND - system has ZLIB
 #  ZLIB_INCLUDE_DIR - the ZLIB include directory
 #  ZLIB_LIBRARY - the ZLIB library
+
+# Detect if we're using vcpkg - if so, skip our custom finder entirely
+if(DEFINED CMAKE_TOOLCHAIN_FILE AND CMAKE_TOOLCHAIN_FILE MATCHES "vcpkg")
+    message(STATUS "ZLIB: vcpkg detected, skipping custom finder")
+    # Exit early and let vcpkg handle it via the standard CMake integration
+    return()
+endif()
+
+# Traditional system library search
+message(STATUS "ZLIB: Using system library search")
 
 FIND_PATH(ZLIB_INCLUDE_DIR NAMES zlib.h)
 SET(_ZLIB_STATIC_LIBS libz.a libzlib.a zlib1.a)

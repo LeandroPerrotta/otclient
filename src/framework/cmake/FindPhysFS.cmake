@@ -1,7 +1,17 @@
-# Try to find the PHYSFS library
+# Smart PHYSFS finder that supports both vcpkg and system libraries
 #  PHYSFS_FOUND - system has PHYSFS
 #  PHYSFS_INCLUDE_DIR - the PHYSFS include directory
 #  PHYSFS_LIBRARY - the PHYSFS library
+
+# Detect if we're using vcpkg - if so, skip our custom finder entirely
+if(DEFINED CMAKE_TOOLCHAIN_FILE AND CMAKE_TOOLCHAIN_FILE MATCHES "vcpkg")
+    message(STATUS "PhysFS: vcpkg detected, skipping custom finder")
+    # Exit early and let vcpkg handle it via the standard CMake integration
+    return()
+endif()
+
+# Traditional system library search
+message(STATUS "PhysFS: Using system library search")
 
 FIND_PATH(PHYSFS_INCLUDE_DIR physfs.h PATH_SUFFIXES physfs)
 SET(_PHYSFS_STATIC_LIBS libphysfs.a)

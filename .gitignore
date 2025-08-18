@@ -60,6 +60,7 @@ ipch/
 *.sdf
 *.cachefile
 *.VC.db
+vcpkg_installed/*
 
 # Visual Studio profiler
 *.psess
