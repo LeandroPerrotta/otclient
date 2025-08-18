@@ -42,7 +42,7 @@ bool CefPhysFsResourceHandler::Read(void* data_out, int bytes_to_read, int& byte
     if (m_offset >= m_data.size())
         return false;
 
-    int transfer = std::min(bytes_to_read, static_cast<int>(m_data.size() - m_offset));
+    int transfer = (bytes_to_read < static_cast<int>(m_data.size() - m_offset)) ? bytes_to_read : static_cast<int>(m_data.size() - m_offset);
     memcpy(data_out, m_data.data() + m_offset, transfer);
     m_offset += transfer;
     bytes_read = transfer;

@@ -26,7 +26,11 @@
 #include <framework/global.h>
 #include <framework/core/application.h>
 
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
 #include <winsock2.h>
+#include <ws2tcpip.h>
+#endif
 #include <windows.h>
 #include <process.h>
 

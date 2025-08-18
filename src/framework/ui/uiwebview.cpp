@@ -25,6 +25,11 @@
 #include <framework/core/application.h>
 #include <framework/luaengine/luainterface.h>
 
+#ifdef _WIN32
+#define NOMINMAX  // Previne macros min/max do Windows
+#endif
+#include <algorithm>  // Para std::min e std::max
+
 UIWebView::UIWebView()
     : m_webViewHandle(nullptr)
     , m_zoomLevel(1.0f)
@@ -96,7 +101,8 @@ void UIWebView::executeJavaScript(const std::string& script)
 
 void UIWebView::setZoomLevel(float zoom)
 {
-    m_zoomLevel = std::max(0.25f, std::min(5.0f, zoom));
+    // Usar (std::max) e (std::min) para evitar conflito com macros Windows
+    m_zoomLevel = (std::max)(0.25f, (std::min)(5.0f, zoom));
     setZoomLevelInternal(m_zoomLevel);
 }
 
