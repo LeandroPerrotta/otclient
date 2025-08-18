@@ -221,9 +221,20 @@ find_package(ZLIB REQUIRED)
 set(framework_LIBRARIES ${framework_LIBRARIES}
     ${Boost_LIBRARIES}
     ${LUA_LIBRARY}
-    ${PHYSFS_LIBRARY}
-    ${ZLIB_LIBRARY}
 )
+
+# Add PhysFS and ZLIB with vcpkg compatibility
+if(WIN32 AND DEFINED CMAKE_TOOLCHAIN_FILE AND CMAKE_TOOLCHAIN_FILE MATCHES "vcpkg")
+    # Use full paths for vcpkg libraries on Windows
+    set(VCPKG_LIB_DIR "${CMAKE_CURRENT_BINARY_DIR}/vcpkg_installed/x64-windows-v142/lib")
+    set(framework_LIBRARIES ${framework_LIBRARIES} 
+        "${VCPKG_LIB_DIR}/physfs.lib"
+        "${VCPKG_LIB_DIR}/zlib.lib"
+    )
+else()
+    # Use standard variables for other platforms
+    set(framework_LIBRARIES ${framework_LIBRARIES} ${PHYSFS_LIBRARY} ${ZLIB_LIBRARY})
+endif()
 
 set(framework_INCLUDE_DIRS ${framework_INCLUDE_DIRS}
     ${Boost_INCLUDE_DIRS}
@@ -241,15 +252,36 @@ endif()
 
 find_package(OpenSSL REQUIRED)
 
-# Explicitly use dynamic OpenSSL libraries to avoid ZSTD issues
-set(OPENSSL_SSL_LIBRARY "/usr/lib/x86_64-linux-gnu/libssl.so")
-set(OPENSSL_CRYPTO_LIBRARY "/usr/lib/x86_64-linux-gnu/libcrypto.so")
-
-if(EXISTS ${OPENSSL_SSL_LIBRARY} AND EXISTS ${OPENSSL_CRYPTO_LIBRARY})
-    set(framework_LIBRARIES ${framework_LIBRARIES} ${OPENSSL_SSL_LIBRARY} ${OPENSSL_CRYPTO_LIBRARY})
-    set(framework_INCLUDE_DIRS ${framework_INCLUDE_DIRS} ${OPENSSL_INCLUDE_DIR})
+# Platform-specific OpenSSL handling
+if(WIN32)
+    # Windows with vcpkg - use full paths
+    if(DEFINED CMAKE_TOOLCHAIN_FILE AND CMAKE_TOOLCHAIN_FILE MATCHES "vcpkg")
+        message(STATUS "OpenSSL: Using full paths for vcpkg libraries on Windows")
+        set(VCPKG_LIB_DIR "${CMAKE_CURRENT_BINARY_DIR}/vcpkg_installed/x64-windows-v142/lib")
+        set(framework_LIBRARIES ${framework_LIBRARIES} 
+            "${VCPKG_LIB_DIR}/libssl.lib"
+            "${VCPKG_LIB_DIR}/libcrypto.lib"
+        )
+        set(framework_INCLUDE_DIRS ${framework_INCLUDE_DIRS} ${OPENSSL_INCLUDE_DIR})
+    else()
+        # Windows manual build
+        set(framework_LIBRARIES ${framework_LIBRARIES} ${OPENSSL_LIBRARIES})
+        set(framework_INCLUDE_DIRS ${framework_INCLUDE_DIRS} ${OPENSSL_INCLUDE_DIR})
+    endif()
 else()
-    message(FATAL_ERROR "Could not find OpenSSL dynamic libraries at ${OPENSSL_SSL_LIBRARY} and ${OPENSSL_CRYPTO_LIBRARY}")
+    # Linux/Unix - explicitly use dynamic OpenSSL libraries to avoid ZSTD issues
+    set(OPENSSL_SSL_LIBRARY "/usr/lib/x86_64-linux-gnu/libssl.so")
+    set(OPENSSL_CRYPTO_LIBRARY "/usr/lib/x86_64-linux-gnu/libcrypto.so")
+    
+    if(EXISTS ${OPENSSL_SSL_LIBRARY} AND EXISTS ${OPENSSL_CRYPTO_LIBRARY})
+        set(framework_LIBRARIES ${framework_LIBRARIES} ${OPENSSL_SSL_LIBRARY} ${OPENSSL_CRYPTO_LIBRARY})
+        set(framework_INCLUDE_DIRS ${framework_INCLUDE_DIRS} ${OPENSSL_INCLUDE_DIR})
+    else()
+        # Fallback to standard variables if hardcoded paths don't exist
+        message(WARNING "Hardcoded OpenSSL paths not found, using standard variables")
+        set(framework_LIBRARIES ${framework_LIBRARIES} ${OPENSSL_LIBRARIES})
+        set(framework_INCLUDE_DIRS ${framework_INCLUDE_DIRS} ${OPENSSL_INCLUDE_DIR})
+    endif()
 endif()
 
 if(CMAKE_BUILD_TYPE STREQUAL "Debug" OR CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
@@ -478,7 +510,22 @@ if(FRAMEWORK_SOUND)
     find_package(Ogg REQUIRED)
 
     set(framework_INCLUDE_DIRS ${framework_INCLUDE_DIRS} ${OPENAL_INCLUDE_DIR} ${VORBISFILE_INCLUDE_DIR})
-    set(framework_LIBRARIES ${OPENAL_LIBRARY} ${VORBISFILE_LIBRARY} ${VORBIS_LIBRARY} ${OGG_LIBRARY} ${framework_LIBRARIES})
+    
+    # Audio libraries with vcpkg compatibility
+    if(WIN32 AND DEFINED CMAKE_TOOLCHAIN_FILE AND CMAKE_TOOLCHAIN_FILE MATCHES "vcpkg")
+        # Use full paths for vcpkg libraries on Windows
+        set(VCPKG_LIB_DIR "${CMAKE_CURRENT_BINARY_DIR}/vcpkg_installed/x64-windows-v142/lib")
+        set(framework_LIBRARIES 
+            "${VCPKG_LIB_DIR}/OpenAL32.lib"
+            "${VCPKG_LIB_DIR}/vorbisfile.lib"
+            "${VCPKG_LIB_DIR}/vorbis.lib"
+            "${VCPKG_LIB_DIR}/ogg.lib"
+            ${framework_LIBRARIES}
+        )
+    else()
+        # Use standard variables for other platforms
+        set(framework_LIBRARIES ${OPENAL_LIBRARY} ${VORBISFILE_LIBRARY} ${VORBIS_LIBRARY} ${OGG_LIBRARY} ${framework_LIBRARIES})
+    endif()
 
     if(WIN32)
         set(framework_LIBRARIES ${framework_LIBRARIES} winmm)

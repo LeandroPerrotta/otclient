@@ -1,0 +1,23 @@
+{
+    "name": "otclient",
+    "version-string": "1.0.0",
+    "dependencies": [
+      "libogg",
+      "libvorbis",
+      "openal-soft",
+      "openssl",
+      "physfs",
+      "zlib",
+      "boost-iostreams",
+      "boost-asio",
+      "boost-system",
+      "boost-variant",
+      "boost-lockfree",
+      "boost-filesystem",
+      "boost-uuid",
+      "lua51",
+      "opengl",
+      "glew"
+    ],
+    "builtin-baseline": "787fe1418ea968913cc6daf11855ffd8b0b5e9d4"
+  }

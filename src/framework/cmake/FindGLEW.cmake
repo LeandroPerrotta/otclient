@@ -1,3 +1,15 @@
+# Smart GLEW finder that supports both vcpkg and system libraries
+
+# Detect if we're using vcpkg - if so, skip our custom finder entirely
+if(DEFINED CMAKE_TOOLCHAIN_FILE AND CMAKE_TOOLCHAIN_FILE MATCHES "vcpkg")
+    message(STATUS "GLEW: vcpkg detected, skipping custom finder")
+    # Exit early and let vcpkg handle it via the standard CMake integration
+    return()
+endif()
+
+# Traditional system library search
+message(STATUS "GLEW: Using system library search")
+
 # Try to find the GLEW library
 #  GLEW_FOUND - system has GLEW
 #  GLEW_INCLUDE_DIR - the GLEW include directory
