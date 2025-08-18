@@ -1,7 +1,17 @@
-# Try to find the VORBIS library
+# Smart VORBIS finder that supports both vcpkg and system libraries
 #  VORBIS_FOUND - system has VORBIS
 #  VORBIS_INCLUDE_DIR - the VORBIS include directory
 #  VORBIS_LIBRARY - the VORBIS library
+
+# Detect if we're using vcpkg - if so, skip our custom finder entirely
+if(DEFINED CMAKE_TOOLCHAIN_FILE AND CMAKE_TOOLCHAIN_FILE MATCHES "vcpkg")
+    message(STATUS "Vorbis: vcpkg detected, skipping custom finder")
+    # Exit early and let vcpkg handle it via the standard CMake integration
+    return()
+endif()
+
+# Traditional system library search
+message(STATUS "Vorbis: Using system library search")
 
 FIND_PATH(VORBIS_INCLUDE_DIR NAMES vorbis/codec.h)
 SET(_VORBIS_STATIC_LIBS libvorbis.a)

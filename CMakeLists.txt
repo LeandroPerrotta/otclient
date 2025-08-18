@@ -130,7 +130,12 @@ endif()
 add_definitions(-D"VERSION=\\"${VERSION}\\"")
 
 # add client executable
-add_executable(${PROJECT_NAME} ${framework_SOURCES} ${client_SOURCES} ${executable_SOURCES})
+add_executable(${PROJECT_NAME} ${framework_SOURCES} ${client_SOURCES} ${executable_SOURCES} )
+
+if(MSVC AND NOT WINDOWS_CONSOLE)
+    message(STATUS "MSVC Build console OFF")
+    target_link_options(${PROJECT_NAME} PRIVATE "/SUBSYSTEM:WINDOWS" "/ENTRY:mainCRTStartup")
+endif()
 
 set_target_properties(${PROJECT_NAME} PROPERTIES CXX_STANDARD 14)
 set_target_properties(${PROJECT_NAME} PROPERTIES CXX_STANDARD_REQUIRED ON)
@@ -141,12 +146,11 @@ if(USE_CEF)
     message(STATUS "Added USE_CEF definition to target")
 endif()
 
-
-
-
-
-
-
+if(WIN32)
+    if(MSVC)
+        set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+    endif()
+endif()
 target_link_libraries(${PROJECT_NAME} ${framework_LIBRARIES})
 
 if(APPLE AND USE_STATIC_LIBS)
