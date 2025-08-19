@@ -164,6 +164,13 @@ endif()
 include(src/framework/CMakeLists.txt)
 include(src/client/CMakeLists.txt)
 
+if(USE_CEF)
+    function(otclient_link_cef target)
+        target_link_libraries(${target} PRIVATE ${CEF_LIBRARIES})
+        message(STATUS "${target} linked with CEF libraries: ${CEF_LIBRARIES}")
+    endfunction()
+endif()
+
 # functions map for reading backtraces
 if(NOT APPLE)
     set(CMAKE_CXX_LINK_FLAGS "${CMAKE_CXX_LINK_FLAGS} -Wl,-Map=${PROJECT_NAME}.map")
@@ -225,22 +232,28 @@ if(WIN32)
         set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "/O2 /Zi /DNDEBUG")
     endif()
 endif()
-target_link_libraries(${PROJECT_NAME} ${framework_LIBRARIES})
+target_link_libraries(${PROJECT_NAME} PRIVATE ${framework_LIBRARIES})
 
-# Link CEF libraries if enabled
 if(USE_CEF)
-    target_link_libraries(${PROJECT_NAME} ${CEF_LIBRARIES})
-    message(STATUS "Linked CEF libraries: ${CEF_LIBRARIES}")
-    
+    otclient_link_cef(${PROJECT_NAME})
+
     # Windows: Use main otclient.exe as CEF subprocess (simple approach)
     if(WIN32)
         # Force /MD runtime for CEF compatibility
         set_target_properties(${PROJECT_NAME} PROPERTIES
             MSVC_RUNTIME_LIBRARY "MultiThreadedDLL"  # CEF REQUIRES /MD
         )
-        
-        message(STATUS "CEF: Using main executable as subprocess")
-        message(STATUS "CEF: Critical DLLs will be in root directory")
+    endif()
+endif()
+
+# Dedicated CEF subprocess executable
+if(USE_CEF)
+    add_executable(otclient_cef_subproc src/cef_subprocess/main.cpp)
+    target_compile_definitions(otclient_cef_subproc PRIVATE USE_CEF)
+    set_target_properties(otclient_cef_subproc PROPERTIES CXX_STANDARD 14 CXX_STANDARD_REQUIRED ON)
+    otclient_link_cef(otclient_cef_subproc)
+    if(WIN32)
+        set_target_properties(otclient_cef_subproc PROPERTIES MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
     endif()
 endif()
 

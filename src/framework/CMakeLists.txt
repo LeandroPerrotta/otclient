@@ -631,12 +631,6 @@ if(EXTRA_LIBS)
     set(framework_LIBRARIES ${framework_LIBRARIES} ${EXTRA_LIBS})
 endif()
 
-# Add CEF libraries if USE_CEF is enabled
-if(USE_CEF)
-    set(framework_LIBRARIES ${framework_LIBRARIES} ${CEF_LIBRARIES})
-    message(STATUS "Added CEF libraries to framework: ${CEF_LIBRARIES}")
-endif()
-
 include_directories(${framework_INCLUDE_DIRS})
 message(STATUS "framework_DEFINITIONS: ${framework_DEFINITIONS}")
 add_definitions(${framework_DEFINITIONS})

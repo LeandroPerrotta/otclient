@@ -35,10 +35,8 @@
 #include "include/cef_client.h"
 #include "include/cef_browser.h"
 #include "include/cef_command_line.h"
-#include "include/cef_render_process_handler.h"
 #include "include/cef_scheme.h"
 #include "include/wrapper/cef_helpers.h"
-#include "include/wrapper/cef_message_router.h"
 #ifdef _WIN32
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
@@ -85,10 +83,10 @@ void rawLogger(const char* message) {
     fflush(stdout);
 }
 
-// CEF App that also handles renderer side callbacks
-class OTClientCEFApp : public CefApp, public CefRenderProcessHandler {
+// Minimal CEF app used by the browser process to register custom schemes
+class OTClientBrowserApp : public CefApp {
 public:
-    OTClientCEFApp() {}
+    OTClientBrowserApp() {}
 
     void OnRegisterCustomSchemes(CefRawPtr<CefSchemeRegistrar> registrar) override {
         registrar->AddCustomScheme("otclient",
@@ -97,59 +95,22 @@ public:
                                    CEF_SCHEME_OPTION_DISPLAY_ISOLATED);
     }
 
-    CefRefPtr<CefRenderProcessHandler> GetRenderProcessHandler() override { return this; }
-
-    void OnContextCreated(CefRefPtr<CefBrowser> browser,
-                          CefRefPtr<CefFrame> frame,
-                          CefRefPtr<CefV8Context> context) override {
-        if (!m_messageRouter) {
-            CefMessageRouterConfig config;
-            config.js_query_function = "luaCallback";
-            config.js_cancel_function = "luaCallbackCancel";
-            m_messageRouter = CefMessageRouterRendererSide::Create(config);
-        }
-        m_messageRouter->OnContextCreated(browser, frame, context);
-    }
-
-    void OnContextReleased(CefRefPtr<CefBrowser> browser,
-                           CefRefPtr<CefFrame> frame,
-                           CefRefPtr<CefV8Context> context) override {
-        if (m_messageRouter)
-            m_messageRouter->OnContextReleased(browser, frame, context);
-    }
-
-    bool OnProcessMessageReceived(CefRefPtr<CefBrowser> browser,
-                                  CefRefPtr<CefFrame> frame,
-                                  CefProcessId source_process,
-                                  CefRefPtr<CefProcessMessage> message) override {
-        if (m_messageRouter &&
-            m_messageRouter->OnProcessMessageReceived(browser, frame, source_process, message))
-            return true;
-        return false;
-    }
-
-private:
-    CefRefPtr<CefMessageRouterRendererSide> m_messageRouter;
-
-    IMPLEMENT_REFCOUNTING(OTClientCEFApp);
+    IMPLEMENT_REFCOUNTING(OTClientBrowserApp);
 };
 
 // Global CEF initialization function (simplified)
 bool InitializeCEF(int argc, const char* argv[]) {
 
 #ifdef _WIN32
-    // 0) Early-subprocess exit
+    // 0) Early-subprocess exit (the main executable should never be used as subprocess
+    // when browser_subprocess_path is defined, but call CefExecuteProcess for
+    // completeness)
     CefMainArgs main_args(GetModuleHandle(nullptr));
-    // Se este processo foi invocado como subprocesso do CEF, ele retorna >= 0.
-    // No binário principal, normalmente será -1; no helper será >= 0.
     {
-        CefRefPtr<OTClientCEFApp> app(new OTClientCEFApp);
-        const int code = CefExecuteProcess(main_args, app, nullptr);
+        const int code = CefExecuteProcess(main_args, nullptr, nullptr);
         rawLogger(("CefExecuteProcess returned code: " + std::to_string(code)).c_str());
-        if (code >= 0) {
-            // Somos um subprocesso: sair imediatamente.
+        if (code >= 0)
             std::exit(code);
-        }
     }
 
     // 1) Descobrir caminhos absolutos
@@ -166,7 +127,7 @@ bool InitializeCEF(int argc, const char* argv[]) {
     const std::wstring cefDir = exeDir + L"\\cef";
     const std::wstring localesDir = cefDir + L"\\locales";
     const std::wstring cacheDir = cefDir + L"\\cache";
-    // helperPath removido - usando otclient.exe como subprocess
+    const std::wstring subprocessPath = cefDir + L"\\otclient_cef_subproc.exe";
 
     // 2) Deixar DLL search padrão do Windows (DLLs críticas ficam na raiz)
 
@@ -180,11 +141,12 @@ bool InitializeCEF(int argc, const char* argv[]) {
     CefString(&settings.locales_dir_path)        = localesDir;  // .\cef\locales
     CefString(&settings.cache_path)              = cacheDir;    // .\cef\cache
     CefString(&settings.user_data_path)          = cacheDir;    // reusa cache p/ prefs/cookies
+    CefString(&settings.browser_subprocess_path) = subprocessPath; // subprocesso dedicado
     settings.persist_session_cookies             = true;
     settings.persist_user_preferences            = true;
 
     // 4) Inicializa
-    CefRefPtr<CefApp> app = new OTClientCEFApp(); // ou nullptr se não usar handlers globais
+    CefRefPtr<CefApp> app = new OTClientBrowserApp();
     if (!CefInitialize(main_args, settings, app, nullptr)) {
         rawLogger("FAILED to initialize CEF!");
         return false;
@@ -200,9 +162,8 @@ bool InitializeCEF(int argc, const char* argv[]) {
     return true;
 #else
     CefMainArgs main_args(argc, const_cast<char**>(argv));
-    CefRefPtr<OTClientCEFApp> app(new OTClientCEFApp);
 
-    int exit_code = CefExecuteProcess(main_args, app, nullptr);
+    int exit_code = CefExecuteProcess(main_args, nullptr, nullptr);
     if (exit_code >= 0) {
         std::exit(exit_code);
     }
@@ -236,6 +197,18 @@ bool InitializeCEF(int argc, const char* argv[]) {
         work_dir = ".";
     }
     
+    // If work_dir is empty or invalid, use current directory
+    if (work_dir.empty() || work_dir == ".") {
+        char cwd[PATH_MAX];
+        if (getcwd(cwd, sizeof(cwd)) != nullptr) {
+            work_dir = cwd;
+        } else {
+            work_dir = ".";
+        }
+    }
+    
+    g_logger.info(stdext::format("OTClient: Work directory: %s", work_dir));
+
     // Look for CEF in the local runtime directory (where setup_cef.sh copies everything)
     std::vector<std::string> search_paths = {
         work_dir + "/cef",                      // Local runtime directory
@@ -349,7 +322,12 @@ bool InitializeCEF(int argc, const char* argv[]) {
     CefString(&settings.resources_dir_path) = abs_resources_path;
     CefString(&settings.locales_dir_path) = abs_locales_path;
 
+    // Define subprocess path (same directory as main executable)
+    std::string subprocess_path = cef_root + "/otclient_cef_subproc";
+    CefString(&settings.browser_subprocess_path) = subprocess_path;
+
     g_logger.info("OTClient: Initializing CEF...");
+    CefRefPtr<CefApp> app = new OTClientBrowserApp();
     bool result = CefInitialize(main_args, settings, app, nullptr);
     if (result) {
         CefRegisterSchemeHandlerFactory("otclient", "", new CefPhysFsSchemeHandlerFactory);
