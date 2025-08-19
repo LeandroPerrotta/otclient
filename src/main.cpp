@@ -143,8 +143,9 @@ bool InitializeCEF(int argc, const char* argv[]) {
     // Se este processo foi invocado como subprocesso do CEF, ele retorna >= 0.
     // No binário principal, normalmente será -1; no helper será >= 0.
     {
-        CefRefPtr<CefApp> dummyApp = nullptr; // use sua OTClientCEFApp se precisar.
-        const int code = CefExecuteProcess(main_args, dummyApp, nullptr);
+        CefRefPtr<OTClientCEFApp> app(new OTClientCEFApp);
+        const int code = CefExecuteProcess(main_args, app, nullptr);
+        rawLogger(("CefExecuteProcess returned code: " + std::to_string(code)).c_str());
         if (code >= 0) {
             // Somos um subprocesso: sair imediatamente.
             std::exit(code);
@@ -165,29 +166,9 @@ bool InitializeCEF(int argc, const char* argv[]) {
     const std::wstring cefDir = exeDir + L"\\cef";
     const std::wstring localesDir = cefDir + L"\\locales";
     const std::wstring cacheDir = cefDir + L"\\cache";
-    const std::wstring helperPath = cefDir + L"\\otclient_helper.exe";
+    // helperPath removido - usando otclient.exe como subprocess
 
-    // 2) Restringir/definir busca de DLLs (sem mexer em PATH e sem copiar DLLs)
-    {
-        HMODULE k32 = GetModuleHandleW(L"kernel32.dll");
-        auto pSetDefaultDllDirectories =
-            (BOOL (WINAPI*)(DWORD))GetProcAddress(k32, "SetDefaultDllDirectories");
-        auto pAddDllDirectory =
-            (PVOID (WINAPI*)(PCWSTR))GetProcAddress(k32, "AddDllDirectory");
-        auto pSetDllDirectoryW =
-            (BOOL (WINAPI*)(LPCWSTR))GetProcAddress(k32, "SetDllDirectoryW");
-
-        if (pSetDefaultDllDirectories && pAddDllDirectory) {
-            // Só System32 + diretórios adicionados
-            pSetDefaultDllDirectories(LOAD_LIBRARY_SEARCH_SYSTEM32 | LOAD_LIBRARY_SEARCH_USER_DIRS);
-            // Remove diretório atual do search path (opcional, ajuda a evitar conflitos)
-            if (pSetDllDirectoryW) pSetDllDirectoryW(L"");
-            // Adiciona .\cef
-            pAddDllDirectory(cefDir.c_str());
-        }
-        // Se não houver AddDllDirectory em máquinas muito antigas, como fallback:
-        // SetDllDirectoryW(cefDir.c_str());
-    }
+    // 2) Deixar DLL search padrão do Windows (DLLs críticas ficam na raiz)
 
     // 3) Configuração de CEF
     CefSettings settings;
@@ -201,29 +182,6 @@ bool InitializeCEF(int argc, const char* argv[]) {
     CefString(&settings.user_data_path)          = cacheDir;    // reusa cache p/ prefs/cookies
     settings.persist_session_cookies             = true;
     settings.persist_user_preferences            = true;
-
-    // Aponta para o helper dedicado dentro de .\cef
-    CefString(&settings.browser_subprocess_path) = helperPath;
-
-    // Verificar se arquivos críticos existem
-    std::wstring icuPath = cefDir + L"\\icudtl.dat";
-    if (GetFileAttributesW(icuPath.c_str()) == INVALID_FILE_ATTRIBUTES) {
-        rawLogger("ERROR: icudtl.dat NOT found in CEF directory!");
-        return false;
-    }
-    rawLogger("icudtl.dat found - CEF resources validated");
-
-    // (Opcional) switches que você quiser manter
-    {
-        CefRefPtr<CefCommandLine> cl = CefCommandLine::CreateCommandLine();
-        cl->InitFromArgv(argc, argv);
-        cl->AppendSwitch("disable-background-networking");
-        cl->AppendSwitch("disable-background-timer-throttling");
-        cl->AppendSwitch("disable-renderer-backgrounding");
-        cl->AppendSwitch("disable-backgrounding-occluded-windows");
-        cl->AppendSwitch("disable-ipc-flooding-protection");
-        cl->AppendSwitch("disable-features=TranslateUI");
-    }
 
     // 4) Inicializa
     CefRefPtr<CefApp> app = new OTClientCEFApp(); // ou nullptr se não usar handlers globais
