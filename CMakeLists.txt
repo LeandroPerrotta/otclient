@@ -217,12 +217,12 @@ endif()
 
 if(WIN32)
     if(MSVC)
-        # Use MT_StaticRelease to match CEF configuration
-        set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
-        # Force static runtime for all configurations to match CEF
-        set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded")
+        # CEF requires dynamic runtime (/MD) - this will be overridden per-target
         # Prevent winsock.h conflicts
         add_compile_definitions(WIN32_LEAN_AND_MEAN)
+        
+        # Force /O2 for RelWithDebInfo to avoid conflicts
+        set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "/O2 /Zi /DNDEBUG")
     endif()
 endif()
 target_link_libraries(${PROJECT_NAME} ${framework_LIBRARIES})
@@ -232,40 +232,15 @@ if(USE_CEF)
     target_link_libraries(${PROJECT_NAME} ${CEF_LIBRARIES})
     message(STATUS "Linked CEF libraries: ${CEF_LIBRARIES}")
     
-    # Windows: Build dedicated CEF subprocess helper for DLL isolation
+    # Windows: Use main otclient.exe as CEF subprocess (simple approach)
     if(WIN32)
-        # Create minimal CEF helper executable (WIN32 = no console window)
-        add_executable(otclient_helper WIN32 src/cef_helper.cpp)
-        
-        # Link CEF libraries to helper with delay loading
-        target_link_libraries(otclient_helper PRIVATE ${CEF_LIBRARIES} delayimp)
-        target_link_options(otclient_helper PRIVATE "/DELAYLOAD:libcef.dll")
-        
-        # Set helper properties to match CEF runtime library settings
-        set_target_properties(otclient_helper PROPERTIES
-            CXX_STANDARD 14
-            CXX_STANDARD_REQUIRED ON
-            MSVC_RUNTIME_LIBRARY "MultiThreadedDLL"  # Use dynamic runtime (MD) to match CEF
+        # Force /MD runtime for CEF compatibility
+        set_target_properties(${PROJECT_NAME} PROPERTIES
+            MSVC_RUNTIME_LIBRARY "MultiThreadedDLL"  # CEF REQUIRES /MD
         )
         
-        # Add CEF definitions to helper
-        target_compile_definitions(otclient_helper PRIVATE USE_CEF)
-        
-        # Include CEF directories for helper
-        target_include_directories(otclient_helper PRIVATE ${CEF_INCLUDE_DIRS})
-        
-        # Copy helper to CEF directory after build
-        add_custom_command(TARGET otclient_helper POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "$<TARGET_FILE:otclient_helper>"
-            "${CEF_RUNTIME_DIR}/otclient_helper.exe"
-            COMMENT "Installing CEF subprocess helper to /cef directory")
-        
-        # Make main target depend on helper
-        add_dependencies(${PROJECT_NAME} otclient_helper)
-        
-        message(STATUS "CEF: Building dedicated subprocess helper")
-        message(STATUS "CEF: Helper provides complete DLL isolation")
+        message(STATUS "CEF: Using main executable as subprocess")
+        message(STATUS "CEF: Critical DLLs will be in root directory")
     endif()
 endif()
 
