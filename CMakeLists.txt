@@ -255,11 +255,8 @@ if(USE_CEF)
     if(WIN32)
         set_target_properties(otclient_cef_subproc PROPERTIES MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
 
-# Set Windows subsystem for the subprocess executable
-if(WIN32)
-    set_target_properties(otclient_cef_subproc PROPERTIES WIN32_EXECUTABLE TRUE)
-)
-endif()
+        # Set Windows subsystem for the subprocess executable
+        set_target_properties(otclient_cef_subproc PROPERTIES WIN32_EXECUTABLE TRUE)
     endif()
 endif()
 
