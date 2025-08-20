@@ -102,17 +102,6 @@ public:
 bool InitializeCEF(int argc, const char* argv[]) {
 
 #ifdef _WIN32
-    // 0) Early-subprocess exit (the main executable should never be used as subprocess
-    // when browser_subprocess_path is defined, but call CefExecuteProcess for
-    // completeness)
-    CefMainArgs main_args(GetModuleHandle(nullptr));
-    {
-        const int code = CefExecuteProcess(main_args, nullptr, nullptr);
-        rawLogger(("CefExecuteProcess returned code: " + std::to_string(code)).c_str());
-        if (code >= 0)
-            std::exit(code);
-    }
-
     // 1) Descobrir caminhos absolutos
     auto getExeDirW = []() -> std::wstring {
         wchar_t buf[MAX_PATH];
@@ -129,7 +118,21 @@ bool InitializeCEF(int argc, const char* argv[]) {
     const std::wstring cacheDir = cefDir + L"\\cache";
     const std::wstring subprocessPath = cefDir + L"\\otclient_cef_subproc.exe";
 
-    // 2) Deixar DLL search padrão do Windows (DLLs críticas ficam na raiz)
+
+    // 1) Setup libcef.dll delay-loaded
+    SetDefaultDllDirectories(LOAD_LIBRARY_SEARCH_DEFAULT_DIRS | LOAD_LIBRARY_SEARCH_USER_DIRS);
+    AddDllDirectory(cefDir.c_str());
+
+    // 2) Early-subprocess exit (the main executable should never be used as subprocess
+    // when browser_subprocess_path is defined, but call CefExecuteProcess for
+    // completeness)
+    CefMainArgs main_args(GetModuleHandle(nullptr));
+    {
+        const int code = CefExecuteProcess(main_args, nullptr, nullptr);
+        rawLogger(("CefExecuteProcess returned code: " + std::to_string(code)).c_str());
+        if (code >= 0)
+            std::exit(code);
+    }         
 
     // 3) Configuração de CEF
     CefSettings settings;

@@ -237,6 +237,11 @@ target_link_libraries(${PROJECT_NAME} PRIVATE ${framework_LIBRARIES})
 if(USE_CEF)
     otclient_link_cef(${PROJECT_NAME})
 
+    if(WIN32 AND MSVC)
+        target_link_options(${PROJECT_NAME} PRIVATE "/DELAYLOAD:libcef.dll")
+        target_link_libraries(${PROJECT_NAME} PRIVATE delayimp)
+    endif()
+
     # Windows: Use main otclient.exe as CEF subprocess (simple approach)
     if(WIN32)
         # Force /MD runtime for CEF compatibility
