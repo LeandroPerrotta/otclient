@@ -297,7 +297,7 @@ public:
                             void* shared_handle) override {
         static bool gpuAccelerationLogged = false;
         if (!gpuAccelerationLogged) {
-            g_logger.info("UICEFWebView: OnAcceleratedPaint called - GPU acceleration is enabled");
+            g_logger.info("UICEFWebView: GPU acceleration is enabled");
             gpuAccelerationLogged = true;
         }
         

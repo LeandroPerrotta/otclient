@@ -44,6 +44,11 @@ public:
         
 
         
+        // Performance flags for all processes (not GPU-specific)
+        command_line->AppendSwitch("enable-begin-frame-scheduling");
+        command_line->AppendSwitch("disable-background-timer-throttling");
+        command_line->AppendSwitch("disable-renderer-backgrounding");
+        
         // For renderer process - only enable GPU if we're on Windows with OpenGL ES
         if (process_type == "renderer") {
 #if defined(_WIN32) && defined(OPENGL_ES) && OPENGL_ES == 2
