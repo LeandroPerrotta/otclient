@@ -34,9 +34,9 @@ public:
 #endif
         
         // Performance flags for all processes (not GPU-specific)
-        // command_line->AppendSwitch("enable-begin-frame-scheduling");
-        // command_line->AppendSwitch("disable-background-timer-throttling");
-        // command_line->AppendSwitch("disable-renderer-backgrounding");
+        command_line->AppendSwitch("enable-begin-frame-scheduling");
+        command_line->AppendSwitch("disable-background-timer-throttling");
+        command_line->AppendSwitch("disable-renderer-backgrounding");
     }
 
     void OnContextCreated(CefRefPtr<CefBrowser> browser,

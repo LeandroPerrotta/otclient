@@ -218,7 +218,7 @@ if(MSVC AND NOT WINDOWS_CONSOLE)
     target_link_options(${PROJECT_NAME} PRIVATE "/SUBSYSTEM:WINDOWS" "/ENTRY:mainCRTStartup")
 endif()
 
-set_target_properties(${PROJECT_NAME} PROPERTIES CXX_STANDARD 14)
+set_target_properties(${PROJECT_NAME} PROPERTIES CXX_STANDARD 17)
 set_target_properties(${PROJECT_NAME} PROPERTIES CXX_STANDARD_REQUIRED ON)
 
 # Add CEF definition directly to target
@@ -266,7 +266,7 @@ if(USE_CEF)
     # Add manifest to subprocess for GPU detection consistency
     add_executable(otclient_cef_subproc src/cef_subprocess/main.cpp src/app.manifest)
     target_compile_definitions(otclient_cef_subproc PRIVATE USE_CEF)
-    set_target_properties(otclient_cef_subproc PROPERTIES CXX_STANDARD 14 CXX_STANDARD_REQUIRED ON)
+    set_target_properties(otclient_cef_subproc PROPERTIES CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON)
     otclient_link_cef(otclient_cef_subproc)
     
     # Add bcrypt library for Windows 10+ APIs (needed for subprocess too)
