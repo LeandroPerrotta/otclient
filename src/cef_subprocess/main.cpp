@@ -42,10 +42,10 @@ public:
         command_line->AppendSwitch("ignore-gpu-blacklist");
 #endif
         
-        // For all processes - add OnAcceleratedPaint support flags
+        // For all processes - add OnAcceleratedPaint support flags (testing without external-begin-frame)
         command_line->AppendSwitch("off-screen-rendering-enabled");
         command_line->AppendSwitch("shared-texture-enabled");
-        command_line->AppendSwitch("external-begin-frame-enabled");
+        // command_line->AppendSwitch("external-begin-frame-enabled");
         
         // For renderer process - only enable GPU if we're on Windows with OpenGL ES
         if (process_type == "renderer") {
