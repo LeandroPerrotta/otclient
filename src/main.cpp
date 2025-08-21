@@ -209,7 +209,7 @@ bool InitializeCEF(int argc, const char* argv[]) {
     CefSettings settings;
     settings.no_sandbox = true;
     settings.windowless_rendering_enabled = true;
-    settings.multi_threaded_message_loop = false;
+    settings.multi_threaded_message_loop = true;  // Enable UI thread for OnAcceleratedPaint
     
     // Enable debug logging in CEF settings too
     settings.log_severity = LOGSEVERITY_INFO;
@@ -296,7 +296,7 @@ bool InitializeCEF(int argc, const char* argv[]) {
     settings.log_severity = LOGSEVERITY_INFO;
     CefString(&settings.log_file).FromASCII("cef_debug.log");
     settings.windowless_rendering_enabled = true;
-    settings.multi_threaded_message_loop = false;
+    settings.multi_threaded_message_loop = true;  // Enable UI thread for OnAcceleratedPaint
     
     // Enable GPU acceleration for OnAcceleratedPaint
     settings.chrome_runtime = false; // OSR requires legacy runtime

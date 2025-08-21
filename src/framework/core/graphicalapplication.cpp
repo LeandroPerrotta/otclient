@@ -138,7 +138,7 @@ void GraphicalApplication::run()
 
 #ifdef USE_CEF
         // Process CEF messages
-        CefDoMessageLoopWork();
+        // CefDoMessageLoopWork(); // Removed: CEF manages its own loop with multi_threaded_message_loop = true
         UICEFWebView::sendAllExternalBeginFrames();
 #endif
 
