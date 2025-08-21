@@ -167,11 +167,53 @@ bool InitializeCEF(int argc, const char* argv[]) {
             std::exit(code);
     }         
 
-    // 3) Configuração de CEF
+    // 3) Configure command line flags for Windows
+    CefRefPtr<CefCommandLine> command_line = CefCommandLine::CreateCommandLine();
+    command_line->InitFromArgv(argc, argv);
+    
+    // Minimal flags based on OpenKneeBoard approach
+    command_line->AppendSwitch("angle");
+    command_line->AppendSwitchWithValue("use-angle", "d3d11");
+    command_line->AppendSwitch("shared-texture-enabled");
+    
+    // Force GPU process more aggressively
+    command_line->AppendSwitch("enable-gpu");
+    command_line->AppendSwitch("enable-gpu-compositing");
+    command_line->AppendSwitch("enable-gpu-rasterization");
+    command_line->AppendSwitch("disable-software-rasterizer");
+    command_line->AppendSwitch("disable-gpu-sandbox"); // Sometimes needed for shared textures
+    
+    // FULL DEBUG MODE - Enable all CEF logging
+    command_line->AppendSwitch("enable-logging");
+    command_line->AppendSwitchWithValue("log-level", "0"); // VERBOSE level
+    command_line->AppendSwitchWithValue("log-file", "cef_debug.log");
+    
+    // Verbose GPU debugging
+    command_line->AppendSwitchWithValue("vmodule", 
+        "*/gpu/*=2,"
+        "*/shared_texture/*=2,"
+        "*/d3d*=2,"
+        "*/angle*=2,"
+        "*/render*=1,"
+        "*/browser_compositor*=1,"
+        "*/viz*=1"
+    );
+    
+    // Additional debug flags
+    command_line->AppendSwitch("enable-gpu-service-logging");
+    command_line->AppendSwitch("gpu-startup-dialog"); // Shows GPU process startup info
+    command_line->AppendSwitch("disable-gpu-watchdog"); // Prevent GPU process timeout
+    command_line->AppendSwitch("disable-features=VizDisplayCompositor"); // Sometimes helps with shared textures
+
+    // 4) Configuração de CEF
     CefSettings settings;
     settings.no_sandbox = true;
     settings.windowless_rendering_enabled = true;
     settings.multi_threaded_message_loop = false;
+    
+    // Enable debug logging in CEF settings too
+    settings.log_severity = LOGSEVERITY_INFO;
+    CefString(&settings.log_file).FromASCII("cef_debug.log");
 
     CefString(&settings.resources_dir_path)      = cefDir;      // .\cef
     CefString(&settings.locales_dir_path)        = localesDir;  // .\cef\locales
@@ -181,7 +223,7 @@ bool InitializeCEF(int argc, const char* argv[]) {
     settings.persist_session_cookies             = true;
     settings.persist_user_preferences            = true;
 
-    // 4) Inicializa
+    // 5) Inicializa with command line
     CefRefPtr<CefApp> app = new OTClientBrowserApp();
     if (!CefInitialize(main_args, settings, app, nullptr)) {
         rawLogger("FAILED to initialize CEF!");
