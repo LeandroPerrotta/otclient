@@ -24,6 +24,7 @@
 #include <framework/core/logger.h>
 #include <framework/core/clock.h>
 #include <framework/core/graphicalapplication.h>
+#include <framework/core/eventdispatcher.h>
 #include <framework/graphics/graphics.h>
 #include <framework/graphics/image.h>
 #include <framework/platform/platformwindow.h>
@@ -214,7 +215,8 @@ static std::u16string cp1252ToUtf16(const std::string& text)
 // Simple CEF Client implementation
 class SimpleCEFClient : public CefClient,
                         public CefRenderHandler,
-                        public CefRequestHandler {
+                        public CefRequestHandler,
+                        public CefLifeSpanHandler {
 public:
     explicit SimpleCEFClient(UICEFWebView* webview) : m_webview(webview) {
         CefMessageRouterConfig config;
@@ -227,6 +229,7 @@ public:
 
     CefRefPtr<CefRenderHandler> GetRenderHandler() override { return this; }
     CefRefPtr<CefRequestHandler> GetRequestHandler() override { return this; }
+    CefRefPtr<CefLifeSpanHandler> GetLifeSpanHandler() override { return this; }
     CefRefPtr<CefResourceRequestHandler> GetResourceRequestHandler(
         CefRefPtr<CefBrowser> browser,
         CefRefPtr<CefFrame> frame,
@@ -264,6 +267,14 @@ public:
         return false;
     }
 
+    // CefLifeSpanHandler methods
+    void OnAfterCreated(CefRefPtr<CefBrowser> browser) override {
+        g_logger.info("UICEFWebView: OnAfterCreated called - browser is ready!");
+        if (m_webview) {
+            m_webview->onBrowserCreated(browser);
+        }
+    }
+
     void GetViewRect(CefRefPtr<CefBrowser> browser, CefRect& rect) override {
         rect.x = rect.y = 0;
         if (m_webview) {
@@ -284,6 +295,7 @@ public:
         static bool sofwareAccelerationLogged = false;
         if (!sofwareAccelerationLogged) {
             g_logger.info("============ UICEFWebView: Software acceleration is enabled =============");
+            g_logger.info("UICEFWebView: OnPaint called - using software rendering");
             sofwareAccelerationLogged = true;
         }
 
@@ -292,7 +304,18 @@ public:
                 m_webview->onBrowserCreated(browser);
             }
             if (type == PET_VIEW) {
-                m_webview->onCEFPaint(buffer, width, height, dirtyRects);
+                // With multi_threaded_message_loop = true, we're on CEF UI thread
+                // Need to schedule paint processing on main thread for OpenGL context
+                
+                // Copy buffer data since it may be freed after this callback
+                std::vector<uint8_t> bufferCopy(width * height * 4);
+                memcpy(bufferCopy.data(), buffer, bufferCopy.size());
+                
+                g_dispatcher.scheduleEvent([webview = m_webview, bufferCopy = std::move(bufferCopy), width, height, dirtyRects]() mutable {
+                    if (webview) {
+                        webview->onCEFPaint(bufferCopy.data(), width, height, dirtyRects);
+                    }
+                }, 0);
             }
         }
     }
@@ -304,6 +327,8 @@ public:
         static bool gpuAccelerationLogged = false;
         if (!gpuAccelerationLogged) {
             g_logger.info("============ UICEFWebView: GPU acceleration is enabled =============");
+            g_logger.info("UICEFWebView: OnAcceleratedPaint called - using GPU rendering!");
+            g_logger.info(stdext::format("UICEFWebView: shared_handle = %p", shared_handle));
             gpuAccelerationLogged = true;
         }
         
@@ -313,7 +338,13 @@ public:
                 m_webview->onBrowserCreated(browser);
             }
             if (type == PET_VIEW) {
-                m_webview->onCEFAcceleratedPaint(shared_handle);
+                // With multi_threaded_message_loop = true, we're on CEF UI thread
+                // Need to schedule accelerated paint processing on main thread for OpenGL context
+                g_dispatcher.scheduleEvent([webview = m_webview, shared_handle]() {
+                    if (webview) {
+                        webview->onCEFAcceleratedPaint(shared_handle);
+                    }
+                }, 0);
             }
         }
     }
@@ -360,7 +391,13 @@ private:
                     }
                 }
                 if (m_webview && !name.empty()) {
-                    m_webview->onJavaScriptCallback(name, data);
+                    // With multi_threaded_message_loop = true, we're on CEF UI thread
+                    // Need to schedule callback on main thread for thread safety
+                    g_dispatcher.scheduleEvent([webview = m_webview, name, data]() {
+                        if (webview) {
+                            webview->onJavaScriptCallback(name, data);
+                        }
+                    }, 0);
                     callback->Success("");
                     return true;
                 }
@@ -444,11 +481,14 @@ void UICEFWebView::createWebView()
 
     // Window info for off-screen rendering
     CefWindowInfo window_info;
-    window_info.SetAsWindowless(nullptr); // 0 = no parent window
+    window_info.SetAsWindowless(0); // 0 = no parent window
+
+#ifdef _WIN32    
     window_info.shared_texture_enabled = true;
-    window_info.external_begin_frame_enabled = true;
+    // window_info.external_begin_frame_enabled = true; // Not needed with multi_threaded_message_loop = true
 
     g_logger.info("UICEFWebView: Window info configured for off-screen rendering");
+#endif
 
     // Create browser asynchronously
     bool result = CefBrowserHost::CreateBrowser(window_info, m_client, "about:blank", browser_settings, nullptr, nullptr);
@@ -663,11 +703,14 @@ void UICEFWebView::onBrowserCreated(CefRefPtr<CefBrowser> browser)
         }
         m_pendingUrl.clear();
     }
+    
+    // With multi_threaded_message_loop = true, CEF handles rendering automatically
+    // No manual frame triggering needed
 }
 
 void UICEFWebView::drawSelf(Fw::DrawPane drawPane)
 {
-    // Testing without SendExternalBeginFrame - CEF should render automatically with shared texture
+    // Render CEF content using multi-threaded rendering
     
     // Render only CEF content - no UIWidget background
     if (m_textureCreated && m_cefTexture) {
@@ -936,33 +979,6 @@ void UICEFWebView::setAllWindowlessFrameRate(int fps)
     }
 }
 
-void UICEFWebView::sendAllExternalBeginFrames()
-{
-    g_logger.info(stdext::format("sendAllExternalBeginFrames: called, active webviews: %d", s_activeWebViews.size()));
-    
-    for (auto* webview : s_activeWebViews) {
-        g_logger.info("sendAllExternalBeginFrames: Checking webview");
-        
-        if (webview) {
-            g_logger.info(stdext::format("UICEFWebView: Webview is valid, checking browser: %p", (void*)webview->m_browser.get()));
-            
-            if (webview->m_browser) {
-                CefRefPtr<CefBrowserHost> host = webview->m_browser->GetHost();
-                g_logger.info(stdext::format("UICEFWebView: Browser is valid, checking host: %p", (void*)host.get()));
-                
-                if (host){
-                    g_logger.info("UICEFWebView: Sending external begin frame");
-                    host->SendExternalBeginFrame();
-                } else {
-                    g_logger.warning("UICEFWebView: Host is null");
-                }
-            } else {
-                g_logger.warning("UICEFWebView: Browser is null");
-            }
-        } else {
-            g_logger.warning("UICEFWebView: Webview is null");
-        }
-    }
-}
+
 
 #endif // USE_CEF 
