@@ -29,6 +29,7 @@ public:
     static size_t getActiveWebViewCount();
 
     static void setAllWindowlessFrameRate(int fps);
+    static void sendAllExternalBeginFrames();
 
     void setWindowlessFrameRate(int fps);
 

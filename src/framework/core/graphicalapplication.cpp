@@ -139,6 +139,7 @@ void GraphicalApplication::run()
 #ifdef USE_CEF
         // Process CEF messages
         CefDoMessageLoopWork();
+        UICEFWebView::sendAllExternalBeginFrames();
 #endif
 
         if(g_window.isVisible()) {
