@@ -210,6 +210,10 @@ bool InitializeCEF(int argc, const char* argv[]) {
     command_line->AppendSwitch("disable-backgrounding-occluded-windows");
     command_line->AppendSwitch("disable-features=TranslateUI");
     command_line->AppendSwitch("disable-ipc-flooding-protection");
+    
+    // Try to enable OnAcceleratedPaint support
+    command_line->AppendSwitch("off-screen-rendering-enabled");
+    command_line->AppendSwitch("shared-texture-enabled");
 
     // Configure CEF settings
     CefSettings settings;
