@@ -211,9 +211,12 @@ bool InitializeCEF(int argc, const char* argv[]) {
     command_line->AppendSwitch("disable-features=TranslateUI");
     command_line->AppendSwitch("disable-ipc-flooding-protection");
     
-    // Try to enable OnAcceleratedPaint support
+    // Try to enable OnAcceleratedPaint support - with debug logs
+    g_logger.info("CEF: Adding off-screen-rendering-enabled flag");
     command_line->AppendSwitch("off-screen-rendering-enabled");
+    g_logger.info("CEF: Adding shared-texture-enabled flag");
     command_line->AppendSwitch("shared-texture-enabled");
+    g_logger.info("CEF: Adding external-begin-frame-enabled flag");
     command_line->AppendSwitch("external-begin-frame-enabled");
 
     // Configure CEF settings
