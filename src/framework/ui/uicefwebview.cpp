@@ -295,6 +295,12 @@ public:
                             PaintElementType type,
                             const RectList& dirtyRects,
                             void* shared_handle) override {
+        static bool gpuAccelerationLogged = false;
+        if (!gpuAccelerationLogged) {
+            g_logger.info("UICEFWebView: GPU acceleration is enabled");
+            gpuAccelerationLogged = true;
+        }
+        
         if (m_webview && type == PET_VIEW) {
             m_webview->onCEFAcceleratedPaint(shared_handle);
         }
