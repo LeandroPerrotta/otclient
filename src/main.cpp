@@ -119,11 +119,15 @@ public:
     void OnBeforeCommandLineProcessing(const CefString& process_type,
                                        CefRefPtr<CefCommandLine> command_line) override {
 #if defined(_WIN32) && defined(OPENGL_ES) && OPENGL_ES == 2
-        // Minimal ANGLE configuration that works
         command_line->AppendSwitch("angle");
         command_line->AppendSwitchWithValue("use-angle", "d3d11");
-        // TODO: Implement GetGpuLuid() if needed for multi-GPU systems
-        // command_line->AppendSwitchWithValue("use-adapter-luid", this->GetGpuLuid());
+        command_line->AppendSwitch("shared-texture-enabled");
+
+        // Essential flags for GPU acceleration
+        command_line->AppendSwitch("disable-gpu-watchdog"); // Prevent GPU process timeout     
+#else
+        // Linux-specific OpenGL flags (no ANGLE on Linux)
+        command_line->AppendSwitchWithValue("use-gl", "desktop"); // Use native OpenGL instead of ANGLE
 #endif
     }
 
@@ -170,11 +174,6 @@ bool InitializeCEF(int argc, const char* argv[]) {
     CefRefPtr<CefCommandLine> command_line = CefCommandLine::CreateCommandLine();
     command_line->InitFromArgv(argc, argv);
     
-    // Minimal flags based on OpenKneeBoard approach
-    command_line->AppendSwitch("angle");
-    command_line->AppendSwitchWithValue("use-angle", "d3d11");
-    command_line->AppendSwitch("shared-texture-enabled");
-    
     // Force GPU process more aggressively
     command_line->AppendSwitch("enable-gpu");
     command_line->AppendSwitch("enable-gpu-compositing");
@@ -182,8 +181,9 @@ bool InitializeCEF(int argc, const char* argv[]) {
     command_line->AppendSwitch("disable-software-rasterizer");
     command_line->AppendSwitch("disable-gpu-sandbox"); // Sometimes needed for shared textures
     
-    // Essential flags for GPU acceleration
-    command_line->AppendSwitch("disable-gpu-watchdog"); // Prevent GPU process timeout
+    command_line->AppendSwitch("enable-begin-frame-scheduling");
+    command_line->AppendSwitch("disable-background-timer-throttling");
+    command_line->AppendSwitch("disable-renderer-backgrounding");
 
     // 4) Configuração de CEF
     CefSettings settings;
@@ -230,16 +230,12 @@ bool InitializeCEF(int argc, const char* argv[]) {
     command_line->AppendSwitch("enable-gpu");
     command_line->AppendSwitch("enable-gpu-compositing");
     command_line->AppendSwitch("enable-gpu-rasterization");
-    command_line->AppendSwitch("shared-texture-enabled");
     command_line->AppendSwitch("disable-software-rasterizer");
     command_line->AppendSwitch("disable-gpu-sandbox"); // Sometimes needed for shared textures
     
-    // Linux-specific OpenGL flags (no ANGLE on Linux)
-    command_line->AppendSwitchWithValue("use-gl", "desktop"); // Use native OpenGL instead of ANGLE
-    
-    // Minimal logging for production
-    command_line->AppendSwitch("enable-logging");
-    command_line->AppendSwitchWithValue("log-level", "2"); // ERROR level only
+    command_line->AppendSwitch("enable-begin-frame-scheduling");
+    command_line->AppendSwitch("disable-background-timer-throttling");
+    command_line->AppendSwitch("disable-renderer-backgrounding");
 
     // Configure CEF settings
     CefSettings settings;
