@@ -658,6 +658,12 @@ void UICEFWebView::onBrowserCreated(CefRefPtr<CefBrowser> browser)
 
 void UICEFWebView::drawSelf(Fw::DrawPane drawPane)
 {
+    // Send external begin frame to trigger OnAcceleratedPaint when using external frame control
+    if (m_browser && m_browser->GetHost()) {
+        // This tells CEF to render a new frame, which should trigger OnAcceleratedPaint
+        m_browser->GetHost()->SendExternalBeginFrame();
+    }
+    
     // Render only CEF content - no UIWidget background
     if (m_textureCreated && m_cefTexture) {
         Rect rect = getRect();

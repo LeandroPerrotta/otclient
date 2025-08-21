@@ -214,6 +214,7 @@ bool InitializeCEF(int argc, const char* argv[]) {
     // Try to enable OnAcceleratedPaint support
     command_line->AppendSwitch("off-screen-rendering-enabled");
     command_line->AppendSwitch("shared-texture-enabled");
+    command_line->AppendSwitch("external-begin-frame-enabled");
 
     // Configure CEF settings
     CefSettings settings;
