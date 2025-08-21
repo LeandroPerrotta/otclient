@@ -37,10 +37,12 @@ public:
         command_line->AppendSwitch("disable-gpu-sandbox");
 #endif
         
-        // For all platforms in renderer process
+        // For renderer process - only enable GPU if we're on Windows with OpenGL ES
         if (process_type == "renderer") {
+#if defined(_WIN32) && defined(OPENGL_ES) && OPENGL_ES == 2
             command_line->AppendSwitch("enable-gpu");
             command_line->AppendSwitch("enable-gpu-compositing");
+#endif
         }
     }
 
