@@ -207,8 +207,8 @@ add_definitions(-D"VERSION=\\"${VERSION}\\"")
 
 # add client executable
 if(WIN32)
-    # Add app.manifest for better GPU detection in VMs - using minimal version without DPI
-    add_executable(${PROJECT_NAME} ${framework_SOURCES} ${client_SOURCES} ${executable_SOURCES} src/app_minimal.manifest)
+    # Add app.manifest for better GPU detection in VMs - based on OpenKneeboard working manifest
+    add_executable(${PROJECT_NAME} ${framework_SOURCES} ${client_SOURCES} ${executable_SOURCES} src/app.manifest)
 else()
     add_executable(${PROJECT_NAME} ${framework_SOURCES} ${client_SOURCES} ${executable_SOURCES})
 endif()
