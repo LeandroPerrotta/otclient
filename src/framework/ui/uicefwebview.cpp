@@ -464,11 +464,14 @@ void UICEFWebView::createWebView()
 
     // Window info for off-screen rendering
     CefWindowInfo window_info;
-    window_info.SetAsWindowless(nullptr); // 0 = no parent window
+    window_info.SetAsWindowless(0); // 0 = no parent window
+
+#ifdef _WIN32    
     window_info.shared_texture_enabled = true;
     window_info.external_begin_frame_enabled = true; // Re-enabled since we're not using CefDoMessageLoopWork
 
     g_logger.info("UICEFWebView: Window info configured for off-screen rendering");
+#endif
 
     // Create browser asynchronously
     bool result = CefBrowserHost::CreateBrowser(window_info, m_client, "about:blank", browser_settings, nullptr, nullptr);

@@ -251,16 +251,6 @@ bool InitializeCEF(int argc, const char* argv[]) {
     command_line->InitFromArgv(argc, argv);
     
     // Disable CEF auto-restart and subprocess management
-    
-    // Minimal flags based on OpenKneeBoard approach
-    command_line->AppendSwitch("angle");
-    command_line->AppendSwitchWithValue("use-angle", "d3d11");
-    command_line->AppendSwitch("shared-texture-enabled");
-    
-    // Force GPU process more aggressively
-    command_line->AppendSwitch("enable-gpu");
-    command_line->AppendSwitch("enable-gpu-compositing");
-    command_line->AppendSwitch("enable-gpu-rasterization");
     command_line->AppendSwitch("disable-software-rasterizer");
     command_line->AppendSwitch("disable-gpu-sandbox"); // Sometimes needed for shared textures
     
@@ -268,25 +258,6 @@ bool InitializeCEF(int argc, const char* argv[]) {
     command_line->AppendSwitch("enable-logging");
     command_line->AppendSwitchWithValue("log-level", "0"); // VERBOSE level
     command_line->AppendSwitchWithValue("log-file", "cef_debug.log");
-    
-    // Verbose GPU debugging
-    command_line->AppendSwitchWithValue("vmodule", 
-        "*/gpu/*=2,"
-        "*/shared_texture/*=2,"
-        "*/d3d*=2,"
-        "*/angle*=2,"
-        "*/render*=1,"
-        "*/browser_compositor*=1,"
-        "*/viz*=1"
-    );
-    
-    // Additional debug flags
-    command_line->AppendSwitch("enable-gpu-service-logging");
-    command_line->AppendSwitch("gpu-startup-dialog"); // Shows GPU process startup info
-    command_line->AppendSwitch("disable-gpu-watchdog"); // Prevent GPU process timeout
-    command_line->AppendSwitch("disable-features=VizDisplayCompositor"); // Sometimes helps with shared textures
-    
-
 
     // Configure CEF settings
     CefSettings settings;
