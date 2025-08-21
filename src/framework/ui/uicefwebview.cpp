@@ -281,12 +281,6 @@ public:
                  const RectList& dirtyRects,
                  const void* buffer,
                  int width, int height) override {
-        static bool softwareRenderingLogged = false;
-        if (!softwareRenderingLogged) {
-            g_logger.info("UICEFWebView: OnPaint called - using SOFTWARE rendering (GPU disabled)");
-            softwareRenderingLogged = true;
-        }
-        
         if (m_webview) {
             if (!m_webview->m_browser) {
                 m_webview->onBrowserCreated(browser);
