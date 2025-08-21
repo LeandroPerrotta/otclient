@@ -138,7 +138,7 @@ void GraphicalApplication::run()
 
 #ifdef USE_CEF
         // Process CEF messages
-        CefDoMessageLoopWork();
+        // CefDoMessageLoopWork(); // Testing without this - may interfere with GPU initialization
         UICEFWebView::sendAllExternalBeginFrames();
 #endif
 
