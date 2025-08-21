@@ -222,15 +222,37 @@ bool InitializeCEF(int argc, const char* argv[]) {
     command_line->AppendSwitch("disable-software-rasterizer");
     command_line->AppendSwitch("disable-gpu-sandbox"); // Sometimes needed for shared textures
     
-    // Debug flags to investigate GPU process
+    // FULL DEBUG MODE - Enable all CEF logging
     command_line->AppendSwitch("enable-logging");
-    command_line->AppendSwitchWithValue("log-level", "0"); // INFO level
+    command_line->AppendSwitchWithValue("log-level", "0"); // VERBOSE level
+    command_line->AppendSwitchWithValue("log-file", "cef_debug.log");
+    
+    // Verbose GPU debugging
+    command_line->AppendSwitchWithValue("vmodule", 
+        "*/gpu/*=2,"
+        "*/shared_texture/*=2,"
+        "*/d3d*=2,"
+        "*/angle*=2,"
+        "*/render*=1,"
+        "*/browser_compositor*=1,"
+        "*/viz*=1"
+    );
+    
+    // Additional debug flags
+    command_line->AppendSwitch("enable-gpu-service-logging");
+    command_line->AppendSwitch("gpu-startup-dialog"); // Shows GPU process startup info
+    command_line->AppendSwitch("disable-gpu-watchdog"); // Prevent GPU process timeout
+    command_line->AppendSwitch("disable-features=VizDisplayCompositor"); // Sometimes helps with shared textures
     
 
 
     // Configure CEF settings
     CefSettings settings;
     settings.no_sandbox = true;
+    
+    // Enable debug logging in CEF settings too
+    settings.log_severity = LOGSEVERITY_INFO;
+    CefString(&settings.log_file).FromASCII("cef_debug.log");
     settings.windowless_rendering_enabled = true;
     settings.multi_threaded_message_loop = false;
     
