@@ -242,11 +242,13 @@ void Texture::setupPixels(int level, const Size& size, uchar* pixels, int channe
             break;
     }
 
-    GLenum internalFormat = GL_RGBA;
+    GLenum internalFormat;
 
 #ifdef OPENGL_ES
-    //TODO
+    internalFormat = format;
+    (void)compress; // compression not handled on OpenGL ES
 #else
+    internalFormat = GL_RGBA;
     if(compress)
         internalFormat = GL_COMPRESSED_RGBA;
 #endif
