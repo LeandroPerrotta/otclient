@@ -206,7 +206,12 @@ endif()
 add_definitions(-D"VERSION=\\"${VERSION}\\"")
 
 # add client executable
-add_executable(${PROJECT_NAME} ${framework_SOURCES} ${client_SOURCES} ${executable_SOURCES} )
+if(WIN32)
+    # Add app.manifest for better GPU detection in VMs
+    add_executable(${PROJECT_NAME} ${framework_SOURCES} ${client_SOURCES} ${executable_SOURCES} src/app.manifest)
+else()
+    add_executable(${PROJECT_NAME} ${framework_SOURCES} ${client_SOURCES} ${executable_SOURCES})
+endif()
 
 if(MSVC AND NOT WINDOWS_CONSOLE)
     message(STATUS "MSVC Build console OFF")
