@@ -214,7 +214,8 @@ static std::u16string cp1252ToUtf16(const std::string& text)
 // Simple CEF Client implementation
 class SimpleCEFClient : public CefClient,
                         public CefRenderHandler,
-                        public CefRequestHandler {
+                        public CefRequestHandler,
+                        public CefLifeSpanHandler {
 public:
     explicit SimpleCEFClient(UICEFWebView* webview) : m_webview(webview) {
         CefMessageRouterConfig config;
@@ -227,6 +228,7 @@ public:
 
     CefRefPtr<CefRenderHandler> GetRenderHandler() override { return this; }
     CefRefPtr<CefRequestHandler> GetRequestHandler() override { return this; }
+    CefRefPtr<CefLifeSpanHandler> GetLifeSpanHandler() override { return this; }
     CefRefPtr<CefResourceRequestHandler> GetResourceRequestHandler(
         CefRefPtr<CefBrowser> browser,
         CefRefPtr<CefFrame> frame,
@@ -262,6 +264,14 @@ public:
         if (m_messageRouter)
             m_messageRouter->OnBeforeBrowse(browser, frame);
         return false;
+    }
+
+    // CefLifeSpanHandler methods
+    void OnAfterCreated(CefRefPtr<CefBrowser> browser) override {
+        g_logger.info("UICEFWebView: OnAfterCreated called - browser is ready!");
+        if (m_webview) {
+            m_webview->onBrowserCreated(browser);
+        }
     }
 
     void GetViewRect(CefRefPtr<CefBrowser> browser, CefRect& rect) override {
@@ -663,6 +673,13 @@ void UICEFWebView::onBrowserCreated(CefRefPtr<CefBrowser> browser)
         }
         m_pendingUrl.clear();
     }
+    
+    // Send initial external begin frame to trigger OnAcceleratedPaint
+    CefRefPtr<CefBrowserHost> host = m_browser->GetHost();
+    if (host) {
+        g_logger.info("UICEFWebView: Sending initial external begin frame to trigger OnAcceleratedPaint");
+        host->SendExternalBeginFrame();
+    }
 }
 
 void UICEFWebView::drawSelf(Fw::DrawPane drawPane)
@@ -938,30 +955,26 @@ void UICEFWebView::setAllWindowlessFrameRate(int fps)
 
 void UICEFWebView::sendAllExternalBeginFrames()
 {
-    g_logger.info(stdext::format("sendAllExternalBeginFrames: called, active webviews: %d", s_activeWebViews.size()));
+    static int callCount = 0;
+    static int lastReadyCount = -1;
+    callCount++;
     
+    int readyBrowsers = 0;
     for (auto* webview : s_activeWebViews) {
-        g_logger.info("sendAllExternalBeginFrames: Checking webview");
-        
-        if (webview) {
-            g_logger.info(stdext::format("UICEFWebView: Webview is valid, checking browser: %p", (void*)webview->m_browser.get()));
-            
-            if (webview->m_browser) {
-                CefRefPtr<CefBrowserHost> host = webview->m_browser->GetHost();
-                g_logger.info(stdext::format("UICEFWebView: Browser is valid, checking host: %p", (void*)host.get()));
-                
-                if (host){
-                    g_logger.info("UICEFWebView: Sending external begin frame");
-                    host->SendExternalBeginFrame();
-                } else {
-                    g_logger.warning("UICEFWebView: Host is null");
-                }
-            } else {
-                g_logger.warning("UICEFWebView: Browser is null");
+        if (webview && webview->m_browser) {
+            CefRefPtr<CefBrowserHost> host = webview->m_browser->GetHost();
+            if (host) {
+                host->SendExternalBeginFrame();
+                readyBrowsers++;
             }
-        } else {
-            g_logger.warning("UICEFWebView: Webview is null");
         }
+    }
+    
+    // Log only when the count of ready browsers changes or every 300 calls (5 seconds at 60fps)
+    if (readyBrowsers != lastReadyCount || callCount % 300 == 0) {
+        g_logger.info(stdext::format("sendAllExternalBeginFrames: %d/%d browsers ready (call #%d)", 
+                      readyBrowsers, s_activeWebViews.size(), callCount));
+        lastReadyCount = readyBrowsers;
     }
 }
 
