@@ -88,8 +88,7 @@ class OTClientBrowserProcessHandler : public CefBrowserProcessHandler {
 public:
     void OnScheduleMessagePumpWork(int64_t delay_ms) override {
         // This method is called when work is scheduled for the browser process main thread
-        // We don't need to do anything special here since we're calling CefDoMessageLoopWork manually
-        // But implementing this prevents CEF from interfering with GPU process initialization
+        // With multi_threaded_message_loop = true, CEF manages its own threading
     }
 
     IMPLEMENT_REFCOUNTING(OTClientBrowserProcessHandler);
@@ -183,37 +182,14 @@ bool InitializeCEF(int argc, const char* argv[]) {
     command_line->AppendSwitch("disable-software-rasterizer");
     command_line->AppendSwitch("disable-gpu-sandbox"); // Sometimes needed for shared textures
     
-    // FULL DEBUG MODE - Enable all CEF logging
-    command_line->AppendSwitch("enable-logging");
-    command_line->AppendSwitchWithValue("log-level", "0"); // VERBOSE level
-    command_line->AppendSwitchWithValue("log-file", "cef_debug.log");
-    
-    // Verbose GPU debugging
-    command_line->AppendSwitchWithValue("vmodule", 
-        "*/gpu/*=2,"
-        "*/shared_texture/*=2,"
-        "*/d3d*=2,"
-        "*/angle*=2,"
-        "*/render*=1,"
-        "*/browser_compositor*=1,"
-        "*/viz*=1"
-    );
-    
-    // Additional debug flags
-    command_line->AppendSwitch("enable-gpu-service-logging");
-    command_line->AppendSwitch("gpu-startup-dialog"); // Shows GPU process startup info
+    // Essential flags for GPU acceleration
     command_line->AppendSwitch("disable-gpu-watchdog"); // Prevent GPU process timeout
-    command_line->AppendSwitch("disable-features=VizDisplayCompositor"); // Sometimes helps with shared textures
 
     // 4) Configuração de CEF
     CefSettings settings;
     settings.no_sandbox = true;
     settings.windowless_rendering_enabled = true;
     settings.multi_threaded_message_loop = true;  // Enable UI thread for OnAcceleratedPaint
-    
-    // Enable debug logging in CEF settings too
-    settings.log_severity = LOGSEVERITY_INFO;
-    CefString(&settings.log_file).FromASCII("cef_debug.log");
 
     CefString(&settings.resources_dir_path)      = cefDir;      // .\cef
     CefString(&settings.locales_dir_path)        = localesDir;  // .\cef\locales
@@ -261,18 +237,13 @@ bool InitializeCEF(int argc, const char* argv[]) {
     // Linux-specific OpenGL flags (no ANGLE on Linux)
     command_line->AppendSwitchWithValue("use-gl", "desktop"); // Use native OpenGL instead of ANGLE
     
-    // FULL DEBUG MODE - Enable all CEF logging
+    // Minimal logging for production
     command_line->AppendSwitch("enable-logging");
-    command_line->AppendSwitchWithValue("log-level", "0"); // VERBOSE level
-    command_line->AppendSwitchWithValue("log-file", "cef_debug.log");
+    command_line->AppendSwitchWithValue("log-level", "2"); // ERROR level only
 
     // Configure CEF settings
     CefSettings settings;
     settings.no_sandbox = true;
-    
-    // Enable debug logging in CEF settings too
-    settings.log_severity = LOGSEVERITY_INFO;
-    CefString(&settings.log_file).FromASCII("cef_debug.log");
     settings.windowless_rendering_enabled = true;
     settings.multi_threaded_message_loop = true;  // Enable UI thread for OnAcceleratedPaint
     
@@ -444,7 +415,7 @@ void ShutdownCEF() {
         // Close all active WebViews first
         UICEFWebView::closeAllWebViews();
 
-        CefDoMessageLoopWork();
+        // With multi_threaded_message_loop = true, CEF manages its own shutdown
 
         rawLogger("All webviews closed... Shutting down CEF");
 

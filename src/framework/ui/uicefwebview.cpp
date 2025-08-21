@@ -485,7 +485,7 @@ void UICEFWebView::createWebView()
 
 #ifdef _WIN32    
     window_info.shared_texture_enabled = true;
-    window_info.external_begin_frame_enabled = true; // Re-enabled since we're not using CefDoMessageLoopWork
+    // window_info.external_begin_frame_enabled = true; // Not needed with multi_threaded_message_loop = true
 
     g_logger.info("UICEFWebView: Window info configured for off-screen rendering");
 #endif
@@ -704,22 +704,13 @@ void UICEFWebView::onBrowserCreated(CefRefPtr<CefBrowser> browser)
         m_pendingUrl.clear();
     }
     
-    // Send initial external begin frame to trigger OnAcceleratedPaint
-    CefRefPtr<CefBrowserHost> host = m_browser->GetHost();
-    if (host) {
-        g_logger.info("UICEFWebView: Sending initial external begin frame to trigger OnAcceleratedPaint");
-        host->SendExternalBeginFrame();
-        
-        // CEF 103 bug workaround: Force continuous animation to prevent 250ms timeout
-        // This tricks CEF into thinking there's always animation happening
-        host->Invalidate(PET_VIEW);
-        host->WasResized(); // Force a resize event
-    }
+    // With multi_threaded_message_loop = true, CEF handles rendering automatically
+    // No manual frame triggering needed
 }
 
 void UICEFWebView::drawSelf(Fw::DrawPane drawPane)
 {
-    // Testing without SendExternalBeginFrame - CEF should render automatically with shared texture
+    // Render CEF content using multi-threaded rendering
     
     // Render only CEF content - no UIWidget background
     if (m_textureCreated && m_cefTexture) {
@@ -988,29 +979,6 @@ void UICEFWebView::setAllWindowlessFrameRate(int fps)
     }
 }
 
-void UICEFWebView::sendAllExternalBeginFrames()
-{
-    static int callCount = 0;
-    static int lastReadyCount = -1;
-    callCount++;
-    
-    int readyBrowsers = 0;
-    for (auto* webview : s_activeWebViews) {
-        if (webview && webview->m_browser) {
-            CefRefPtr<CefBrowserHost> host = webview->m_browser->GetHost();
-            if (host) {
-                host->SendExternalBeginFrame();
-                readyBrowsers++;
-            }
-        }
-    }
-    
-    // Log only when the count of ready browsers changes or every 300 calls (5 seconds at 60fps)
-    if (readyBrowsers != lastReadyCount || callCount % 300 == 0) {
-        g_logger.info(stdext::format("sendAllExternalBeginFrames: %d/%d browsers ready (call #%d)", 
-                      readyBrowsers, s_activeWebViews.size(), callCount));
-        lastReadyCount = readyBrowsers;
-    }
-}
+
 
 #endif // USE_CEF 
