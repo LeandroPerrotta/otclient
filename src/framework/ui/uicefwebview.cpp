@@ -430,10 +430,12 @@ void UICEFWebView::createWebView()
         maxFps = 60;
     browser_settings.windowless_frame_rate = maxFps;
 
-    // Window info for off-screen rendering
+    // Window info for off-screen rendering with shared texture
     CefWindowInfo window_info;
     window_info.SetAsWindowless(0); // 0 = no parent window
-    g_logger.info("UICEFWebView: Window info configured for off-screen rendering");
+    window_info.shared_texture_enabled = true; // Enable shared texture for OnAcceleratedPaint
+    window_info.external_begin_frame_enabled = true; // Enable external frame control
+    g_logger.info("UICEFWebView: Window info configured for accelerated off-screen rendering");
 
     // Create browser asynchronously
     bool result = CefBrowserHost::CreateBrowser(window_info, m_client, "about:blank", browser_settings, nullptr, nullptr);

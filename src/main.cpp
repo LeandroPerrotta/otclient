@@ -106,7 +106,18 @@ public:
         command_line->AppendSwitch("enable-zero-copy");
         // Explicitly use ANGLE with Direct3D11 backend which is compatible with OpenGL ES 2.0.
         command_line->AppendSwitchWithValue("use-angle", "d3d11");
+        
+        // Additional switches for OnAcceleratedPaint support
+        command_line->AppendSwitch("enable-gpu-compositing");
+        command_line->AppendSwitch("enable-accelerated-2d-canvas");
+        command_line->AppendSwitch("disable-gpu-sandbox");
 #endif
+        
+        // For all platforms - ensure GPU process doesn't get disabled
+        if (process_type.empty()) { // Browser process
+            command_line->AppendSwitch("enable-gpu");
+            command_line->AppendSwitch("enable-gpu-compositing");
+        }
     }
 
     IMPLEMENT_REFCOUNTING(OTClientBrowserApp);
@@ -202,6 +213,10 @@ bool InitializeCEF(int argc, const char* argv[]) {
     settings.no_sandbox = true;
     settings.windowless_rendering_enabled = true;
     settings.multi_threaded_message_loop = false;
+    
+    // Enable GPU acceleration for OnAcceleratedPaint
+    settings.chrome_runtime = false; // OSR requires legacy runtime
+    settings.external_message_pump = false;
     
     // Find CEF automatically (same logic as CMake)
     std::string cef_root;
