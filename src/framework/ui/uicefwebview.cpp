@@ -56,6 +56,9 @@
 #include <EGL/egl.h>
 #include <EGL/eglext.h>
 #include <GLES2/gl2ext.h>
+#ifndef EGL_D3D11_TEXTURE_2D_SHARE_HANDLE_ANGLE
+#define EGL_D3D11_TEXTURE_2D_SHARE_HANDLE_ANGLE 0x33A0
+#endif
 #endif
 #include "cefphysfsresourcehandler.h"
 
