@@ -218,6 +218,12 @@ bool InitializeCEF(int argc, const char* argv[]) {
     command_line->AppendSwitch("shared-texture-enabled");
     g_logger.info("CEF: Adding external-begin-frame-enabled flag");
     command_line->AppendSwitch("external-begin-frame-enabled");
+    
+    // Add debug flags to see what's happening with GPU
+    g_logger.info("CEF: Adding GPU debug flags");
+    command_line->AppendSwitch("enable-logging");
+    command_line->AppendSwitchWithValue("log-level", "0"); // INFO level
+    command_line->AppendSwitch("enable-gpu-client-logging");
 
     // Configure CEF settings
     CefSettings settings;
