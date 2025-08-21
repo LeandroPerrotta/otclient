@@ -83,10 +83,31 @@ void rawLogger(const char* message) {
     fflush(stdout);
 }
 
+// Browser process handler for proper message pump work scheduling
+class OTClientBrowserProcessHandler : public CefBrowserProcessHandler {
+public:
+    void OnScheduleMessagePumpWork(int64_t delay_ms) override {
+        // This method is called when work is scheduled for the browser process main thread
+        // We don't need to do anything special here since we're calling CefDoMessageLoopWork manually
+        // But implementing this prevents CEF from interfering with GPU process initialization
+    }
+
+    IMPLEMENT_REFCOUNTING(OTClientBrowserProcessHandler);
+};
+
 // Minimal CEF app used by the browser process to register custom schemes
 class OTClientBrowserApp : public CefApp {
+private:
+    CefRefPtr<OTClientBrowserProcessHandler> m_browserProcessHandler;
+
 public:
-    OTClientBrowserApp() {}
+    OTClientBrowserApp() {
+        m_browserProcessHandler = new OTClientBrowserProcessHandler();
+    }
+
+    CefRefPtr<CefBrowserProcessHandler> GetBrowserProcessHandler() override {
+        return m_browserProcessHandler;
+    }
 
     void OnRegisterCustomSchemes(CefRawPtr<CefSchemeRegistrar> registrar) override {
         registrar->AddCustomScheme("otclient",
