@@ -48,14 +48,14 @@ Texture::Texture(const Size& size)
     setupFilters();
 }
 
-Texture::Texture(const ImagePtr& image, bool buildMipmaps, bool compress)
+Texture::Texture(const ImagePtr& image, bool buildMipmaps, bool compress, bool bgra)
 {
     m_id = 0;
     m_time = 0;
 
     createTexture();
 
-    uploadPixels(image, buildMipmaps, compress);
+    uploadPixels(image, buildMipmaps, compress, bgra);
 }
 
 Texture::~Texture()
@@ -68,7 +68,7 @@ Texture::~Texture()
         glDeleteTextures(1, &m_id);
 }
 
-void Texture::uploadPixels(const ImagePtr& image, bool buildMipmaps, bool compress)
+void Texture::uploadPixels(const ImagePtr& image, bool buildMipmaps, bool compress, bool bgra)
 {
     if(!setupSize(image->getSize(), buildMipmaps))
         return;
@@ -85,11 +85,11 @@ void Texture::uploadPixels(const ImagePtr& image, bool buildMipmaps, bool compre
     if(buildMipmaps) {
         int level = 0;
         do {
-            setupPixels(level++, glImage->getSize(), glImage->getPixelData(), glImage->getBpp(), compress);
+            setupPixels(level++, glImage->getSize(), glImage->getPixelData(), glImage->getBpp(), compress, bgra);
         } while(glImage->nextMipmap());
         m_hasMipmaps = true;
     } else
-        setupPixels(0, glImage->getSize(), glImage->getPixelData(), glImage->getBpp(), compress);
+        setupPixels(0, glImage->getSize(), glImage->getPixelData(), glImage->getBpp(), compress, bgra);
 
     setupWrap();
     setupFilters();
@@ -224,12 +224,12 @@ void Texture::setupTranformMatrix()
     }
 }
 
-void Texture::setupPixels(int level, const Size& size, uchar* pixels, int channels, bool compress)
+void Texture::setupPixels(int level, const Size& size, uchar* pixels, int channels, bool compress, bool bgra)
 {
     GLenum format = 0;
     switch(channels) {
         case 4:
-            format = GL_RGBA;
+            format = bgra ? GL_BGRA : GL_RGBA;
             break;
         case 3:
             format = GL_RGB;
@@ -242,14 +242,42 @@ void Texture::setupPixels(int level, const Size& size, uchar* pixels, int channe
             break;
     }
 
-    GLenum internalFormat = GL_RGBA;
+    GLenum internalFormat;
 
 #ifdef OPENGL_ES
-    //TODO
+    internalFormat = format;
+    (void)compress; // compression not handled on OpenGL ES
 #else
+    internalFormat = GL_RGBA;
     if(compress)
         internalFormat = GL_COMPRESSED_RGBA;
 #endif
 
     glTexImage2D(GL_TEXTURE_2D, level, internalFormat, size.width(), size.height(), 0, format, GL_UNSIGNED_BYTE, pixels);
+}
+
+void Texture::updateSubPixels(const Rect& rect, const uchar* pixels, int channels, bool bgra)
+{
+    if(m_id == 0 || !pixels)
+        return;
+
+    bind();
+
+    GLenum format = 0;
+    switch(channels) {
+        case 4:
+            format = bgra ? GL_BGRA : GL_RGBA;
+            break;
+        case 3:
+            format = GL_RGB;
+            break;
+        case 2:
+            format = GL_LUMINANCE_ALPHA;
+            break;
+        case 1:
+            format = GL_LUMINANCE;
+            break;
+    }
+
+    glTexSubImage2D(GL_TEXTURE_2D, 0, rect.x(), rect.y(), rect.width(), rect.height(), format, GL_UNSIGNED_BYTE, pixels);
 }

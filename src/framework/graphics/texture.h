@@ -30,10 +30,11 @@ class Texture : public stdext::shared_object
 public:
     Texture();
     Texture(const Size& size);
-    Texture(const ImagePtr& image, bool buildMipmaps = false, bool compress = false);
+    Texture(const ImagePtr& image, bool buildMipmaps = false, bool compress = false, bool bgra = false);
     virtual ~Texture();
 
-    void uploadPixels(const ImagePtr& image, bool buildMipmaps = false, bool compress = false);
+    void uploadPixels(const ImagePtr& image, bool buildMipmaps = false, bool compress = false, bool bgra = false);
+    void updateSubPixels(const Rect& rect, const uchar* pixels, int channels = 4, bool bgra = false);
     void bind();
     void copyFromScreen(const Rect& screenRect);
     virtual bool buildHardwareMipmaps();
@@ -61,7 +62,7 @@ protected:
     void setupWrap();
     void setupFilters();
     void setupTranformMatrix();
-    void setupPixels(int level, const Size& size, uchar *pixels, int channels = 4, bool compress = false);
+    void setupPixels(int level, const Size& size, uchar *pixels, int channels = 4, bool compress = false, bool bgra = false);
 
     uint m_id;
     ticks_t m_time;

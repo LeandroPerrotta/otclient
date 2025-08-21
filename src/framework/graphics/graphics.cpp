@@ -40,6 +40,7 @@
 #include "texturemanager.h"
 #include "framebuffermanager.h"
 #include <framework/platform/platformwindow.h>
+#include <cstring>
 
 Graphics g_graphics;
 
@@ -60,6 +61,14 @@ void Graphics::init()
 
 #if OPENGL_ES==2
     g_painterOGL2 = new PainterOGL2;
+#ifdef OPENGL_ES
+    const char* extensions = reinterpret_cast<const char*>(glGetString(GL_EXTENSIONS));
+    if(!extensions || (std::strstr(extensions, "GL_EXT_texture_format_BGRA8888") == nullptr &&
+                       std::strstr(extensions, "GL_IMG_texture_format_BGRA8888") == nullptr &&
+                       std::strstr(extensions, "GL_APPLE_texture_format_BGRA8888") == nullptr)) {
+        m_useBGRA = false;
+    }
+#endif
 #elif OPENGL_ES==1
     g_painterOGL1 = new PainterOGL1;
 #else
@@ -67,6 +76,9 @@ void Graphics::init()
     GLenum err = glewInit();
     if(err != GLEW_OK)
         g_logger.fatal(stdext::format("Unable to init GLEW: %s", glewGetErrorString(err)));
+
+    if(!GLEW_VERSION_1_2 && !GLEW_EXT_bgra)
+        m_useBGRA = false;
 
     // overwrite framebuffer API if needed
     if(GLEW_EXT_framebuffer_object && !GLEW_ARB_framebuffer_object) {
@@ -152,6 +164,8 @@ bool Graphics::parseOption(const std::string& option)
         m_useNonPowerOfTwoTextures = false;
     else if(option == "-no-clamp-to-edge")
         m_useClampToEdge = false;
+    else if(option == "-no-bgra")
+        m_useBGRA = false;    
     else if(option == "-no-backbuffer-cache")
         m_cacheBackbuffer = false;
     else if(option == "-opengl1")
@@ -369,6 +383,17 @@ bool Graphics::canUseClampToEdge()
     if(!GLEW_VERSION_1_2)
         return false;
     return m_useClampToEdge;
+#endif
+}
+
+bool Graphics::canUseBGRA()
+{
+#ifdef OPENGL_ES
+    return m_useBGRA;
+#else
+    if(!GLEW_VERSION_1_2 && !GLEW_EXT_bgra)
+        return false;
+    return m_useBGRA;
 #endif
 }
 

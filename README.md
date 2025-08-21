@@ -1,13 +1,63 @@
 [![Build Status](https://github.com/edubart/otclient/actions/workflows/build-vcpkg.yml/badge.svg)](https://github.com/edubart/otclient/actions/workflows/build-vcpkg.yml) [![Join the chat at https://gitter.im/edubart/otclient](https://img.shields.io/badge/GITTER-join%20chat-green.svg)](https://gitter.im/edubart/otclient?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge) [![Open Source Helpers](https://www.codetriage.com/edubart/otclient/badges/users.svg)](https://www.codetriage.com/edubart/otclient)
 
-### What is otclient?
+### OTClient + WebView with Chromium Embedded Framework (CEF)
 
-Otclient is an alternative Tibia client for usage with otserv. It aims to be complete and flexible,
+This is the default OTClient with the addition of a powerful WebView feature. It allows building UI 
+components in OTClient using web technologies and is fully compatible with HTML, CSS, and JavaScript.
+
+The WebViews are provided by CEF using OSR (off-screen rendering), which renders the buffer that would
+normally be displayed by the browser.
+
+## How to build (Ubuntu 24)
+
+- Download and install CEF. It's needed to be specific version 103.0 (automated script is available `setup_cef.sh`)
+- Same procedure as build regular OTClient, but when preparing the build with cmake you need to set USE_CEF=ON:
+  - `cmake -DUSE_CEF=ON ..`
+
+## TODO
+
+### Completed
+
+- [x] Basic CEF integration in OTClient
+- [x] Basic HTML/CSS rendering
+- [x] CEF installation and compilation helpers
+- [x] Mouse interaction with the component
+- [x] Keyboard interaction with the component
+- [x] Performance optimization (texture caching, frame rate control)
+- [x] Integrate webviews with otclient filesystem through otclient://
+- [x] Basic integration through callbacks between Lua and JS
+
+### Pending
+
+- [ ] Dynamically build components to be expose for webviews on otclient://webviews
+- [ ] Touchscreen interaction with the component
+- [ ] Implementation (bridge) of all available callbacks/methods in Lua also for JavaScript
+- [ ] Developer tools integration (F12 debugger)
+- [ ] Code readibility (clean-code geeks happy)
+- [ ] Windows builds (vcpkg probably)
+
+### HTTP Login Component
+
+The HTTP Login component demonstrates WebView capabilities by replacing the traditional TCP login with HTTP-based authentication. It supports JWT tokens (if server supports) with fallback to username/password for the final game connection.
+
+**Requirements:**
+- [OTClient HTTP Login Server](https://github.com/LeandroPerrotta/otclient-http-login-server) (Node.js application)
+
+**Configuration:**
+- Enable/disable in `init.lua`: `useLoginHttp = true/false`
+- Configure API URL in `modules/client_http_entergame/http_entergame.lua`: `baseUrl = "https://your-api-url"`
+
+![HTTP Login Screenshot](images/httplogin_1.png "HTTP Login Component")
+![HTTP Login Screenshot](images/httplogin_2.png "Character Selection")
+
+### What is OTClient?
+
+OTClient is an alternative Tibia client for usage with otserv. It aims to be complete and flexible,
 for that it uses LUA scripting for all game interface functionality and configurations files with a syntax
-similar to CSS for the client interface design. Otclient works with a modular system, this means
+similar to CSS for the client interface design. OTClient works with a modular system, this means
 that each functionality is a separated module, giving the possibility to users modify and customize
 anything easily. Users can also create new mods and extend game interface for their own purposes.
-Otclient is written in C++11 and heavily scripted in lua.
+OTClient is written in C++11 and heavily scripted in lua.
 
 For a server to connect to, you can build your own with the [forgottenserver](https://github.com/otland/forgottenserver)
 or connect to one listed on [otservlist](https://otservlist.org/).
@@ -21,13 +71,13 @@ Compiled for Windows can be found here (but can be outdated):
 
 ### Features
 
-Beyond of it's flexibility with scripts, otclient comes with tons of other features that make possible
+Beyond of it's flexibility with scripts, OTClient comes with tons of other features that make possible
 the creation of new client side stuff in otserv that was not possible before. These include,
 sound system, graphics effects with shaders, modules/addons system, animated textures,
 styleable user interface, transparency, multi language, in game lua terminal, an OpenGL 1.1/2.0 ES engine that make possible
-to port to mobile platforms. Otclient is also flexible enough to
+to port to mobile platforms. OTClient is also flexible enough to
 create tibia tools like map editors just using scripts, because it wasn't designed to be just a
-client, instead otclient was designed to be a combination of a framework and tibia APIs.
+client, instead OTClient was designed to be a combination of a framework and tibia APIs.
 
 ### Compiling
 

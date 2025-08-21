@@ -1,0 +1,11 @@
+UIWindow
+  id: httpEnterGame
+  opacity: 1.0
+  width: 600
+  height: 900  
+  anchors.centerIn: parent
+  @onEnter: HTTPEnterGame.doLogin()
+
+  UICEFWebView
+    id: loginWebView
+    anchors.fill: parent

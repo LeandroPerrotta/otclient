@@ -122,9 +122,9 @@ function installLocale(locale)
 
     if #updatesNamesMissing > 0 then
       pdebug('Locale \'' .. locale.name .. '\' is missing ' .. #updatesNamesMissing .. ' translations.')
-      for _,name in pairs(updatesNamesMissing) do
-        pdebug('["' .. name ..'"] = \"\",')
-      end
+      --for _,name in pairs(updatesNamesMissing) do
+      --  pdebug('["' .. name ..'"] = \"\",')
+      --end
     end
   end
 

@@ -1,0 +1,48 @@
+body { font-family: Arial, sans-serif; background:#f2f2f2; margin:20px; line-height: 1.6; }
+h1 { color:#0080ff; }
+.container {
+    background: white;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    max-width: 600px;
+}
+label { display: block; margin-bottom: 5px; font-weight: bold; color: #333; }
+input, textarea {
+    width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;
+    font-size: 14px; box-sizing: border-box;
+}
+input:focus, textarea:focus {
+    outline: none; border-color: #0080ff; box-shadow: 0 0 5px rgba(0,128,255,0.3);
+}
+button { padding: 8px 16px; margin: 5px; background: #0080ff; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; }
+button:hover { background: #0066cc; }
+.status { margin-top: 15px; padding: 10px; background: #e8f4fd; border-radius: 4px; border-left: 4px solid #0080ff; }
+.keylog { background: #f9f9f9; padding: 10px; border-radius: 4px; font-family: monospace; font-size: 12px; max-height: 100px; overflow-y: auto; }
+.debug-section { background: #fff3cd; border: 1px solid #ffeaa7; border-radius: 4px; padding: 10px; margin: 10px 0; }
+
+.custom-dropdown { position: relative; width: 100%; }
+.dropdown-button {
+    width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;
+    background: white; text-align: left; cursor: pointer; font-size: 14px;
+    display: flex; justify-content: space-between; align-items: center;
+    color: #333;
+}
+.dropdown-button:hover { border-color: #0080ff; }
+.dropdown-arrow {
+    border: solid #666; border-width: 0 2px 2px 0;
+    display: inline-block; padding: 3px; transform: rotate(45deg);
+    transition: transform 0.2s;
+}
+.dropdown-open .dropdown-arrow { transform: rotate(-135deg); }
+.dropdown-options {
+    position: absolute; top: 100%; left: 0; right: 0; background: white;
+    border: 1px solid #ddd; border-top: none; border-radius: 0 0 4px 4px;
+    max-height: 200px; overflow-y: auto; z-index: 1000; display: none;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+}
+.dropdown-open .dropdown-options { display: block; }
+.dropdown-option { padding: 8px 12px; cursor: pointer; border-bottom: 1px solid #f0f0f0; }
+.dropdown-option:hover { background: #f5f5f5; }
+.dropdown-option.selected { background: #e3f2fd; color: #0080ff; }
+.dropdown-option:last-child { border-bottom: none; }

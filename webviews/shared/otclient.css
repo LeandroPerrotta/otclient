@@ -1,0 +1,347 @@
+/*
+ * OTClient Native UI Style for Webview Components
+ * Generic CSS to make webview components match native OTClient design
+ */
+
+/* CSS Variables for OTClient Design System */
+:root {
+  /* Colors from native OTUI */
+  --otc-text-primary: #dfdfdf;
+  --otc-text-disabled: #dfdfdf88;
+  --otc-text-input: #272727;
+  --otc-background-window: #3a3a3a;
+  --otc-background-panel: #2a2a2a;
+  --otc-background-flat: #333333;
+  --otc-border-color: #555555;
+  --otc-button-gradient-start: #4a4a4a;
+  --otc-button-gradient-end: #2a2a2a;
+  --otc-button-hover: #5a5a5a;
+  --otc-button-pressed: #1a1a1a;
+  --otc-selection-bg: #cccccc;
+  --otc-selection-text: #272727;
+  
+  /* Typography from native fonts */
+  --otc-font-primary: 'Terminus', 'Consolas', 'Courier New', monospace;
+  --otc-font-size-small: 10px;
+  --otc-font-size-normal: 11px;
+  --otc-font-size-large: 14px;
+  --otc-font-size-title: 16px;
+  
+  /* Layout constants from OTUI */
+  --otc-border-radius: 2px;
+  --otc-padding-small: 4px;
+  --otc-padding-normal: 8px;
+  --otc-margin-small: 2px;
+  --otc-margin-normal: 8px;
+}
+
+/* Reset and base styles */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: var(--otc-font-primary);
+  font-size: var(--otc-font-size-normal);
+  color: var(--otc-text-primary);
+  background: transparent;
+  line-height: 1.2;
+  -webkit-font-smoothing: none;
+  font-smooth: never;
+  text-rendering: optimizeSpeed;
+}
+
+/* OTClient Window Style */
+.otc-window {
+  background: var(--otc-background-window);
+  border: 3px solid var(--otc-border-color);
+  border-radius: var(--otc-border-radius);
+  padding: 16px;
+  box-shadow: 
+    inset 1px 1px 0 rgba(255, 255, 255, 0.1),
+    inset -1px -1px 0 rgba(0, 0, 0, 0.3),
+    2px 2px 8px rgba(0, 0, 0, 0.5);
+  max-width: 400px;
+  margin: 0 auto;
+}
+
+.otc-window-title {
+  font-size: var(--otc-font-size-title);
+  color: var(--otc-text-primary);
+  text-align: center;
+  margin-bottom: var(--otc-margin-normal);
+  padding-bottom: var(--otc-padding-small);
+  border-bottom: 1px solid var(--otc-border-color);
+  font-weight: bold;
+}
+
+/* OTClient Panel Style */
+.otc-panel {
+  background: var(--otc-background-panel);
+  border: 1px solid var(--otc-border-color);
+  border-radius: var(--otc-border-radius);
+  padding: var(--otc-padding-normal);
+  box-shadow: 
+    inset 1px 1px 0 rgba(0, 0, 0, 0.5),
+    inset -1px -1px 0 rgba(255, 255, 255, 0.1);
+}
+
+.otc-panel-flat {
+  background: var(--otc-background-flat);
+  border: 1px solid var(--otc-border-color);
+  border-radius: var(--otc-border-radius);
+  padding: var(--otc-padding-small);
+  box-shadow: inset 0 0 2px rgba(0, 0, 0, 0.3);
+}
+
+/* OTClient Labels */
+.otc-label {
+  font-family: var(--otc-font-primary);
+  font-size: var(--otc-font-size-normal);
+  color: var(--otc-text-primary);
+  font-weight: normal;
+  text-shadow: 1px 1px 1px rgba(0, 0, 0, 0.8);
+}
+
+.otc-menu-label {
+  font-size: var(--otc-font-size-normal);
+  color: var(--otc-text-primary);
+  margin-bottom: var(--otc-margin-small);
+  display: block;
+  font-weight: normal;
+}
+
+/* OTClient Text Input Style */
+.otc-text-input {
+  font-family: var(--otc-font-primary);
+  font-size: var(--otc-font-size-normal);
+  color: var(--otc-text-input);
+  background: #f0f0f0;
+  border: 1px solid var(--otc-border-color);
+  border-radius: var(--otc-border-radius);
+  padding: var(--otc-padding-small);
+  width: 100%;
+  min-height: 22px;
+  box-shadow: 
+    inset 1px 1px 2px rgba(0, 0, 0, 0.5),
+    inset -1px -1px 0 rgba(255, 255, 255, 0.8);
+  outline: none;
+  transition: none;
+}
+
+.otc-text-input:focus {
+  box-shadow: 
+    inset 1px 1px 2px rgba(0, 0, 0, 0.7),
+    inset -1px -1px 0 rgba(255, 255, 255, 0.8),
+    0 0 0 1px var(--otc-text-primary);
+}
+
+.otc-text-input::selection {
+  background: var(--otc-selection-bg);
+  color: var(--otc-selection-text);
+}
+
+.otc-text-input:disabled {
+  color: var(--otc-text-disabled);
+  opacity: 0.5;
+  background: #e0e0e0;
+}
+
+/* OTClient Button Style */
+.otc-button {
+  font-family: var(--otc-font-primary);
+  font-size: var(--otc-font-size-normal);
+  color: var(--otc-text-primary);
+  background: linear-gradient(to bottom, var(--otc-button-gradient-start) 0%, var(--otc-button-gradient-end) 100%);
+  border: 1px solid var(--otc-border-color);
+  border-radius: var(--otc-border-radius);
+  padding: var(--otc-padding-small) var(--otc-padding-normal);
+  min-height: 23px;
+  min-width: 64px;
+  cursor: pointer;
+  text-shadow: 1px 1px 1px rgba(0, 0, 0, 0.8);
+  box-shadow: 
+    inset 1px 1px 0 rgba(255, 255, 255, 0.2),
+    inset -1px -1px 0 rgba(0, 0, 0, 0.3),
+    1px 1px 2px rgba(0, 0, 0, 0.5);
+  outline: none;
+  transition: none;
+  font-weight: normal;
+}
+
+.otc-button:hover {
+  background: linear-gradient(to bottom, var(--otc-button-hover) 0%, var(--otc-button-gradient-end) 100%);
+}
+
+.otc-button:active,
+.otc-button:focus {
+  background: linear-gradient(to bottom, var(--otc-button-pressed) 0%, var(--otc-button-gradient-start) 100%);
+  box-shadow: 
+    inset 1px 1px 2px rgba(0, 0, 0, 0.5),
+    inset -1px -1px 0 rgba(255, 255, 255, 0.1);
+  transform: translateY(1px);
+}
+
+.otc-button:disabled {
+  color: var(--otc-text-disabled);
+  opacity: 0.8;
+  cursor: not-allowed;
+  background: var(--otc-button-gradient-end);
+}
+
+.otc-button-primary {
+  background: linear-gradient(to bottom, #6a6a6a 0%, #4a4a4a 100%);
+  font-weight: bold;
+}
+
+.otc-button-primary:hover {
+  background: linear-gradient(to bottom, #7a7a7a 0%, #5a5a5a 100%);
+}
+
+/* OTClient Checkbox Style */
+.otc-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--otc-padding-small);
+  font-family: var(--otc-font-primary);
+  font-size: var(--otc-font-size-normal);
+  color: var(--otc-text-primary);
+  cursor: pointer;
+}
+
+.otc-checkbox input[type="checkbox"] {
+  width: 13px;
+  height: 13px;
+  appearance: none;
+  background: #f0f0f0;
+  border: 1px solid var(--otc-border-color);
+  border-radius: 1px;
+  box-shadow: 
+    inset 1px 1px 1px rgba(0, 0, 0, 0.3),
+    inset -1px -1px 0 rgba(255, 255, 255, 0.8);
+  outline: none;
+  margin: 0;
+}
+
+.otc-checkbox input[type="checkbox"]:checked {
+  background: var(--otc-text-input);
+  background-image: url("data:image/svg+xml,%3csvg viewBox='0 0 16 16' fill='white' xmlns='http://www.w3.org/2000/svg'%3e%3cpath d='m13.854 3.646-7.5 7.5a.5.5 0 0 1-.708 0l-3.5-3.5a.5.5 0 1 1 .708-.708L6 10.293l7.146-7.147a.5.5 0 0 1 .708.708z'/%3e%3c/svg%3e");
+  background-size: 10px 10px;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
+.otc-checkbox input[type="checkbox"]:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Form Groups */
+.otc-form-group {
+  margin-bottom: var(--otc-margin-normal);
+}
+
+.otc-form-group:last-child {
+  margin-bottom: 0;
+}
+
+/* Error and Success Messages */
+.otc-message {
+  padding: var(--otc-padding-small);
+  border-radius: var(--otc-border-radius);
+  margin-bottom: var(--otc-margin-normal);
+  font-family: var(--otc-font-primary);
+  font-size: var(--otc-font-size-normal);
+  border: 1px solid;
+}
+
+.otc-message-error {
+  background: #4a2222;
+  border-color: #722222;
+  color: #ff8888;
+}
+
+.otc-message-success {
+  background: #224a22;
+  border-color: #227222;
+  color: #88ff88;
+}
+
+.otc-message-info {
+  background: var(--otc-background-panel);
+  border-color: var(--otc-border-color);
+  color: var(--otc-text-primary);
+}
+
+/* Loading Animation */
+.otc-loading {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--otc-text-primary);
+  border-radius: 50%;
+  border-top-color: transparent;
+  animation: otc-spin 1s linear infinite;
+  margin-right: var(--otc-padding-small);
+}
+
+@keyframes otc-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Responsive adjustments */
+@media (max-width: 480px) {
+  .otc-window {
+    padding: var(--otc-padding-normal);
+    margin: var(--otc-padding-small);
+    max-width: none;
+  }
+  
+  .otc-button {
+    min-width: 48px;
+    padding: var(--otc-padding-small);
+  }
+}
+
+/* Utility Classes */
+.otc-text-center { text-align: center; }
+.otc-text-left { text-align: left; }
+.otc-text-right { text-align: right; }
+
+.otc-mb-small { margin-bottom: var(--otc-margin-small); }
+.otc-mb-normal { margin-bottom: var(--otc-margin-normal); }
+.otc-mt-small { margin-top: var(--otc-margin-small); }
+.otc-mt-normal { margin-top: var(--otc-margin-normal); }
+
+.otc-p-small { padding: var(--otc-padding-small); }
+.otc-p-normal { padding: var(--otc-padding-normal); }
+
+.otc-hidden { display: none; }
+.otc-visible { display: block; }
+
+/* Header with icon */
+.otc-header {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--otc-padding-small);
+  margin-bottom: var(--otc-margin-normal);
+}
+
+.otc-icon {
+  width: 16px;
+  height: 16px;
+  filter: brightness(0.9);
+}
+
+/* Button groups */
+.otc-button-group {
+  display: flex;
+  gap: var(--otc-padding-small);
+}
+
+.otc-button-group .otc-button {
+  flex: 1;
+}

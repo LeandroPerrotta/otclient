@@ -8,9 +8,19 @@
 # add framework cmake modules
 set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/cmake;${CMAKE_MODULE_PATH}")
 
+# Don't reset framework_LIBRARIES - it may contain values from parent CMakeLists.txt
+if(NOT DEFINED framework_LIBRARIES)
 set(framework_LIBRARIES "")
+endif()
+# Don't reset framework_DEFINITIONS - it may contain values from parent CMakeLists.txt
+if(NOT DEFINED framework_DEFINITIONS)
 set(framework_DEFINITIONS "")
-set(framework_INCLUDE_DIRS "${CMAKE_CURRENT_LIST_DIR}/..")
+endif()
+# Don't reset framework_INCLUDE_DIRS - it may contain values from parent CMakeLists.txt
+if(NOT DEFINED framework_INCLUDE_DIRS)
+    set(framework_INCLUDE_DIRS "")
+endif()
+list(APPEND framework_INCLUDE_DIRS "${CMAKE_CURRENT_LIST_DIR}/..")
 set(framework_SOURCES ${framework_SOURCES}
     ${CMAKE_CURRENT_LIST_DIR}/const.h
     ${CMAKE_CURRENT_LIST_DIR}/global.h
@@ -479,6 +489,14 @@ if(FRAMEWORK_GRAPHICS)
         ${CMAKE_CURRENT_LIST_DIR}/ui/uiwidget.h
         ${CMAKE_CURRENT_LIST_DIR}/ui/uiwidgetimage.cpp
         ${CMAKE_CURRENT_LIST_DIR}/ui/uiwidgettext.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/ui/uiwebview.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/ui/uiwebview.h
+
+        # CEF WebView (conditional)
+        $<$<BOOL:${USE_CEF}>:${CMAKE_CURRENT_LIST_DIR}/ui/uicefwebview.cpp>
+        $<$<BOOL:${USE_CEF}>:${CMAKE_CURRENT_LIST_DIR}/ui/uicefwebview.h>
+        $<$<BOOL:${USE_CEF}>:${CMAKE_CURRENT_LIST_DIR}/ui/cefphysfsresourcehandler.cpp>
+        $<$<BOOL:${USE_CEF}>:${CMAKE_CURRENT_LIST_DIR}/ui/cefphysfsresourcehandler.h>        
 
         # platform window
         ${CMAKE_CURRENT_LIST_DIR}/platform/platformwindow.cpp
@@ -614,4 +632,5 @@ if(EXTRA_LIBS)
 endif()
 
 include_directories(${framework_INCLUDE_DIRS})
+message(STATUS "framework_DEFINITIONS: ${framework_DEFINITIONS}")
 add_definitions(${framework_DEFINITIONS})

@@ -26,6 +26,13 @@
 
 #if OPENGL_ES==2
 #include <GLES2/gl2.h>
+#ifndef GL_BGRA
+#  ifdef GL_BGRA_EXT
+#    define GL_BGRA GL_BGRA_EXT
+#  else
+#    define GL_BGRA 0x80E1
+#  endif
+#endif
 #elif OPENGL_ES==1
 #include <GLES/gl.h>
 

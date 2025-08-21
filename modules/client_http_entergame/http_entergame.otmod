@@ -1,0 +1,16 @@
+Module
+  name: client_http_entergame
+  description: HTTP-based login system with webview interface
+  author: edubart
+  website: https://github.com/edubart/otclient
+
+  dependencies:
+    - client_topmenu
+    - client_locales
+
+  @onLoad: |
+    dofile 'http_entergame'
+    HTTPEnterGame.init()
+
+  @onUnload: |
+    HTTPEnterGame.terminate() 

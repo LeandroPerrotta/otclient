@@ -48,6 +48,10 @@
 #include <framework/graphics/particlemanager.h>
 #include <framework/graphics/fontmanager.h>
 #include <framework/ui/ui.h>
+#include <framework/ui/uiwebview.h>
+#ifdef USE_CEF
+#include <framework/ui/uicefwebview.h>
+#endif
 #include <framework/input/mouse.h>
 #endif
 
@@ -63,6 +67,7 @@
 
 void Application::registerLuaFunctions()
 {
+    g_logger.info("Application::registerLuaFunctions() called");
     // conversion globals
     g_lua.bindGlobalFunction("torect", [](const std::string& v) { return stdext::from_string<Rect>(v); });
     g_lua.bindGlobalFunction("topoint", [](const std::string& v) { return stdext::from_string<Point>(v); });
@@ -76,6 +81,7 @@ void Application::registerLuaFunctions()
     g_lua.bindGlobalFunction("stringtoip", [](const std::string& v) { return stdext::string_to_ip(v); });
     g_lua.bindGlobalFunction("listSubnetAddresses", [](uint32 a, uint8 b) { return stdext::listSubnetAddresses(a, b); });
     g_lua.bindGlobalFunction("ucwords", [](std::string s) { return stdext::ucwords(s); });
+    g_lua.bindGlobalFunction("latin1_to_utf8", [](const std::string& s) { return stdext::latin1_to_utf8(s); });
 
     // Platform
     g_lua.registerSingletonClass("g_platform");
@@ -682,6 +688,61 @@ void Application::registerLuaFunctions()
     g_lua.bindClassMemberFunction<UIAnchorLayout>("removeAnchors", &UIAnchorLayout::removeAnchors);
     g_lua.bindClassMemberFunction<UIAnchorLayout>("centerIn", &UIAnchorLayout::centerIn);
     g_lua.bindClassMemberFunction<UIAnchorLayout>("fill", &UIAnchorLayout::fill);
+
+    // WebView bindings
+#ifdef USE_CEF
+    g_logger.info("USE_CEF is defined - registering UICEFWebView class");
+    g_lua.registerClass<UICEFWebView, UIWidget>();
+    g_lua.bindClassStaticFunction<UICEFWebView>("create", []{ 
+        g_logger.info("Creating UICEFWebView instance");
+        return UICEFWebViewPtr(new UICEFWebView()); 
+    });
+    g_lua.bindClassStaticFunction<UICEFWebView>("setAllWindowlessFrameRate", &UICEFWebView::setAllWindowlessFrameRate);
+
+    g_lua.bindClassMemberFunction<UICEFWebView>("loadUrl", &UICEFWebView::loadUrl);
+    g_lua.bindClassMemberFunction<UICEFWebView>("loadHtml", &UICEFWebView::loadHtml);
+    g_lua.bindClassMemberFunction<UICEFWebView>("loadFile", &UICEFWebView::loadFile);
+    g_lua.bindClassMemberFunction<UICEFWebView>("executeJavaScript", &UICEFWebView::executeJavaScript);
+    g_lua.bindClassMemberFunction<UICEFWebView>("setZoomLevel", &UICEFWebView::setZoomLevel);
+    g_lua.bindClassMemberFunction<UICEFWebView>("getZoomLevel", &UICEFWebView::getZoomLevel);
+    g_lua.bindClassMemberFunction<UICEFWebView>("setUserAgent", &UICEFWebView::setUserAgent);
+    g_lua.bindClassMemberFunction<UICEFWebView>("getUserAgent", &UICEFWebView::getUserAgent);
+    g_lua.bindClassMemberFunction<UICEFWebView>("setScrollPosition", &UICEFWebView::setScrollPosition);
+    g_lua.bindClassMemberFunction<UICEFWebView>("getScrollPosition", &UICEFWebView::getScrollPosition);
+    g_lua.bindClassMemberFunction<UICEFWebView>("setScrollable", &UICEFWebView::setScrollable);
+    g_lua.bindClassMemberFunction<UICEFWebView>("isScrollable", &UICEFWebView::isScrollable);
+    g_lua.bindClassMemberFunction<UICEFWebView>("goBack", &UICEFWebView::goBack);
+    g_lua.bindClassMemberFunction<UICEFWebView>("goForward", &UICEFWebView::goForward);
+    g_lua.bindClassMemberFunction<UICEFWebView>("reload", &UICEFWebView::reload);
+    g_lua.bindClassMemberFunction<UICEFWebView>("stop", &UICEFWebView::stop);
+    g_lua.bindClassMemberFunction<UICEFWebView>("canGoBack", &UICEFWebView::canGoBack);
+    g_lua.bindClassMemberFunction<UICEFWebView>("canGoForward", &UICEFWebView::canGoForward);
+    g_lua.bindClassMemberFunction<UICEFWebView>("isLoading", &UICEFWebView::isLoading);
+    g_lua.registerClassMemberFunction<UICEFWebView>("registerJavaScriptCallback", [](LuaInterface* lua) -> int {
+        LuaObjectPtr obj = lua->toObject(1);
+        UICEFWebViewPtr webview = obj->static_self_cast<UICEFWebView>();
+        std::string name = lua->toString(2);
+        if (lua->isFunction(3)) {
+            lua->pushValue(3);
+            int ref = lua->ref();
+            webview->registerJavaScriptCallback(name,
+                [ref](const std::string& data) {
+                    g_lua.getRef(ref);
+                    if (g_lua.isFunction()) {
+                        int args = g_lua.polymorphicPush(data);
+                        int rets = g_lua.safeCall(args);
+                        g_lua.pop(rets);
+                    }
+                },
+                ref);
+        }
+        // clean up stack (object, name and optional function)
+        lua->pop(lua->stackSize());
+        return 0;
+    });
+    g_lua.bindClassMemberFunction<UICEFWebView>("unregisterJavaScriptCallback", &UICEFWebView::unregisterJavaScriptCallback);
+    g_lua.bindClassMemberFunction<UICEFWebView>("sendToJavaScript", &UICEFWebView::sendToJavaScript);
+#endif
 
     // UITextEdit
     g_lua.registerClass<UITextEdit, UIWidget>();
