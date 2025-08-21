@@ -37,6 +37,11 @@ public:
         command_line->AppendSwitch("disable-gpu-sandbox");
 #endif
         
+        // For all processes - add OnAcceleratedPaint support flags
+        command_line->AppendSwitch("off-screen-rendering-enabled");
+        command_line->AppendSwitch("shared-texture-enabled");
+        command_line->AppendSwitch("external-begin-frame-enabled");
+        
         // For renderer process - only enable GPU if we're on Windows with OpenGL ES
         if (process_type == "renderer") {
 #if defined(_WIN32) && defined(OPENGL_ES) && OPENGL_ES == 2
