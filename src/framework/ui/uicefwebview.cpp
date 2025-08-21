@@ -24,6 +24,7 @@
 #include <framework/core/logger.h>
 #include <framework/core/clock.h>
 #include <framework/core/graphicalapplication.h>
+#include <framework/core/eventdispatcher.h>
 #include <framework/graphics/graphics.h>
 #include <framework/graphics/image.h>
 #include <framework/platform/platformwindow.h>
@@ -294,6 +295,7 @@ public:
         static bool sofwareAccelerationLogged = false;
         if (!sofwareAccelerationLogged) {
             g_logger.info("============ UICEFWebView: Software acceleration is enabled =============");
+            g_logger.info("UICEFWebView: OnPaint called - using software rendering");
             sofwareAccelerationLogged = true;
         }
 
@@ -314,6 +316,7 @@ public:
         static bool gpuAccelerationLogged = false;
         if (!gpuAccelerationLogged) {
             g_logger.info("============ UICEFWebView: GPU acceleration is enabled =============");
+            g_logger.info("UICEFWebView: OnAcceleratedPaint called - using GPU rendering!");
             g_logger.info(stdext::format("UICEFWebView: shared_handle = %p", shared_handle));
             gpuAccelerationLogged = true;
         }
@@ -371,7 +374,13 @@ private:
                     }
                 }
                 if (m_webview && !name.empty()) {
-                    m_webview->onJavaScriptCallback(name, data);
+                    // With multi_threaded_message_loop = true, we're on CEF UI thread
+                    // Need to schedule callback on main thread for thread safety
+                    g_dispatcher.scheduleEvent([webview = m_webview, name, data]() {
+                        if (webview) {
+                            webview->onJavaScriptCallback(name, data);
+                        }
+                    }, 0);
                     callback->Success("");
                     return true;
                 }
