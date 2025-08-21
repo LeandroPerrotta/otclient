@@ -244,7 +244,6 @@ bool InitializeCEF(int argc, const char* argv[]) {
     settings.multi_threaded_message_loop = true;  // Enable UI thread for OnAcceleratedPaint
     
     // Enable GPU acceleration for OnAcceleratedPaint
-    settings.chrome_runtime = false; // OSR requires legacy runtime
     settings.external_message_pump = false;
     
     // Find CEF automatically (same logic as CMake)
@@ -376,9 +375,8 @@ bool InitializeCEF(int argc, const char* argv[]) {
     
     // Configure CEF settings for data persistence
     CefString(&settings.cache_path) = abs_cache_path;
-    CefString(&settings.user_data_path) = abs_cache_path;
+    CefString(&settings.root_cache_path) = abs_cache_path;
     settings.persist_session_cookies = true;
-    settings.persist_user_preferences = true;
 
     CefString(&settings.resources_dir_path) = abs_resources_path;
     CefString(&settings.locales_dir_path) = abs_locales_path;

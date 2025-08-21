@@ -323,12 +323,12 @@ public:
     void OnAcceleratedPaint(CefRefPtr<CefBrowser> browser,
                             PaintElementType type,
                             const RectList& dirtyRects,
-                            void* shared_handle) override {
+                            const CefAcceleratedPaintInfo& info) override {
         static bool gpuAccelerationLogged = false;
         if (!gpuAccelerationLogged) {
             g_logger.info("============ UICEFWebView: GPU acceleration is enabled =============");
             g_logger.info("UICEFWebView: OnAcceleratedPaint called - using GPU rendering!");
-            g_logger.info(stdext::format("UICEFWebView: shared_handle = %p", shared_handle));
+            g_logger.info("UICEFWebView: accelerated paint info received");
             gpuAccelerationLogged = true;
         }
         
@@ -340,9 +340,9 @@ public:
             if (type == PET_VIEW) {
                 // With multi_threaded_message_loop = true, we're on CEF UI thread
                 // Need to schedule accelerated paint processing on main thread for OpenGL context
-                g_dispatcher.scheduleEvent([webview = m_webview, shared_handle]() {
+                g_dispatcher.scheduleEvent([webview = m_webview, info]() {
                     if (webview) {
-                        webview->onCEFAcceleratedPaint(shared_handle);
+                        webview->onCEFAcceleratedPaint(info);
                     }
                 }, 0);
             }
@@ -640,9 +640,10 @@ void UICEFWebView::onCEFPaint(const void* buffer, int width, int height,
     setVisible(true);
 }
 
-void UICEFWebView::onCEFAcceleratedPaint(void* sharedHandle)
+void UICEFWebView::onCEFAcceleratedPaint(const CefAcceleratedPaintInfo& info)
 {
 #if defined(_WIN32) && defined(OPENGL_ES) && OPENGL_ES == 2
+    void* sharedHandle = info.shared_handle;
     if (!sharedHandle)
         return;
 
@@ -675,6 +676,8 @@ void UICEFWebView::onCEFAcceleratedPaint(void* sharedHandle)
         glEGLImageTargetTexture2DOES(GL_TEXTURE_2D, image);
         eglDestroyImageKHR(display, image);
     }
+#else
+    (void)info;
 #endif
 }
 
