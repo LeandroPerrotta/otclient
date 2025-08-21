@@ -215,6 +215,17 @@ bool InitializeCEF(int argc, const char* argv[]) {
     command_line->AppendSwitchWithValue("use-angle", "d3d11");
     command_line->AppendSwitch("shared-texture-enabled");
     
+    // Force GPU process more aggressively
+    command_line->AppendSwitch("enable-gpu");
+    command_line->AppendSwitch("enable-gpu-compositing");
+    command_line->AppendSwitch("enable-gpu-rasterization");
+    command_line->AppendSwitch("disable-software-rasterizer");
+    command_line->AppendSwitch("disable-gpu-sandbox"); // Sometimes needed for shared textures
+    
+    // Debug flags to investigate GPU process
+    command_line->AppendSwitch("enable-logging");
+    command_line->AppendSwitchWithValue("log-level", "0"); // INFO level
+    
 
 
     // Configure CEF settings

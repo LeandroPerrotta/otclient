@@ -314,6 +314,7 @@ public:
         static bool gpuAccelerationLogged = false;
         if (!gpuAccelerationLogged) {
             g_logger.info("============ UICEFWebView: GPU acceleration is enabled =============");
+            g_logger.info(stdext::format("UICEFWebView: shared_handle = %p", shared_handle));
             gpuAccelerationLogged = true;
         }
         
