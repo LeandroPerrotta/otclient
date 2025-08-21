@@ -216,6 +216,10 @@ bool InitializeCEF(int argc, const char* argv[]) {
     command_line->AppendSwitch("disable-features=TranslateUI");
     command_line->AppendSwitch("disable-ipc-flooding-protection");
     
+    // Performance flags that benefit all platforms (not GPU-specific)
+    command_line->AppendSwitch("enable-begin-frame-scheduling");
+    // Note: disable-background-timer-throttling and disable-renderer-backgrounding already added above
+    
 
 
     // Configure CEF settings
