@@ -680,6 +680,11 @@ void UICEFWebView::onBrowserCreated(CefRefPtr<CefBrowser> browser)
     if (host) {
         g_logger.info("UICEFWebView: Sending initial external begin frame to trigger OnAcceleratedPaint");
         host->SendExternalBeginFrame();
+        
+        // CEF 103 bug workaround: Force continuous animation to prevent 250ms timeout
+        // This tricks CEF into thinking there's always animation happening
+        host->Invalidate(PET_VIEW);
+        host->WasResized(); // Force a resize event
     }
 }
 
