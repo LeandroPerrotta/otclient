@@ -30,11 +30,16 @@ public:
         command_line->AppendSwitch("enable-gpu-rasterization");
         command_line->AppendSwitch("enable-zero-copy");
         command_line->AppendSwitchWithValue("use-angle", "d3d11");
+        // Disable passthrough to avoid ANGLE conflicts
+        command_line->AppendSwitch("disable-gpu-passthrough");
         
         // Additional switches for OnAcceleratedPaint support
         command_line->AppendSwitch("enable-gpu-compositing");
         command_line->AppendSwitch("enable-accelerated-2d-canvas");
         command_line->AppendSwitch("disable-gpu-sandbox");
+        // Force GPU process and disable software fallback
+        command_line->AppendSwitch("disable-software-rasterizer");
+        command_line->AppendSwitch("ignore-gpu-blacklist");
 #endif
         
         // For all processes - add OnAcceleratedPaint support flags

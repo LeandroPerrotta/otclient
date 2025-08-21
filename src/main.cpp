@@ -106,11 +106,16 @@ public:
         command_line->AppendSwitch("enable-zero-copy");
         // Explicitly use ANGLE with Direct3D11 backend which is compatible with OpenGL ES 2.0.
         command_line->AppendSwitchWithValue("use-angle", "d3d11");
+        // Disable passthrough to avoid ANGLE conflicts
+        command_line->AppendSwitch("disable-gpu-passthrough");
         
         // Additional switches for OnAcceleratedPaint support
         command_line->AppendSwitch("enable-gpu-compositing");
         command_line->AppendSwitch("enable-accelerated-2d-canvas");
         command_line->AppendSwitch("disable-gpu-sandbox");
+        // Force GPU process and disable software fallback
+        command_line->AppendSwitch("disable-software-rasterizer");
+        command_line->AppendSwitch("ignore-gpu-blacklist");
 #endif
         
         // For all platforms - try to enable GPU process (but don't force it)
