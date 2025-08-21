@@ -304,7 +304,18 @@ public:
                 m_webview->onBrowserCreated(browser);
             }
             if (type == PET_VIEW) {
-                m_webview->onCEFPaint(buffer, width, height, dirtyRects);
+                // With multi_threaded_message_loop = true, we're on CEF UI thread
+                // Need to schedule paint processing on main thread for OpenGL context
+                
+                // Copy buffer data since it may be freed after this callback
+                std::vector<uint8_t> bufferCopy(width * height * 4);
+                memcpy(bufferCopy.data(), buffer, bufferCopy.size());
+                
+                g_dispatcher.scheduleEvent([webview = m_webview, bufferCopy = std::move(bufferCopy), width, height, dirtyRects]() mutable {
+                    if (webview) {
+                        webview->onCEFPaint(bufferCopy.data(), width, height, dirtyRects);
+                    }
+                }, 0);
             }
         }
     }
@@ -327,7 +338,13 @@ public:
                 m_webview->onBrowserCreated(browser);
             }
             if (type == PET_VIEW) {
-                m_webview->onCEFAcceleratedPaint(shared_handle);
+                // With multi_threaded_message_loop = true, we're on CEF UI thread
+                // Need to schedule accelerated paint processing on main thread for OpenGL context
+                g_dispatcher.scheduleEvent([webview = m_webview, shared_handle]() {
+                    if (webview) {
+                        webview->onCEFAcceleratedPaint(shared_handle);
+                    }
+                }, 0);
             }
         }
     }
