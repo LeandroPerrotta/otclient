@@ -188,26 +188,30 @@ bool InitializeCEF(int argc, const char* argv[]) {
     command_line->InitFromArgv(argc, argv);
     
     // Disable CEF auto-restart and subprocess management
-    command_line->AppendSwitch("disable-background-networking");
-    command_line->AppendSwitch("disable-background-timer-throttling");
-    command_line->AppendSwitch("disable-renderer-backgrounding");
-    command_line->AppendSwitch("disable-backgrounding-occluded-windows");
-    command_line->AppendSwitch("disable-features=TranslateUI");
-    command_line->AppendSwitch("disable-ipc-flooding-protection");
+    
+    command_line->AppendSwitch("angle");
+    command_line->AppendSwitchWithValue("use-angle", "d3d11");
+
+    // command_line->AppendSwitch("disable-background-networking");
+    // command_line->AppendSwitch("disable-background-timer-throttling");
+    // command_line->AppendSwitch("disable-renderer-backgrounding");
+    // command_line->AppendSwitch("disable-backgrounding-occluded-windows");
+    // command_line->AppendSwitch("disable-features=TranslateUI");
+    // command_line->AppendSwitch("disable-ipc-flooding-protection");
     
     // Performance flags that benefit all platforms (not GPU-specific)
-    command_line->AppendSwitch("enable-begin-frame-scheduling");
+    //command_line->AppendSwitch("enable-begin-frame-scheduling");
     // Note: disable-background-timer-throttling and disable-renderer-backgrounding already added above
     
     // OnAcceleratedPaint support flags (minimal set)
-    command_line->AppendSwitch("shared-texture-enabled");
+    //command_line->AppendSwitch("shared-texture-enabled");
     
     // Enable out-of-process rasterization (required for shared textures)
-    command_line->AppendSwitch("enable-oop-rasterization");
+    //command_line->AppendSwitch("enable-oop-rasterization");
     
     // Additional flags that may help with shared texture support
-    command_line->AppendSwitch("enable-gpu-rasterization");
-    command_line->AppendSwitch("enable-zero-copy");
+    //command_line->AppendSwitch("enable-gpu-rasterization");
+    //command_line->AppendSwitch("enable-zero-copy");
     
 
 

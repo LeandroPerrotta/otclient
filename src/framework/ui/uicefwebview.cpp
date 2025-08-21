@@ -281,6 +281,12 @@ public:
                  const RectList& dirtyRects,
                  const void* buffer,
                  int width, int height) override {
+        static bool sofwareAccelerationLogged = false;
+        if (!sofwareAccelerationLogged) {
+            g_logger.info("============ UICEFWebView: Software acceleration is enabled =============");
+            sofwareAccelerationLogged = true;
+        }
+
         if (m_webview) {
             if (!m_webview->m_browser) {
                 m_webview->onBrowserCreated(browser);
@@ -297,7 +303,7 @@ public:
                             void* shared_handle) override {
         static bool gpuAccelerationLogged = false;
         if (!gpuAccelerationLogged) {
-            g_logger.info("UICEFWebView: GPU acceleration is enabled");
+            g_logger.info("============ UICEFWebView: GPU acceleration is enabled =============");
             gpuAccelerationLogged = true;
         }
         
@@ -402,7 +408,7 @@ UICEFWebView::~UICEFWebView()
     auto it = std::find(s_activeWebViews.begin(), s_activeWebViews.end(), this);
     if (it != s_activeWebViews.end()) {
         s_activeWebViews.erase(it);
-        g_logger.info("UICEFWebView: Removed from active list. Remaining: " + std::to_string(s_activeWebViews.size()));
+        g_logger.info(stdext::format("UICEFWebView: Removed from active list. Remaining: %d", s_activeWebViews.size()));
     }
     
     if (m_browser) {
@@ -438,12 +444,15 @@ void UICEFWebView::createWebView()
 
     // Window info for off-screen rendering
     CefWindowInfo window_info;
-    window_info.SetAsWindowless(0); // 0 = no parent window
+    window_info.SetAsWindowless(nullptr); // 0 = no parent window
+    window_info.shared_texture_enabled = true;
+    window_info.external_begin_frame_enabled = true;
+
     g_logger.info("UICEFWebView: Window info configured for off-screen rendering");
 
     // Create browser asynchronously
     bool result = CefBrowserHost::CreateBrowser(window_info, m_client, "about:blank", browser_settings, nullptr, nullptr);
-    g_logger.info("UICEFWebView: CreateBrowser called, result: " + std::to_string(result));
+    g_logger.info(stdext::format("UICEFWebView: CreateBrowser called, result: %d", result));
     
     if (!result) {
         g_logger.error("Failed to create CEF browser");
@@ -494,7 +503,7 @@ bool UICEFWebView::loadHtmlInternal(const std::string& html, const std::string& 
     g_logger.info("UICEFWebView: Loading HTML directly into browser");
     // Use a simple data URL with minimal encoding
         std::string dataUri = GetDataURI(html, "text/html");
-        g_logger.info("UICEFWebView: Data URL length: " + std::to_string(html.length()));
+        g_logger.info(stdext::format("UICEFWebView: Data URL length: %d", html.length()));
         g_logger.info("UICEFWebView: HTML content: " + html.substr(0, 100) + "...");
     m_browser->GetMainFrame()->LoadURL(dataUri);
 
@@ -636,7 +645,7 @@ void UICEFWebView::onBrowserCreated(CefRefPtr<CefBrowser> browser)
     
     if (!m_pendingHtml.empty()) {
         g_logger.info("UICEFWebView: Loading pending HTML content...");
-        g_logger.info("UICEFWebView: HTML content length: " + std::to_string(m_pendingHtml.length()));
+        g_logger.info(stdext::format("UICEFWebView: HTML content length: %d", m_pendingHtml.length()));
         g_logger.info("UICEFWebView: HTML preview: " + m_pendingHtml.substr(0, 200) + "...");
 
         if(!loadHtmlInternal(m_pendingHtml, "")) {
@@ -886,7 +895,7 @@ void UICEFWebView::onGeometryChange(const Rect& oldRect, const Rect& newRect)
 
 // Static methods for managing all WebViews
 void UICEFWebView::closeAllWebViews() {
-    g_logger.info("UICEFWebView: Closing all active WebViews. Count: " + std::to_string(s_activeWebViews.size()));
+    g_logger.info(stdext::format("UICEFWebView: Closing all active WebViews. Count: %d", s_activeWebViews.size()));
     
     // Create a copy of the vector to avoid issues during iteration
     std::vector<UICEFWebView*> webViewsToClose = s_activeWebViews;
@@ -924,6 +933,35 @@ void UICEFWebView::setAllWindowlessFrameRate(int fps)
     for (auto* webview : s_activeWebViews) {
         if (webview)
             webview->setWindowlessFrameRate(fps);
+    }
+}
+
+void UICEFWebView::sendAllExternalBeginFrames()
+{
+    g_logger.info(stdext::format("sendAllExternalBeginFrames: called, active webviews: %d", s_activeWebViews.size()));
+    
+    for (auto* webview : s_activeWebViews) {
+        g_logger.info("sendAllExternalBeginFrames: Checking webview");
+        
+        if (webview) {
+            g_logger.info(stdext::format("UICEFWebView: Webview is valid, checking browser: %p", (void*)webview->m_browser.get()));
+            
+            if (webview->m_browser) {
+                CefRefPtr<CefBrowserHost> host = webview->m_browser->GetHost();
+                g_logger.info(stdext::format("UICEFWebView: Browser is valid, checking host: %p", (void*)host.get()));
+                
+                if (host){
+                    g_logger.info("UICEFWebView: Sending external begin frame");
+                    host->SendExternalBeginFrame();
+                } else {
+                    g_logger.warning("UICEFWebView: Host is null");
+                }
+            } else {
+                g_logger.warning("UICEFWebView: Browser is null");
+            }
+        } else {
+            g_logger.warning("UICEFWebView: Webview is null");
+        }
     }
 }
 
