@@ -301,8 +301,14 @@ public:
             gpuAccelerationLogged = true;
         }
         
-        if (m_webview && type == PET_VIEW) {
-            m_webview->onCEFAcceleratedPaint(shared_handle);
+        if (m_webview) {
+            if (!m_webview->m_browser) {
+                g_logger.info("UICEFWebView: Browser created via OnAcceleratedPaint callback");
+                m_webview->onBrowserCreated(browser);
+            }
+            if (type == PET_VIEW) {
+                m_webview->onCEFAcceleratedPaint(shared_handle);
+            }
         }
     }
 
@@ -652,6 +658,8 @@ void UICEFWebView::onBrowserCreated(CefRefPtr<CefBrowser> browser)
 
 void UICEFWebView::drawSelf(Fw::DrawPane drawPane)
 {
+    // Testing without SendExternalBeginFrame - CEF should render automatically with shared texture
+    
     // Render only CEF content - no UIWidget background
     if (m_textureCreated && m_cefTexture) {
         Rect rect = getRect();
