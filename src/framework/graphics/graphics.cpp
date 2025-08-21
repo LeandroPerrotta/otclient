@@ -40,6 +40,7 @@
 #include "texturemanager.h"
 #include "framebuffermanager.h"
 #include <framework/platform/platformwindow.h>
+#include <cstring>
 
 Graphics g_graphics;
 
@@ -60,6 +61,14 @@ void Graphics::init()
 
 #if OPENGL_ES==2
     g_painterOGL2 = new PainterOGL2;
+#ifdef OPENGL_ES
+    const char* extensions = reinterpret_cast<const char*>(glGetString(GL_EXTENSIONS));
+    if(!extensions || (std::strstr(extensions, "GL_EXT_texture_format_BGRA8888") == nullptr &&
+                       std::strstr(extensions, "GL_IMG_texture_format_BGRA8888") == nullptr &&
+                       std::strstr(extensions, "GL_APPLE_texture_format_BGRA8888") == nullptr)) {
+        m_useBGRA = false;
+    }
+#endif
 #elif OPENGL_ES==1
     g_painterOGL1 = new PainterOGL1;
 #else
