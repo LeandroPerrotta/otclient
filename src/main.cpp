@@ -113,10 +113,13 @@ public:
         command_line->AppendSwitch("disable-gpu-sandbox");
 #endif
         
-        // For all platforms - ensure GPU process doesn't get disabled
+        // For all platforms - try to enable GPU process (but don't force it)
         if (process_type.empty()) { // Browser process
+            // Only enable GPU if we're on Windows with OpenGL ES
+#if defined(_WIN32) && defined(OPENGL_ES) && OPENGL_ES == 2
             command_line->AppendSwitch("enable-gpu");
             command_line->AppendSwitch("enable-gpu-compositing");
+#endif
         }
     }
 

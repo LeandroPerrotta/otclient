@@ -281,8 +281,10 @@ public:
                  const RectList& dirtyRects,
                  const void* buffer,
                  int width, int height) override {
+        g_logger.info("UICEFWebView: OnPaint called - width: " + std::to_string(width) + ", height: " + std::to_string(height));
         if (m_webview) {
             if (!m_webview->m_browser) {
+                g_logger.info("UICEFWebView: Browser created via OnPaint callback");
                 m_webview->onBrowserCreated(browser);
             }
             if (type == PET_VIEW) {
@@ -297,12 +299,18 @@ public:
                             void* shared_handle) override {
         static bool gpuAccelerationLogged = false;
         if (!gpuAccelerationLogged) {
-            g_logger.info("UICEFWebView: GPU acceleration is enabled");
+            g_logger.info("UICEFWebView: OnAcceleratedPaint called - GPU acceleration is enabled");
             gpuAccelerationLogged = true;
         }
         
-        if (m_webview && type == PET_VIEW) {
-            m_webview->onCEFAcceleratedPaint(shared_handle);
+        if (m_webview) {
+            if (!m_webview->m_browser) {
+                g_logger.info("UICEFWebView: Browser created via OnAcceleratedPaint callback");
+                m_webview->onBrowserCreated(browser);
+            }
+            if (type == PET_VIEW) {
+                m_webview->onCEFAcceleratedPaint(shared_handle);
+            }
         }
     }
 
@@ -433,9 +441,16 @@ void UICEFWebView::createWebView()
     // Window info for off-screen rendering with shared texture
     CefWindowInfo window_info;
     window_info.SetAsWindowless(0); // 0 = no parent window
-    window_info.shared_texture_enabled = true; // Enable shared texture for OnAcceleratedPaint
-    window_info.external_begin_frame_enabled = true; // Enable external frame control
-    g_logger.info("UICEFWebView: Window info configured for accelerated off-screen rendering");
+    
+    // Try to enable shared texture for OnAcceleratedPaint
+    // If this fails, CEF will fallback to OnPaint
+    try {
+        window_info.shared_texture_enabled = true; // Enable shared texture for OnAcceleratedPaint
+        window_info.external_begin_frame_enabled = true; // Enable external frame control
+        g_logger.info("UICEFWebView: Window info configured for accelerated off-screen rendering");
+    } catch (...) {
+        g_logger.warning("UICEFWebView: Failed to enable shared texture, falling back to software rendering");
+    }
 
     // Create browser asynchronously
     bool result = CefBrowserHost::CreateBrowser(window_info, m_client, "about:blank", browser_settings, nullptr, nullptr);
