@@ -52,6 +52,11 @@
 #include <include/cef_frame.h>
 #include "include/cef_parser.h"
 #include <GL/gl.h>
+#if defined(_WIN32) && defined(OPENGL_ES) && OPENGL_ES == 2
+#include <EGL/egl.h>
+#include <EGL/eglext.h>
+#include <GLES2/gl2ext.h>
+#endif
 #include "cefphysfsresourcehandler.h"
 
 std::string GetDataURI(const std::string& data, const std::string& mime_type) {
@@ -280,6 +285,15 @@ public:
             if (type == PET_VIEW) {
                 m_webview->onCEFPaint(buffer, width, height, dirtyRects);
             }
+        }
+    }
+
+    void OnAcceleratedPaint(CefRefPtr<CefBrowser> browser,
+                            PaintElementType type,
+                            const RectList& dirtyRects,
+                            void* shared_handle) override {
+        if (m_webview && type == PET_VIEW) {
+            m_webview->onCEFAcceleratedPaint(shared_handle);
         }
     }
 
@@ -560,6 +574,44 @@ void UICEFWebView::onCEFPaint(const void* buffer, int width, int height,
     }
 
     setVisible(true);
+}
+
+void UICEFWebView::onCEFAcceleratedPaint(void* sharedHandle)
+{
+#if defined(_WIN32) && defined(OPENGL_ES) && OPENGL_ES == 2
+    if (!sharedHandle)
+        return;
+
+    int width = getWidth();
+    int height = getHeight();
+
+    if (!m_cefTexture || width != m_lastWidth || height != m_lastHeight) {
+        m_cefTexture = TexturePtr(new Texture(Size(width, height)));
+        m_textureCreated = true;
+        m_lastWidth = width;
+        m_lastHeight = height;
+    }
+
+    EGLDisplay display = eglGetCurrentDisplay();
+    if (display == EGL_NO_DISPLAY)
+        return;
+
+    auto eglCreateImageKHR = reinterpret_cast<PFNEGLCREATEIMAGEKHRPROC>(eglGetProcAddress("eglCreateImageKHR"));
+    auto eglDestroyImageKHR = reinterpret_cast<PFNEGLDESTROYIMAGEKHRPROC>(eglGetProcAddress("eglDestroyImageKHR"));
+    auto glEGLImageTargetTexture2DOES = reinterpret_cast<PFNGLEGLIMAGETARGETTEXTURE2DOESPROC>(eglGetProcAddress("glEGLImageTargetTexture2DOES"));
+
+    if (!eglCreateImageKHR || !eglDestroyImageKHR || !glEGLImageTargetTexture2DOES)
+        return;
+
+    EGLint attrs[] = {EGL_NONE};
+    EGLImageKHR image = eglCreateImageKHR(display, EGL_NO_CONTEXT,
+        EGL_D3D11_TEXTURE_2D_SHARE_HANDLE_ANGLE, sharedHandle, attrs);
+    if (image != EGL_NO_IMAGE_KHR) {
+        glBindTexture(GL_TEXTURE_2D, m_cefTexture->getId());
+        glEGLImageTargetTexture2DOES(GL_TEXTURE_2D, image);
+        eglDestroyImageKHR(display, image);
+    }
+#endif
 }
 
 void UICEFWebView::onBrowserCreated(CefRefPtr<CefBrowser> browser)

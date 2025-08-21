@@ -95,6 +95,20 @@ public:
                                    CEF_SCHEME_OPTION_DISPLAY_ISOLATED);
     }
 
+    // Enable GPU acceleration when building on Windows with OpenGL ES 2.0
+    void OnBeforeCommandLineProcessing(const CefString& process_type,
+                                       CefRefPtr<CefCommandLine> command_line) override {
+#if defined(_WIN32) && defined(OPENGL_ES) && OPENGL_ES == 2
+        // Ensure GPU accelerated rendering via ANGLE/DirectX.
+        // These switches enable GPU compositing and rasterization.
+        command_line->AppendSwitch("enable-gpu");
+        command_line->AppendSwitch("enable-gpu-rasterization");
+        command_line->AppendSwitch("enable-zero-copy");
+        // Explicitly use ANGLE with Direct3D11 backend which is compatible with OpenGL ES 2.0.
+        command_line->AppendSwitchWithValue("use-angle", "d3d11");
+#endif
+    }
+
     IMPLEMENT_REFCOUNTING(OTClientBrowserApp);
 };
 

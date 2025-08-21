@@ -1,5 +1,6 @@
 #include "include/cef_app.h"
 #include "include/cef_render_process_handler.h"
+#include "include/cef_command_line.h"
 #include "include/wrapper/cef_message_router.h"
 
 #ifdef _WIN32
@@ -20,6 +21,16 @@ public:
 
     CefRefPtr<CefRenderProcessHandler> GetRenderProcessHandler() override {
         return this;
+    }
+
+    void OnBeforeCommandLineProcessing(const CefString& process_type,
+                                       CefRefPtr<CefCommandLine> command_line) override {
+#if defined(_WIN32) && defined(OPENGL_ES) && OPENGL_ES == 2
+        command_line->AppendSwitch("enable-gpu");
+        command_line->AppendSwitch("enable-gpu-rasterization");
+        command_line->AppendSwitch("enable-zero-copy");
+        command_line->AppendSwitchWithValue("use-angle", "d3d11");
+#endif
     }
 
     void OnContextCreated(CefRefPtr<CefBrowser> browser,
