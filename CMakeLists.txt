@@ -239,6 +239,11 @@ if(WIN32)
 endif()
 target_link_libraries(${PROJECT_NAME} PRIVATE ${framework_LIBRARIES})
 
+# Add bcrypt library for Windows 10+ APIs (needed after _WIN32_WINNT upgrade)
+if(WIN32)
+    target_link_libraries(${PROJECT_NAME} PRIVATE bcrypt)
+endif()
+
 if(USE_CEF)
     otclient_link_cef(${PROJECT_NAME})
 
