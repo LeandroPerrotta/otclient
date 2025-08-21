@@ -29,7 +29,7 @@ public:
         command_line->AppendSwitch("enable-gpu");
         command_line->AppendSwitch("enable-gpu-rasterization");
         command_line->AppendSwitch("enable-zero-copy");
-        command_line->AppendSwitchWithValue("use-angle", "d3d11");
+        command_line->AppendSwitchWithValue("use-angle", "gl");
         // Disable passthrough to avoid ANGLE conflicts
         command_line->AppendSwitch("disable-gpu-passthrough");
         

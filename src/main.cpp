@@ -104,8 +104,8 @@ public:
         command_line->AppendSwitch("enable-gpu");
         command_line->AppendSwitch("enable-gpu-rasterization");
         command_line->AppendSwitch("enable-zero-copy");
-        // Explicitly use ANGLE with Direct3D11 backend which is compatible with OpenGL ES 2.0.
-        command_line->AppendSwitchWithValue("use-angle", "d3d11");
+        // Try OpenGL backend instead of D3D11 to avoid passthrough issues
+        command_line->AppendSwitchWithValue("use-angle", "gl");
         // Disable passthrough to avoid ANGLE conflicts
         command_line->AppendSwitch("disable-gpu-passthrough");
         
