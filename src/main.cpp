@@ -83,10 +83,30 @@ void rawLogger(const char* message) {
     fflush(stdout);
 }
 
+// Browser process handler for proper message pump work scheduling
+class OTClientBrowserProcessHandler : public CefBrowserProcessHandler {
+public:
+    void OnScheduleMessagePumpWork(int64_t delay_ms) override {
+        // This method is called when work is scheduled for the browser process main thread
+        // With multi_threaded_message_loop = true, CEF manages its own threading
+    }
+
+    IMPLEMENT_REFCOUNTING(OTClientBrowserProcessHandler);
+};
+
 // Minimal CEF app used by the browser process to register custom schemes
 class OTClientBrowserApp : public CefApp {
+private:
+    CefRefPtr<OTClientBrowserProcessHandler> m_browserProcessHandler;
+
 public:
-    OTClientBrowserApp() {}
+    OTClientBrowserApp() {
+        m_browserProcessHandler = new OTClientBrowserProcessHandler();
+    }
+
+    CefRefPtr<CefBrowserProcessHandler> GetBrowserProcessHandler() override {
+        return m_browserProcessHandler;
+    }
 
     void OnRegisterCustomSchemes(CefRawPtr<CefSchemeRegistrar> registrar) override {
         registrar->AddCustomScheme("otclient",
@@ -146,11 +166,30 @@ bool InitializeCEF(int argc, const char* argv[]) {
             std::exit(code);
     }         
 
-    // 3) Configuração de CEF
+    // 3) Configure command line flags for Windows
+    CefRefPtr<CefCommandLine> command_line = CefCommandLine::CreateCommandLine();
+    command_line->InitFromArgv(argc, argv);
+    
+    // Minimal flags based on OpenKneeBoard approach
+    command_line->AppendSwitch("angle");
+    command_line->AppendSwitchWithValue("use-angle", "d3d11");
+    command_line->AppendSwitch("shared-texture-enabled");
+    
+    // Force GPU process more aggressively
+    command_line->AppendSwitch("enable-gpu");
+    command_line->AppendSwitch("enable-gpu-compositing");
+    command_line->AppendSwitch("enable-gpu-rasterization");
+    command_line->AppendSwitch("disable-software-rasterizer");
+    command_line->AppendSwitch("disable-gpu-sandbox"); // Sometimes needed for shared textures
+    
+    // Essential flags for GPU acceleration
+    command_line->AppendSwitch("disable-gpu-watchdog"); // Prevent GPU process timeout
+
+    // 4) Configuração de CEF
     CefSettings settings;
     settings.no_sandbox = true;
     settings.windowless_rendering_enabled = true;
-    settings.multi_threaded_message_loop = false;
+    settings.multi_threaded_message_loop = true;  // Enable UI thread for OnAcceleratedPaint
 
     CefString(&settings.resources_dir_path)      = cefDir;      // .\cef
     CefString(&settings.locales_dir_path)        = localesDir;  // .\cef\locales
@@ -160,7 +199,7 @@ bool InitializeCEF(int argc, const char* argv[]) {
     settings.persist_session_cookies             = true;
     settings.persist_user_preferences            = true;
 
-    // 4) Inicializa
+    // 5) Inicializa with command line
     CefRefPtr<CefApp> app = new OTClientBrowserApp();
     if (!CefInitialize(main_args, settings, app, nullptr)) {
         rawLogger("FAILED to initialize CEF!");
@@ -187,35 +226,26 @@ bool InitializeCEF(int argc, const char* argv[]) {
     CefRefPtr<CefCommandLine> command_line = CefCommandLine::CreateCommandLine();
     command_line->InitFromArgv(argc, argv);
     
-    // Disable CEF auto-restart and subprocess management
-    command_line->AppendSwitch("disable-background-networking");
-    command_line->AppendSwitch("disable-background-timer-throttling");
-    command_line->AppendSwitch("disable-renderer-backgrounding");
-    command_line->AppendSwitch("disable-backgrounding-occluded-windows");
-    command_line->AppendSwitch("disable-features=TranslateUI");
-    command_line->AppendSwitch("disable-ipc-flooding-protection");
-    
-    // Performance flags that benefit all platforms (not GPU-specific)
-    command_line->AppendSwitch("enable-begin-frame-scheduling");
-    // Note: disable-background-timer-throttling and disable-renderer-backgrounding already added above
-    
-    // OnAcceleratedPaint support flags (minimal set)
-    command_line->AppendSwitch("shared-texture-enabled");
-    
-    // Enable out-of-process rasterization (required for shared textures)
-    command_line->AppendSwitch("enable-oop-rasterization");
-    
-    // Additional flags that may help with shared texture support
+    // Linux GPU acceleration flags
+    command_line->AppendSwitch("enable-gpu");
+    command_line->AppendSwitch("enable-gpu-compositing");
     command_line->AppendSwitch("enable-gpu-rasterization");
-    command_line->AppendSwitch("enable-zero-copy");
+    command_line->AppendSwitch("shared-texture-enabled");
+    command_line->AppendSwitch("disable-software-rasterizer");
+    command_line->AppendSwitch("disable-gpu-sandbox"); // Sometimes needed for shared textures
     
-
+    // Linux-specific OpenGL flags (no ANGLE on Linux)
+    command_line->AppendSwitchWithValue("use-gl", "desktop"); // Use native OpenGL instead of ANGLE
+    
+    // Minimal logging for production
+    command_line->AppendSwitch("enable-logging");
+    command_line->AppendSwitchWithValue("log-level", "2"); // ERROR level only
 
     // Configure CEF settings
     CefSettings settings;
     settings.no_sandbox = true;
     settings.windowless_rendering_enabled = true;
-    settings.multi_threaded_message_loop = false;
+    settings.multi_threaded_message_loop = true;  // Enable UI thread for OnAcceleratedPaint
     
     // Enable GPU acceleration for OnAcceleratedPaint
     settings.chrome_runtime = false; // OSR requires legacy runtime
@@ -385,7 +415,7 @@ void ShutdownCEF() {
         // Close all active WebViews first
         UICEFWebView::closeAllWebViews();
 
-        CefDoMessageLoopWork();
+        // With multi_threaded_message_loop = true, CEF manages its own shutdown
 
         rawLogger("All webviews closed... Shutting down CEF");
 
