@@ -26,36 +26,17 @@ public:
     void OnBeforeCommandLineProcessing(const CefString& process_type,
                                        CefRefPtr<CefCommandLine> command_line) override {
 #if defined(_WIN32) && defined(OPENGL_ES) && OPENGL_ES == 2
-        command_line->AppendSwitch("enable-gpu");
-        command_line->AppendSwitch("enable-gpu-rasterization");
-        command_line->AppendSwitch("enable-zero-copy");
-        command_line->AppendSwitchWithValue("use-angle", "gl");
-        // Disable passthrough to avoid ANGLE conflicts
-        command_line->AppendSwitch("disable-gpu-passthrough");
-        
-        // Additional switches for OnAcceleratedPaint support
-        command_line->AppendSwitch("enable-gpu-compositing");
-        command_line->AppendSwitch("enable-accelerated-2d-canvas");
-        command_line->AppendSwitch("disable-gpu-sandbox");
-        // Force GPU process and disable software fallback
-        command_line->AppendSwitch("disable-software-rasterizer");
-        command_line->AppendSwitch("ignore-gpu-blacklist");
+        // Minimal ANGLE configuration that works (same as main process)
+        command_line->AppendSwitch("angle");
+        command_line->AppendSwitchWithValue("use-angle", "d3d11");
+        // TODO: Implement GetGpuLuid() if needed for multi-GPU systems
+        // command_line->AppendSwitchWithValue("use-adapter-luid", this->GetGpuLuid());
 #endif
-        
-
         
         // Performance flags for all processes (not GPU-specific)
         command_line->AppendSwitch("enable-begin-frame-scheduling");
         command_line->AppendSwitch("disable-background-timer-throttling");
         command_line->AppendSwitch("disable-renderer-backgrounding");
-        
-        // For renderer process - only enable GPU if we're on Windows with OpenGL ES
-        if (process_type == "renderer") {
-#if defined(_WIN32) && defined(OPENGL_ES) && OPENGL_ES == 2
-            command_line->AppendSwitch("enable-gpu");
-            command_line->AppendSwitch("enable-gpu-compositing");
-#endif
-        }
     }
 
     void OnContextCreated(CefRefPtr<CefBrowser> browser,
