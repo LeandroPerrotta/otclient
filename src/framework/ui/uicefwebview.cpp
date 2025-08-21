@@ -456,7 +456,7 @@ void UICEFWebView::createWebView()
     CefWindowInfo window_info;
     window_info.SetAsWindowless(nullptr); // 0 = no parent window
     window_info.shared_texture_enabled = true;
-    window_info.external_begin_frame_enabled = true;
+    // window_info.external_begin_frame_enabled = true; // Testing without this first
 
     g_logger.info("UICEFWebView: Window info configured for off-screen rendering");
 
