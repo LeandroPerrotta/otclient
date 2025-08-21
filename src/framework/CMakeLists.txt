@@ -326,7 +326,9 @@ if(WIN32)
         set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -mthreads")
     endif()
 
-    set(framework_DEFINITIONS ${framework_DEFINITIONS} -D_WIN32_WINNT=0x0501 -DWIN32)
+    # Update Windows version for modern GPU detection (was 0x0501 = WinXP)
+    # 0x0A00 = Windows 10, better for CEF GPU detection in VMs
+    set(framework_DEFINITIONS ${framework_DEFINITIONS} -D_WIN32_WINNT=0x0A00 -DWIN32)
     #set(CMAKE_CXX_LINK_FLAGS "${CMAKE_CXX_LINK_FLAGS} -Wl,--large-address-aware") # strip all debug information
     set(SYSTEM_LIBRARIES "")
 else()
