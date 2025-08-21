@@ -250,9 +250,16 @@ bool InitializeCEF(int argc, const char* argv[]) {
     CefRefPtr<CefCommandLine> command_line = CefCommandLine::CreateCommandLine();
     command_line->InitFromArgv(argc, argv);
     
-    // Disable CEF auto-restart and subprocess management
+    // Linux GPU acceleration flags
+    command_line->AppendSwitch("enable-gpu");
+    command_line->AppendSwitch("enable-gpu-compositing");
+    command_line->AppendSwitch("enable-gpu-rasterization");
+    command_line->AppendSwitch("shared-texture-enabled");
     command_line->AppendSwitch("disable-software-rasterizer");
     command_line->AppendSwitch("disable-gpu-sandbox"); // Sometimes needed for shared textures
+    
+    // Linux-specific OpenGL flags (no ANGLE on Linux)
+    command_line->AppendSwitchWithValue("use-gl", "desktop"); // Use native OpenGL instead of ANGLE
     
     // FULL DEBUG MODE - Enable all CEF logging
     command_line->AppendSwitch("enable-logging");
