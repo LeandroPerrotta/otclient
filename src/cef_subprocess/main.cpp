@@ -30,7 +30,18 @@ public:
         command_line->AppendSwitch("enable-gpu-rasterization");
         command_line->AppendSwitch("enable-zero-copy");
         command_line->AppendSwitchWithValue("use-angle", "d3d11");
+        
+        // Additional switches for OnAcceleratedPaint support
+        command_line->AppendSwitch("enable-gpu-compositing");
+        command_line->AppendSwitch("enable-accelerated-2d-canvas");
+        command_line->AppendSwitch("disable-gpu-sandbox");
 #endif
+        
+        // For all platforms in renderer process
+        if (process_type == "renderer") {
+            command_line->AppendSwitch("enable-gpu");
+            command_line->AppendSwitch("enable-gpu-compositing");
+        }
     }
 
     void OnContextCreated(CefRefPtr<CefBrowser> browser,
