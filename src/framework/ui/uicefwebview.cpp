@@ -660,6 +660,11 @@ void UICEFWebView::drawSelf(Fw::DrawPane drawPane)
 {
     // Send external begin frame to trigger OnAcceleratedPaint when using external frame control
     if (m_browser && m_browser->GetHost()) {
+        static bool sendBeginFrameLogged = false;
+        if (!sendBeginFrameLogged) {
+            g_logger.info("UICEFWebView: Calling SendExternalBeginFrame");
+            sendBeginFrameLogged = true;
+        }
         // This tells CEF to render a new frame, which should trigger OnAcceleratedPaint
         m_browser->GetHost()->SendExternalBeginFrame();
     }
