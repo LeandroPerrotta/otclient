@@ -281,10 +281,8 @@ public:
                  const RectList& dirtyRects,
                  const void* buffer,
                  int width, int height) override {
-        g_logger.info("UICEFWebView: OnPaint called - width: " + std::to_string(width) + ", height: " + std::to_string(height));
         if (m_webview) {
             if (!m_webview->m_browser) {
-                g_logger.info("UICEFWebView: Browser created via OnPaint callback");
                 m_webview->onBrowserCreated(browser);
             }
             if (type == PET_VIEW) {
@@ -438,19 +436,10 @@ void UICEFWebView::createWebView()
         maxFps = 60;
     browser_settings.windowless_frame_rate = maxFps;
 
-    // Window info for off-screen rendering with shared texture
+    // Window info for off-screen rendering
     CefWindowInfo window_info;
     window_info.SetAsWindowless(0); // 0 = no parent window
-    
-    // Try to enable shared texture for OnAcceleratedPaint
-    // If this fails, CEF will fallback to OnPaint
-    try {
-        window_info.shared_texture_enabled = true; // Enable shared texture for OnAcceleratedPaint
-        window_info.external_begin_frame_enabled = true; // Enable external frame control
-        g_logger.info("UICEFWebView: Window info configured for accelerated off-screen rendering");
-    } catch (...) {
-        g_logger.warning("UICEFWebView: Failed to enable shared texture, falling back to software rendering");
-    }
+    g_logger.info("UICEFWebView: Window info configured for off-screen rendering");
 
     // Create browser asynchronously
     bool result = CefBrowserHost::CreateBrowser(window_info, m_client, "about:blank", browser_settings, nullptr, nullptr);
