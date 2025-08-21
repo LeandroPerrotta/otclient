@@ -207,8 +207,9 @@ add_definitions(-D"VERSION=\\"${VERSION}\\"")
 
 # add client executable
 if(WIN32)
-    # Add app.manifest for better GPU detection in VMs
-    add_executable(${PROJECT_NAME} ${framework_SOURCES} ${client_SOURCES} ${executable_SOURCES} src/app.manifest)
+    # Add app.manifest for better GPU detection in VMs (temporarily disabled)
+    # add_executable(${PROJECT_NAME} ${framework_SOURCES} ${client_SOURCES} ${executable_SOURCES} src/app.manifest)
+    add_executable(${PROJECT_NAME} ${framework_SOURCES} ${client_SOURCES} ${executable_SOURCES})
 else()
     add_executable(${PROJECT_NAME} ${framework_SOURCES} ${client_SOURCES} ${executable_SOURCES})
 endif()
