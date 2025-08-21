@@ -26,7 +26,7 @@ bool CefPhysFsResourceHandler::ProcessRequest(CefRefPtr<CefRequest> /*request*/,
     return true;
 }
 
-void CefPhysFsResourceHandler::GetResponseHeaders(CefRefPtr<CefResponse> response, int64& response_length, CefString& /*redirectUrl*/) {
+void CefPhysFsResourceHandler::GetResponseHeaders(CefRefPtr<CefResponse> response, int64_t& response_length, CefString& /*redirectUrl*/) {
     if (!m_data.empty()) {
         response->SetMimeType(m_mimeType);
         response->SetStatus(200);

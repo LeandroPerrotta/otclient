@@ -5,7 +5,8 @@
 
 set -e
 
-CEF_VERSION="103.0.12+g8eb56c7+chromium-103.0.5060.134"
+#CEF_VERSION="103.0.12+g8eb56c7+chromium-103.0.5060.134"
+CEF_VERSION="139.0.26+g9d80e0d+chromium-139.0.7258.139"
 CEF_URL="https://cef-builds.spotifycdn.com/cef_binary_${CEF_VERSION}_linux64_minimal.tar.bz2"
 CEF_ARCHIVE="/tmp/cef_binary_${CEF_VERSION}_linux64_minimal.tar.bz2"
 
@@ -139,7 +140,9 @@ fi
 
 # Move contents to runtime directory
 echo "[INFO] Moving CEF files to runtime directory..."
-mv "$CEF_EXTRACTED_DIR"/* .
+# Move all files including hidden ones (starting with .)
+mv "$CEF_EXTRACTED_DIR"/.* . 2>/dev/null || true
+mv "$CEF_EXTRACTED_DIR"/* . 2>/dev/null || true
 rmdir "$CEF_EXTRACTED_DIR"
 
 echo "[INFO] Cleaning up download..."
