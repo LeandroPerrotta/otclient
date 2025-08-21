@@ -202,6 +202,13 @@ bool InitializeCEF(int argc, const char* argv[]) {
     // OnAcceleratedPaint support flags (minimal set)
     command_line->AppendSwitch("shared-texture-enabled");
     
+    // Enable out-of-process rasterization (required for shared textures)
+    command_line->AppendSwitch("enable-oop-rasterization");
+    
+    // Additional flags that may help with shared texture support
+    command_line->AppendSwitch("enable-gpu-rasterization");
+    command_line->AppendSwitch("enable-zero-copy");
+    
 
 
     // Configure CEF settings
