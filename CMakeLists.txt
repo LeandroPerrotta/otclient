@@ -206,7 +206,12 @@ endif()
 add_definitions(-D"VERSION=\\"${VERSION}\\"")
 
 # add client executable
-add_executable(${PROJECT_NAME} ${framework_SOURCES} ${client_SOURCES} ${executable_SOURCES} )
+if(WIN32)
+    # Add app.manifest for better GPU detection in VMs - based on OpenKneeboard working manifest
+    add_executable(${PROJECT_NAME} ${framework_SOURCES} ${client_SOURCES} ${executable_SOURCES} src/app.manifest)
+else()
+    add_executable(${PROJECT_NAME} ${framework_SOURCES} ${client_SOURCES} ${executable_SOURCES})
+endif()
 
 if(MSVC AND NOT WINDOWS_CONSOLE)
     message(STATUS "MSVC Build console OFF")
@@ -234,6 +239,11 @@ if(WIN32)
 endif()
 target_link_libraries(${PROJECT_NAME} PRIVATE ${framework_LIBRARIES})
 
+# Add bcrypt library for Windows 10+ APIs (needed after _WIN32_WINNT upgrade)
+if(WIN32)
+    target_link_libraries(${PROJECT_NAME} PRIVATE bcrypt)
+endif()
+
 if(USE_CEF)
     otclient_link_cef(${PROJECT_NAME})
 
@@ -253,11 +263,15 @@ endif()
 
 # Dedicated CEF subprocess executable
 if(USE_CEF)
-    add_executable(otclient_cef_subproc src/cef_subprocess/main.cpp)
+    # Add manifest to subprocess for GPU detection consistency
+    add_executable(otclient_cef_subproc src/cef_subprocess/main.cpp src/app.manifest)
     target_compile_definitions(otclient_cef_subproc PRIVATE USE_CEF)
     set_target_properties(otclient_cef_subproc PROPERTIES CXX_STANDARD 14 CXX_STANDARD_REQUIRED ON)
     otclient_link_cef(otclient_cef_subproc)
+    
+    # Add bcrypt library for Windows 10+ APIs (needed for subprocess too)
     if(WIN32)
+        target_link_libraries(otclient_cef_subproc PRIVATE bcrypt)
         set_target_properties(otclient_cef_subproc PROPERTIES MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
 
         # Set Windows subsystem for the subprocess executable

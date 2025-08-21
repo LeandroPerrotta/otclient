@@ -26,11 +26,17 @@ public:
     void OnBeforeCommandLineProcessing(const CefString& process_type,
                                        CefRefPtr<CefCommandLine> command_line) override {
 #if defined(_WIN32) && defined(OPENGL_ES) && OPENGL_ES == 2
-        command_line->AppendSwitch("enable-gpu");
-        command_line->AppendSwitch("enable-gpu-rasterization");
-        command_line->AppendSwitch("enable-zero-copy");
+        // Minimal ANGLE configuration that works (same as main process)
+        command_line->AppendSwitch("angle");
         command_line->AppendSwitchWithValue("use-angle", "d3d11");
+        // TODO: Implement GetGpuLuid() if needed for multi-GPU systems
+        // command_line->AppendSwitchWithValue("use-adapter-luid", this->GetGpuLuid());
 #endif
+        
+        // Performance flags for all processes (not GPU-specific)
+        command_line->AppendSwitch("enable-begin-frame-scheduling");
+        command_line->AppendSwitch("disable-background-timer-throttling");
+        command_line->AppendSwitch("disable-renderer-backgrounding");
     }
 
     void OnContextCreated(CefRefPtr<CefBrowser> browser,

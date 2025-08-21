@@ -95,17 +95,15 @@ public:
                                    CEF_SCHEME_OPTION_DISPLAY_ISOLATED);
     }
 
-    // Enable GPU acceleration when building on Windows with OpenGL ES 2.0
+    // Simple ANGLE configuration based on working open-source project
     void OnBeforeCommandLineProcessing(const CefString& process_type,
                                        CefRefPtr<CefCommandLine> command_line) override {
 #if defined(_WIN32) && defined(OPENGL_ES) && OPENGL_ES == 2
-        // Ensure GPU accelerated rendering via ANGLE/DirectX.
-        // These switches enable GPU compositing and rasterization.
-        command_line->AppendSwitch("enable-gpu");
-        command_line->AppendSwitch("enable-gpu-rasterization");
-        command_line->AppendSwitch("enable-zero-copy");
-        // Explicitly use ANGLE with Direct3D11 backend which is compatible with OpenGL ES 2.0.
+        // Minimal ANGLE configuration that works
+        command_line->AppendSwitch("angle");
         command_line->AppendSwitchWithValue("use-angle", "d3d11");
+        // TODO: Implement GetGpuLuid() if needed for multi-GPU systems
+        // command_line->AppendSwitchWithValue("use-adapter-luid", this->GetGpuLuid());
 #endif
     }
 
@@ -196,12 +194,32 @@ bool InitializeCEF(int argc, const char* argv[]) {
     command_line->AppendSwitch("disable-backgrounding-occluded-windows");
     command_line->AppendSwitch("disable-features=TranslateUI");
     command_line->AppendSwitch("disable-ipc-flooding-protection");
+    
+    // Performance flags that benefit all platforms (not GPU-specific)
+    command_line->AppendSwitch("enable-begin-frame-scheduling");
+    // Note: disable-background-timer-throttling and disable-renderer-backgrounding already added above
+    
+    // OnAcceleratedPaint support flags (minimal set)
+    command_line->AppendSwitch("shared-texture-enabled");
+    
+    // Enable out-of-process rasterization (required for shared textures)
+    command_line->AppendSwitch("enable-oop-rasterization");
+    
+    // Additional flags that may help with shared texture support
+    command_line->AppendSwitch("enable-gpu-rasterization");
+    command_line->AppendSwitch("enable-zero-copy");
+    
+
 
     // Configure CEF settings
     CefSettings settings;
     settings.no_sandbox = true;
     settings.windowless_rendering_enabled = true;
     settings.multi_threaded_message_loop = false;
+    
+    // Enable GPU acceleration for OnAcceleratedPaint
+    settings.chrome_runtime = false; // OSR requires legacy runtime
+    settings.external_message_pump = false;
     
     // Find CEF automatically (same logic as CMake)
     std::string cef_root;
