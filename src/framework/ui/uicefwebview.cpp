@@ -465,10 +465,25 @@ private:
 
 UICEFWebView::UICEFWebView()
     : UIWebView(), m_browser(nullptr), m_client(nullptr), m_cefTexture(nullptr), m_cefImage(nullptr), m_textureCreated(false), m_lastWidth(0), m_lastHeight(0), m_lastMousePos(0, 0)
+#if defined(__linux__)
+    , m_currentTextureIndex(0), m_acceleratedTexturesCreated(false), m_readFbo(0), m_lastReadyTexture(0), m_lastFence(nullptr), m_writeIndex(0)
+#endif
 {
     setSize(Size(800, 600)); // Set initial size
     setDraggable(true); // Enable dragging for scrollbar interaction
     s_activeWebViews.push_back(this);
+    
+#if defined(__linux__)
+    // Initialize GPU acceleration resources
+    m_acceleratedTextures[0] = 0;
+    m_acceleratedTextures[1] = 0;
+    m_textureFences[0] = nullptr;
+    m_textureFences[1] = nullptr;
+    
+    // Initialize EGL sidecar for DMA buffer import
+    g_logger.info("UICEFWebView: Constructor (no parent) - initializing EGL sidecar...");
+    initializeEGLSidecar();
+#endif
 }
 
 UICEFWebView::UICEFWebView(UIWidgetPtr parent)
