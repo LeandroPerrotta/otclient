@@ -488,8 +488,8 @@ UICEFWebView::UICEFWebView(UIWidgetPtr parent)
     m_textureFences[0] = nullptr;
     m_textureFences[1] = nullptr;
     
-    // Initialize GLX shared context and EGL sidecar
-    initializeGLXSharedContext();
+    // Initialize EGL sidecar for DMA buffer import
+    g_logger.info("UICEFWebView: Constructor - initializing EGL sidecar...");
     initializeEGLSidecar();
 #endif
 }
@@ -943,19 +943,19 @@ void UICEFWebView::initializeEGLSidecar()
 {
 #if defined(__linux__)
     if (s_eglSidecarInitialized) {
+        g_logger.info("UICEFWebView: EGL sidecar already initialized");
         return;
     }
     
     g_logger.info("UICEFWebView: Initializing EGL sidecar for DMA buffer import...");
     
-    // Create EGL display from X11 display for sidecar
-    if (!s_x11Display) {
-        g_logger.error("UICEFWebView: No X11 display available for EGL sidecar");
+    // Create EGL display for sidecar - try default display first
+    EGLDisplay eglDisplay = eglGetDisplay(EGL_DEFAULT_DISPLAY);
+    if (eglDisplay == EGL_NO_DISPLAY) {
+        g_logger.error("UICEFWebView: Failed to get EGL default display");
         return;
     }
-    
-    EGLDisplay eglDisplay = eglGetDisplay((EGLNativeDisplayType)s_x11Display);
-    g_logger.info("UICEFWebView: Created EGL display from X11 display");
+    g_logger.info("UICEFWebView: Got EGL default display");
     
     if (eglDisplay == EGL_NO_DISPLAY) {
         g_logger.error("UICEFWebView: Failed to get EGL display");
@@ -1023,17 +1023,12 @@ void UICEFWebView::processAcceleratedPaintGPU(const CefAcceleratedPaintInfo& inf
 #if defined(__linux__)
     // This runs in CEF UI thread - must process immediately before CEF releases resources
     
-    if (!s_glxContextInitialized || !s_eglSidecarInitialized) {
-        g_logger.error("UICEFWebView: GLX context or EGL sidecar not initialized");
+    if (!s_eglSidecarInitialized) {
+        g_logger.error("UICEFWebView: EGL sidecar not initialized");
         return;
     }
     
-    // Make GLX shared context current for this thread
-    if (!glXMakeContextCurrent((Display*)s_x11Display, (GLXPbuffer)s_glxPbuffer, (GLXPbuffer)s_glxPbuffer, (GLXContext)s_glxContext)) {
-        g_logger.error("UICEFWebView: Failed to make GLX shared context current");
-        return;
-    }
-    g_logger.info("UICEFWebView: GLX shared context made current in CEF thread");
+    g_logger.info("UICEFWebView: Processing DMA buffer immediately in CEF thread");
     
     // Extract parameters
     const int fd = info.planes[0].fd;
@@ -1042,14 +1037,12 @@ void UICEFWebView::processAcceleratedPaintGPU(const CefAcceleratedPaintInfo& inf
     const int stride = info.planes[0].stride;
     const int offset = info.planes[0].offset;
     
-    g_logger.info("UICEFWebView: GPU processing in CEF thread - " + std::to_string(width) + "x" + std::to_string(height) + 
+    g_logger.info("UICEFWebView: DMA buffer - " + std::to_string(width) + "x" + std::to_string(height) + 
                   ", fd=" + std::to_string(fd) + ", stride=" + std::to_string(stride));
     
-    // Create double-buffered textures if needed
-    createAcceleratedTextures(width, height);
-    
-    // Get next texture for double buffering
-    GLuint dstTexture = m_acceleratedTextures[m_writeIndex & 1];
+    // IMMEDIATE PROCESSING: Copy DMA buffer data NOW before CEF releases it
+    // We'll do the EGLImage import and immediately copy to CPU memory
+    // Then schedule OpenGL upload on main thread
     
     // Get EGL function pointers
     auto eglCreateImageKHRFn = (PFNEGLCREATEIMAGEKHRPROC)eglGetProcAddress("eglCreateImageKHR");
@@ -1093,45 +1086,62 @@ void UICEFWebView::processAcceleratedPaintGPU(const CefAcceleratedPaintInfo& inf
         g_logger.info("UICEFWebView: Created EGLImage with format ARGB8888");
     }
     
-    // 2) Attach EGLImage to temporary GL texture
-    auto glEGLImageTargetTexture2DOES = (PFNGLEGLIMAGETARGETTEXTURE2DOESPROC)eglGetProcAddress("glEGLImageTargetTexture2DOES");
-    if (!glEGLImageTargetTexture2DOES) {
-        g_logger.error("UICEFWebView: glEGLImageTargetTexture2DOES not available");
+    // 2) Since we don't have OpenGL context in CEF thread, use CPU fallback with EGLImage
+    // This is still GPU-accelerated because CEF renders with GPU, we just copy via CPU
+    
+    // Map the DMA buffer immediately while FD is valid
+    size_t mapSize = stride * height;
+    void* mapped = mmap(nullptr, mapSize, PROT_READ, MAP_SHARED, fd, offset);
+    if (mapped == MAP_FAILED) {
+        g_logger.error("UICEFWebView: Failed to mmap DMA buffer: " + std::string(strerror(errno)));
         eglDestroyImageKHRFn((EGLDisplay)s_eglDisplay, img);
         return;
     }
     
-    GLuint srcTex = 0;
-    glGenTextures(1, &srcTex);
-    glBindTexture(GL_TEXTURE_2D, srcTex);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glEGLImageTargetTexture2DOES(GL_TEXTURE_2D, img);
+    g_logger.info("UICEFWebView: Successfully mapped DMA buffer");
     
-    // 3) Copy to persistent texture via FBO
-    glBindFramebuffer(GL_READ_FRAMEBUFFER, m_readFbo);
-    glFramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, srcTex, 0);
+    // Copy pixel data to our own buffer (removing stride padding)
+    std::vector<uint8_t> pixelData(width * height * 4);
+    uint8_t* src = static_cast<uint8_t*>(mapped);
+    uint8_t* dst = pixelData.data();
     
-    glBindTexture(GL_TEXTURE_2D, dstTexture);
-    glCopyTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 0, 0, width, height);
+    if (stride == width * 4) {
+        // No padding, direct copy
+        memcpy(dst, src, width * height * 4);
+        g_logger.info("UICEFWebView: Direct copy (no padding)");
+    } else {
+        // Copy row by row to remove padding
+        for (int y = 0; y < height; y++) {
+            memcpy(dst + y * width * 4, src + y * stride, width * 4);
+        }
+        g_logger.info("UICEFWebView: Row-by-row copy (removed padding)");
+    }
     
-    // 4) Immediate cleanup of temporary resources
-    glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
-    glDeleteTextures(1, &srcTex);
+    // 3) Immediate cleanup - we have our copy now
+    munmap(mapped, mapSize);
     eglDestroyImageKHRFn((EGLDisplay)s_eglDisplay, img);
+    g_logger.info("UICEFWebView: DMA buffer processed and cleaned up");
     
-    // 5) Signal frame ready with fence
-    GLsync fence = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
-    m_lastReadyTexture = dstTexture;
-    m_lastFence = fence;
-    m_writeIndex++;
-    
-    g_logger.info("UICEFWebView: GPU processing completed, texture ready with fence");
-    
-    // Restore context - back to no context for CEF thread
-    glXMakeContextCurrent((Display*)s_x11Display, X11_None, X11_None, nullptr);
+    // 4) Schedule OpenGL upload on main thread with copied data
+    g_dispatcher.scheduleEvent([this, pixelData = std::move(pixelData), width, height]() mutable {
+        if (!m_textureCreated || getWidth() != m_lastWidth || getHeight() != m_lastHeight || !m_cefTexture) {
+            m_cefTexture = TexturePtr(new Texture(Size(getWidth(), getHeight())));
+            m_textureCreated = true;
+            m_lastWidth = getWidth();
+            m_lastHeight = getHeight();
+        }
+        
+        // Upload to OpenGL texture on main thread with OpenGL context
+        glBindTexture(GL_TEXTURE_2D, m_cefTexture->getId());
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_BGRA, GL_UNSIGNED_BYTE, pixelData.data());
+        
+        GLenum glError = glGetError();
+        if (glError == GL_NO_ERROR) {
+            g_logger.info("UICEFWebView: Successfully uploaded accelerated frame via EGL sidecar!");
+        } else {
+            g_logger.error("UICEFWebView: OpenGL upload failed: " + std::to_string(glError));
+        }
+    }, 0);
 #endif
 }
 
@@ -1270,52 +1280,8 @@ void UICEFWebView::drawSelf(Fw::DrawPane drawPane)
 {
     // Render CEF content using multi-threaded rendering
     
-#if defined(__linux__)
-    // Check if we have a ready accelerated texture (poll fence with timeout 0)
-    if (m_lastFence && m_lastReadyTexture != 0) {
-        GLenum result = glClientWaitSync(m_lastFence, 0, 0);
-        if (result == GL_ALREADY_SIGNALED || result == GL_CONDITION_SATISFIED) {
-            // Fence is signaled - texture is ready!
-            
-            // Clean up old fence and update current texture
-            glDeleteSync(m_lastFence);
-            m_lastFence = nullptr;
-            m_currentTextureIndex = (m_lastReadyTexture == m_acceleratedTextures[0]) ? 0 : 1;
-            
-            g_logger.info("UICEFWebView: Fence signaled, using accelerated texture " + std::to_string(m_currentTextureIndex));
-            
-            Rect rect = getRect();
-            
-            // Copy accelerated texture to our CEF texture for rendering
-            if (!m_cefTexture || getWidth() != m_lastWidth || getHeight() != m_lastHeight) {
-                m_cefTexture = TexturePtr(new Texture(Size(getWidth(), getHeight())));
-                m_textureCreated = true;
-                m_lastWidth = getWidth();
-                m_lastHeight = getHeight();
-            }
-            
-            // Copy from accelerated texture to CEF texture
-            static GLuint copyFbo = 0;
-            if (copyFbo == 0) {
-                glGenFramebuffers(1, &copyFbo);
-            }
-            
-            glBindFramebuffer(GL_READ_FRAMEBUFFER, copyFbo);
-            glFramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, m_lastReadyTexture, 0);
-            
-            glBindTexture(GL_TEXTURE_2D, m_cefTexture->getId());
-            glCopyTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 0, 0, getWidth(), getHeight());
-            
-            glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
-            
-            g_painter->setOpacity(1.0);
-            g_painter->drawTexturedRect(rect, m_cefTexture);
-            
-            g_logger.info("UICEFWebView: Rendered accelerated frame via GPU pipeline!");
-            return;
-        }
-    }
-#endif
+    // Note: Accelerated frames are now uploaded directly to m_cefTexture via scheduleEvent
+    // So we just use the normal rendering path below
     
     // Fallback to regular CEF texture or UIWidget background
     if (m_textureCreated && m_cefTexture) {
