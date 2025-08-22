@@ -127,8 +127,8 @@ public:
         command_line->AppendSwitch("disable-gpu-watchdog"); // Prevent GPU process timeout     
 #else
         // Linux-specific OpenGL flags and GPU setup
-        command_line->AppendSwitchWithValue("use-gl", "egl-angle");
-        command_line->AppendSwitchWithValue("use-angle", "default");
+        // For AMD/Mesa drivers, try native OpenGL first, then ANGLE as fallback
+        command_line->AppendSwitchWithValue("use-gl", "desktop");
         command_line->AppendSwitchWithValue("ozone-platform", "x11");
 
         // Enable GPU acceleration across processes
@@ -137,6 +137,10 @@ public:
         command_line->AppendSwitch("enable-gpu-rasterization");
         command_line->AppendSwitch("disable-software-rasterizer");
         command_line->AppendSwitch("disable-gpu-sandbox"); // Sometimes needed for shared textures
+        
+        // Additional flags for better Mesa/AMD compatibility
+        command_line->AppendSwitch("ignore-gpu-blocklist");
+        command_line->AppendSwitch("enable-accelerated-2d-canvas");
 
         command_line->AppendSwitch("enable-begin-frame-scheduling");
         command_line->AppendSwitch("disable-background-timer-throttling");
