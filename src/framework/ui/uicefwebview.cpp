@@ -905,9 +905,10 @@ void UICEFWebView::onCEFAcceleratedPaint(const CefAcceleratedPaintInfo& info)
                   ", bytes_per_pixel=" + std::to_string(bytesPerPixel) + 
                   ", padding=" + std::to_string(padding));
     
-    // Try different OpenGL internal formats based on detected format
-    GLenum internalFormats[] = { GL_BGRA, GL_RGBA8, GL_RGBA, GL_RGB8, GL_RGB };
-    const char* formatNames[] = { "GL_BGRA", "GL_RGBA8", "GL_RGBA", "GL_RGB8", "GL_RGB" };
+    // Try different OpenGL internal formats - CEF likely uses BGRA like in OnPaint
+    // For glTexStorageMem2DEXT, we need proper internal formats
+    GLenum internalFormats[] = { GL_RGBA8, GL_SRGB8_ALPHA8, GL_RGBA, GL_RGB8, GL_SRGB8 };
+    const char* formatNames[] = { "GL_RGBA8", "GL_SRGB8_ALPHA8", "GL_RGBA", "GL_RGB8", "GL_SRGB8" };
     
     bool textureCreated = false;
     for (size_t i = 0; i < sizeof(internalFormats) / sizeof(internalFormats[0]); i++) {
