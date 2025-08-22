@@ -204,10 +204,9 @@ bool InitializeCEF(int argc, const char* argv[]) {
     CefString(&settings.resources_dir_path)      = cefDir;      // .\cef
     CefString(&settings.locales_dir_path)        = localesDir;  // .\cef\locales
     CefString(&settings.cache_path)              = cacheDir;    // .\cef\cache
-    CefString(&settings.user_data_path)          = cacheDir;    // reusa cache p/ prefs/cookies
+    CefString(&settings.root_cache_path)          = cacheDir;    // reusa cache p/ prefs/cookies
     CefString(&settings.browser_subprocess_path) = subprocessPath; // subprocesso dedicado
     settings.persist_session_cookies             = true;
-    settings.persist_user_preferences            = true;
 
     // 5) Inicializa with command line
     CefRefPtr<CefApp> app = new OTClientBrowserApp();
