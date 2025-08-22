@@ -53,15 +53,20 @@
 #include <include/cef_frame.h>
 #include "include/cef_parser.h"
 #include <GL/gl.h>
-#if defined(_WIN32) && defined(OPENGL_ES) && OPENGL_ES == 2
-#include <EGL/egl.h>
-#include <EGL/eglext.h>
-#include <GLES2/gl2ext.h>
-#include <d3d11.h>
-#include <dxgi.h>
-#ifndef EGL_D3D11_TEXTURE_2D_SHARE_HANDLE_ANGLE
-#define EGL_D3D11_TEXTURE_2D_SHARE_HANDLE_ANGLE 0x33A0
-#endif
+#if defined(__linux__)
+#  define EGL_EGLEXT_PROTOTYPES
+#  include <EGL/egl.h>
+#  include <EGL/eglext.h>
+#  include <drm/drm_fourcc.h>
+#elif defined(_WIN32) && defined(OPENGL_ES) && OPENGL_ES == 2
+#  include <EGL/egl.h>
+#  include <EGL/eglext.h>
+#  include <GLES2/gl2ext.h>
+#  include <d3d11.h>
+#  include <dxgi.h>
+#  ifndef EGL_D3D11_TEXTURE_2D_SHARE_HANDLE_ANGLE
+#  define EGL_D3D11_TEXTURE_2D_SHARE_HANDLE_ANGLE 0x33A0
+#  endif
 #endif
 #include "cefphysfsresourcehandler.h"
 
@@ -484,13 +489,11 @@ void UICEFWebView::createWebView()
     // Window info for off-screen rendering
     CefWindowInfo window_info;
     window_info.SetAsWindowless(0); // 0 = no parent window
-
-#ifdef _WIN32    
+   
     window_info.shared_texture_enabled = true;
     // window_info.external_begin_frame_enabled = true; // Not needed with multi_threaded_message_loop = true
 
     g_logger.info("UICEFWebView: Window info configured for off-screen rendering");
-#endif
 
     // Create browser asynchronously
     bool result = CefBrowserHost::CreateBrowser(window_info, m_client, "about:blank", browser_settings, nullptr, nullptr);
@@ -710,6 +713,62 @@ void UICEFWebView::onCEFAcceleratedPaint(const CefAcceleratedPaintInfo& info)
     tex->Release();
     d3dDevice->Release();
     d3dContext->Release();
+#elif defined(__linux__)
+    if (info.plane_count <= 0 || info.planes[0].fd == -1) {
+        g_logger.warning("UICEFWebView: No shared texture handle available");
+        return;
+    }
+
+    if (!m_textureCreated || getWidth() != m_lastWidth || getHeight() != m_lastHeight || !m_cefTexture) {
+        m_cefTexture = TexturePtr(new Texture(Size(getWidth(), getHeight())));
+        m_textureCreated = true;
+        m_lastWidth = getWidth();
+        m_lastHeight = getHeight();
+    }
+
+    EGLDisplay display = eglGetCurrentDisplay();
+    const EGLAttrib attrs[] = {
+        EGL_WIDTH, static_cast<EGLAttrib>(info.extra.coded_size.width),
+        EGL_HEIGHT, static_cast<EGLAttrib>(info.extra.coded_size.height),
+        EGL_LINUX_DRM_FOURCC_EXT, static_cast<EGLAttrib>(DRM_FORMAT_ARGB8888),
+        EGL_DMA_BUF_PLANE0_FD_EXT, static_cast<EGLAttrib>(info.planes[0].fd),
+        EGL_DMA_BUF_PLANE0_OFFSET_EXT, static_cast<EGLAttrib>(info.planes[0].offset),
+        EGL_DMA_BUF_PLANE0_PITCH_EXT, static_cast<EGLAttrib>(info.planes[0].stride),
+        EGL_NONE
+    };
+    EGLImage image = eglCreateImage(display, EGL_NO_CONTEXT, EGL_LINUX_DMA_BUF_EXT, nullptr, attrs);
+    if (image == EGL_NO_IMAGE) {
+        g_logger.error("eglCreateImage failed, eglError=" + stdext::dec_to_hex(eglGetError()));
+        return;
+    }
+
+    GLuint tempTex = 0;
+    glGenTextures(1, &tempTex);
+    glBindTexture(GL_TEXTURE_2D, tempTex);
+    auto glEGLImageTargetTexture2DOESFn =
+        reinterpret_cast<PFNGLEGLIMAGETARGETTEXTURE2DOESPROC>(
+            eglGetProcAddress("glEGLImageTargetTexture2DOES"));
+    if (!glEGLImageTargetTexture2DOESFn) {
+        g_logger.error("glEGLImageTargetTexture2DOES not available");
+        glDeleteTextures(1, &tempTex);
+        eglDestroyImage(display, image);
+        return;
+    }
+    glEGLImageTargetTexture2DOESFn(GL_TEXTURE_2D, image);
+
+    static GLuint fbo = 0;
+    if (fbo == 0)
+        glGenFramebuffers(1, &fbo);
+
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, fbo);
+    glFramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tempTex, 0);
+
+    glBindTexture(GL_TEXTURE_2D, m_cefTexture->getId());
+    glCopyTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 0, 0, getWidth(), getHeight());
+
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+    glDeleteTextures(1, &tempTex);
+    eglDestroyImage(display, image);
 #else
     (void)info;
 #endif
