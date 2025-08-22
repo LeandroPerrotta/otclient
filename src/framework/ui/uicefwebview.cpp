@@ -58,6 +58,16 @@
 #  include <EGL/egl.h>
 #  include <EGL/eglext.h>
 #  include <drm/drm_fourcc.h>
+
+// OpenGL memory object extension defines
+#ifndef GL_EXT_memory_object_fd
+#define GL_EXT_memory_object_fd 1
+#define GL_HANDLE_TYPE_OPAQUE_FD_EXT      0x9586
+typedef void (APIENTRYP PFNGLCREATEMEMORYOBJECTSEXTPROC) (GLsizei n, GLuint *memoryObjects);
+typedef void (APIENTRYP PFNGLIMPORTMEMORYFDEXTPROC) (GLuint memory, GLuint64 size, GLenum handleType, GLint fd);
+typedef void (APIENTRYP PFNGLTEXSTORAGEMEM2DEXTPROC) (GLenum target, GLsizei levels, GLenum internalFormat, GLsizei width, GLsizei height, GLuint memory, GLuint64 offset);
+typedef void (APIENTRYP PFNGLDELETEMEMORYOBJECTSEXTPROC) (GLsizei n, const GLuint *memoryObjects);
+#endif
 #elif defined(_WIN32) && defined(OPENGL_ES) && OPENGL_ES == 2
 #  include <EGL/egl.h>
 #  include <EGL/eglext.h>
@@ -738,36 +748,13 @@ void UICEFWebView::onCEFAcceleratedPaint(const CefAcceleratedPaintInfo& info)
         m_lastHeight = getHeight();
     }
 
-    // Get EGL display - try current first, then default display
-    EGLDisplay display = eglGetCurrentDisplay();
-    bool needsContextRestore = false;
-    
-    if (display == EGL_NO_DISPLAY) {
-        g_logger.info("UICEFWebView: No current EGL display, trying default display...");
-        display = eglGetDisplay(EGL_DEFAULT_DISPLAY);
-        if (display == EGL_NO_DISPLAY) {
-            g_logger.error("UICEFWebView: Failed to get EGL default display");
-            return;
-        }
-        
-        // Initialize EGL if needed
-        EGLint major, minor;
-        if (!eglInitialize(display, &major, &minor)) {
-            g_logger.error("UICEFWebView: Failed to initialize EGL display, error=" + stdext::dec_to_hex(eglGetError()));
-            return;
-        }
-        g_logger.info("UICEFWebView: Initialized EGL " + std::to_string(major) + "." + std::to_string(minor));
-        needsContextRestore = true;
-    } else {
-        g_logger.info("UICEFWebView: Using current EGL display");
-    }
-
-    // Check for EGL_EXT_image_dma_buf_import extension
-    const char* extensions = eglQueryString(display, EGL_EXTENSIONS);
-    if (!extensions || !strstr(extensions, "EGL_EXT_image_dma_buf_import")) {
-        g_logger.error("UICEFWebView: EGL_EXT_image_dma_buf_import extension not available");
+    // Check for OpenGL memory object extension (much simpler than EGL approach)
+    const char* gl_extensions = (const char*)glGetString(GL_EXTENSIONS);
+    if (!gl_extensions || !strstr(gl_extensions, "GL_EXT_memory_object_fd")) {
+        g_logger.error("UICEFWebView: GL_EXT_memory_object_fd extension not available");
         return;
     }
+    g_logger.info("UICEFWebView: GL_EXT_memory_object_fd extension available - using direct OpenGL import");
 
     // Use default DRM format - we'll try different formats if this fails
     uint32_t drm_format = DRM_FORMAT_ARGB8888; // Default BGRA format
@@ -797,75 +784,37 @@ void UICEFWebView::onCEFAcceleratedPaint(const CefAcceleratedPaintInfo& info)
         EGL_NONE
     };
 
-    // Try multiple DRM formats that are commonly supported
-    uint32_t formats_to_try[] = {
-        DRM_FORMAT_ARGB8888,  // BGRA8888
-        DRM_FORMAT_ABGR8888,  // RGBA8888  
-        DRM_FORMAT_XRGB8888,  // BGRX8888
-        DRM_FORMAT_XBGR8888,  // RGBX8888
-        DRM_FORMAT_BGRA8888,  // ARGB8888
-        DRM_FORMAT_RGBA8888   // ABGR8888
-    };
-    
-    EGLImage image = EGL_NO_IMAGE;
-    uint32_t successful_format = 0;
-    
-    for (size_t i = 0; i < sizeof(formats_to_try) / sizeof(formats_to_try[0]); i++) {
-        uint32_t format = formats_to_try[i];
-        
-        const EGLAttrib attrs_try[] = {
-            EGL_WIDTH, static_cast<EGLAttrib>(width),
-            EGL_HEIGHT, static_cast<EGLAttrib>(height),
-            EGL_LINUX_DRM_FOURCC_EXT, static_cast<EGLAttrib>(format),
-            EGL_DMA_BUF_PLANE0_FD_EXT, static_cast<EGLAttrib>(info.planes[0].fd),
-            EGL_DMA_BUF_PLANE0_OFFSET_EXT, static_cast<EGLAttrib>(info.planes[0].offset),
-            EGL_DMA_BUF_PLANE0_PITCH_EXT, static_cast<EGLAttrib>(stride),
-            EGL_NONE
-        };
-        
-        image = eglCreateImage(display, EGL_NO_CONTEXT, EGL_LINUX_DMA_BUF_EXT, nullptr, attrs_try);
-        if (image != EGL_NO_IMAGE) {
-            successful_format = format;
-            g_logger.info("UICEFWebView: Successfully created EGL image with format " + stdext::dec_to_hex(format));
-            break;
-        } else {
-            EGLint error = eglGetError();
-            g_logger.info("UICEFWebView: Format " + stdext::dec_to_hex(format) + " failed, eglError=" + stdext::dec_to_hex(error));
-        }
-    }
-    
-    if (image == EGL_NO_IMAGE) {
-        g_logger.error("UICEFWebView: All DRM formats failed, falling back to CPU rendering");
-        
-        // Fallback to CPU-based rendering using regular OnPaint
-        // We'll copy the DMA buffer content to CPU memory and use regular texture upload
-        g_logger.info("UICEFWebView: Attempting CPU fallback - reading DMA buffer directly");
-        
-        // For now, just return - we need to implement the CPU fallback
-        // TODO: Implement CPU fallback by reading from DMA buffer FD
+    // Get OpenGL function pointers for memory objects
+    PFNGLCREATEMEMORYOBJECTSEXTPROC glCreateMemoryObjectsEXT = 
+        (PFNGLCREATEMEMORYOBJECTSEXTPROC)glGetProcAddress("glCreateMemoryObjectsEXT");
+    PFNGLIMPORTMEMORYFDEXTPROC glImportMemoryFdEXT = 
+        (PFNGLIMPORTMEMORYFDEXTPROC)glGetProcAddress("glImportMemoryFdEXT");
+    PFNGLTEXSTORAGEMEM2DEXTPROC glTexStorageMem2DEXT = 
+        (PFNGLTEXSTORAGEMEM2DEXTPROC)glGetProcAddress("glTexStorageMem2DEXT");
+    PFNGLDELETEMEMORYOBJECTSEXTPROC glDeleteMemoryObjectsEXT = 
+        (PFNGLDELETEMEMORYOBJECTSEXTPROC)glGetProcAddress("glDeleteMemoryObjectsEXT");
+
+    if (!glCreateMemoryObjectsEXT || !glImportMemoryFdEXT || !glTexStorageMem2DEXT || !glDeleteMemoryObjectsEXT) {
+        g_logger.error("UICEFWebView: Required GL_EXT_memory_object_fd functions not available");
         return;
     }
 
-    // Ensure we have an OpenGL context
-    EGLContext context = eglGetCurrentContext();
-    if (context == EGL_NO_CONTEXT) {
-        g_logger.error("UICEFWebView: No OpenGL context available for texture operations");
-        eglDestroyImage(display, image);
-        return;
-    }
-    g_logger.info("UICEFWebView: OpenGL context is available");
-
-    // Check for required OpenGL extension
-    auto glEGLImageTargetTexture2DOESFn =
-        reinterpret_cast<PFNGLEGLIMAGETARGETTEXTURE2DOESPROC>(
-            eglGetProcAddress("glEGLImageTargetTexture2DOES"));
-    if (!glEGLImageTargetTexture2DOESFn) {
-        g_logger.error("glEGLImageTargetTexture2DOES not available");
-        eglDestroyImage(display, image);
+    // Create memory object from DMA buffer FD
+    GLuint memoryObject;
+    glCreateMemoryObjectsEXT(1, &memoryObject);
+    
+    // Import the DMA buffer FD into the memory object
+    glImportMemoryFdEXT(memoryObject, stride * height, GL_HANDLE_TYPE_OPAQUE_FD_EXT, info.planes[0].fd);
+    
+    GLenum glError = glGetError();
+    if (glError != GL_NO_ERROR) {
+        g_logger.error("UICEFWebView: Failed to import DMA buffer FD: " + std::to_string(glError));
+        glDeleteMemoryObjectsEXT(1, &memoryObject);
         return;
     }
 
-    GLuint tempTex = 0;
+    // Create texture directly from memory object
+    GLuint tempTex;
     glGenTextures(1, &tempTex);
     glBindTexture(GL_TEXTURE_2D, tempTex);
     
@@ -875,17 +824,20 @@ void UICEFWebView::onCEFAcceleratedPaint(const CefAcceleratedPaintInfo& info)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     
-    glEGLImageTargetTexture2DOESFn(GL_TEXTURE_2D, image);
-
-    // Check for OpenGL errors
-    GLenum glError = glGetError();
+    // Create texture storage from memory object
+    glTexStorageMem2DEXT(GL_TEXTURE_2D, 1, GL_RGBA8, width, height, memoryObject, info.planes[0].offset);
+    
+    glError = glGetError();
     if (glError != GL_NO_ERROR) {
-        g_logger.error("OpenGL error after glEGLImageTargetTexture2DOES: " + std::to_string(glError));
+        g_logger.error("UICEFWebView: Failed to create texture from memory object: " + std::to_string(glError));
         glDeleteTextures(1, &tempTex);
-        eglDestroyImage(display, image);
+        glDeleteMemoryObjectsEXT(1, &memoryObject);
         return;
     }
 
+    g_logger.info("UICEFWebView: Successfully created texture from DMA buffer!");
+
+    // Copy to our CEF texture
     static GLuint fbo = 0;
     if (fbo == 0)
         glGenFramebuffers(1, &fbo);
@@ -896,27 +848,27 @@ void UICEFWebView::onCEFAcceleratedPaint(const CefAcceleratedPaintInfo& info)
     // Check framebuffer completeness
     GLenum status = glCheckFramebufferStatus(GL_READ_FRAMEBUFFER);
     if (status != GL_FRAMEBUFFER_COMPLETE) {
-        g_logger.error("Framebuffer not complete: " + std::to_string(status));
+        g_logger.error("UICEFWebView: Framebuffer not complete: " + std::to_string(status));
         glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
         glDeleteTextures(1, &tempTex);
-        eglDestroyImage(display, image);
+        glDeleteMemoryObjectsEXT(1, &memoryObject);
         return;
     }
 
     glBindTexture(GL_TEXTURE_2D, m_cefTexture->getId());
     glCopyTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 0, 0, getWidth(), getHeight());
 
-    // Check for copy errors
     glError = glGetError();
     if (glError != GL_NO_ERROR) {
-        g_logger.error("OpenGL error during texture copy: " + std::to_string(glError));
+        g_logger.error("UICEFWebView: OpenGL error during texture copy: " + std::to_string(glError));
     } else {
-        g_logger.info("UICEFWebView: Successfully copied accelerated frame!");
+        g_logger.info("UICEFWebView: Successfully copied accelerated frame via GL memory objects!");
     }
 
+    // Cleanup
     glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
     glDeleteTextures(1, &tempTex);
-    eglDestroyImage(display, image);
+    glDeleteMemoryObjectsEXT(1, &memoryObject);
 #else
     (void)info;
 #endif
