@@ -53,6 +53,18 @@ public:
         command_line->AppendSwitchWithValue("use-angle", "d3d11");
         // TODO: Implement GetGpuLuid() if needed for multi-GPU systems
         // command_line->AppendSwitchWithValue("use-adapter-luid", this->GetGpuLuid());
+#else
+        // Linux-specific OpenGL flags and GPU setup (same as main process)
+        command_line->AppendSwitchWithValue("use-gl", "egl-angle");
+        command_line->AppendSwitchWithValue("use-angle", "default");
+        command_line->AppendSwitchWithValue("ozone-platform", "x11");
+
+        // Enable GPU acceleration across processes
+        command_line->AppendSwitch("enable-gpu");
+        command_line->AppendSwitch("enable-gpu-compositing");
+        command_line->AppendSwitch("enable-gpu-rasterization");
+        command_line->AppendSwitch("disable-software-rasterizer");
+        command_line->AppendSwitch("disable-gpu-sandbox"); // Sometimes needed for shared textures
 #endif
         
         // Performance flags for all processes (not GPU-specific)
