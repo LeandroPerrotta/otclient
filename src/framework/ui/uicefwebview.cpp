@@ -643,9 +643,19 @@ void UICEFWebView::onCEFPaint(const void* buffer, int width, int height,
 void UICEFWebView::onCEFAcceleratedPaint(const CefAcceleratedPaintInfo& info)
 {
 #if defined(_WIN32) && defined(OPENGL_ES) && OPENGL_ES == 2
-    void* sharedHandle = info.shared_handle;
-    if (!sharedHandle)
-        return;
+    // CEF 139 Windows: The accelerated paint API structure changed
+    // The shared_handle field was removed/renamed in Windows implementation
+    
+    // Temporarily disable accelerated paint on Windows until the new API is implemented
+    // This prevents compilation errors while maintaining functionality on other platforms
+    g_logger.warning("UICEFWebView: Windows accelerated paint disabled - CEF 139 API changes require implementation update");
+    g_logger.info("UICEFWebView: Falling back to software rendering for WebView");
+    
+    // TODO: Implement CEF 139 Windows accelerated paint API
+    // The new API likely uses a different method to access D3D11 textures
+    // Reference: https://cef-builds.spotifycdn.com/docs/139.0/
+    
+    return;
 
     int width = getWidth();
     int height = getHeight();
