@@ -245,6 +245,16 @@ if(WIN32)
     target_link_libraries(${PROJECT_NAME} PRIVATE bcrypt)
 endif()
 
+# Add DirectX 11 libraries for CEF accelerated paint on Windows
+if(WIN32 AND USE_CEF)
+    target_link_libraries(${PROJECT_NAME} PRIVATE 
+        d3d11
+        dxgi
+        d3dcompiler
+    )
+    message(STATUS "Added DirectX 11 libraries for CEF accelerated paint")
+endif()
+
 if(USE_CEF)
     otclient_link_cef(${PROJECT_NAME})
 
@@ -273,6 +283,14 @@ if(USE_CEF)
     # Add bcrypt library for Windows 10+ APIs (needed for subprocess too)
     if(WIN32)
         target_link_libraries(otclient_cef_subproc PRIVATE bcrypt)
+        
+        # Add DirectX 11 libraries for CEF subprocess (may be needed for shared textures)
+        target_link_libraries(otclient_cef_subproc PRIVATE 
+            d3d11
+            dxgi
+            d3dcompiler
+        )
+        
         set_target_properties(otclient_cef_subproc PROPERTIES MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
 
         # Set Windows subsystem for the subprocess executable
