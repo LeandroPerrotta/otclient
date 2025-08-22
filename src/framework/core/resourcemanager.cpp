@@ -347,7 +347,15 @@ std::string ResourceManager::getBaseDir()
 
 std::string ResourceManager::getUserDir()
 {
-    return PHYSFS_getUserDir();
+    // PHYSFS_getUserDir() is deprecated, use PHYSFS_getPrefDir() instead
+    // or fall back to platform-specific home directory
+    const char* prefDir = PHYSFS_getPrefDir("otclient", "otclient");
+    if (prefDir) {
+        return std::string(prefDir);
+    }
+    
+    // Fallback to base directory if getPrefDir fails
+    return PHYSFS_getBaseDir();
 }
 
 std::string ResourceManager::guessFilePath(const std::string& filename, const std::string& type)
