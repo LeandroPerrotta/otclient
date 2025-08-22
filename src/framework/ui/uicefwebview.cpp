@@ -801,28 +801,57 @@ void UICEFWebView::onCEFAcceleratedPaint(const CefAcceleratedPaintInfo& info)
 
     // Create memory object from DMA buffer FD
     GLuint memoryObject;
+    g_logger.info("UICEFWebView: Creating memory object...");
     glCreateMemoryObjectsEXT(1, &memoryObject);
     
-    // Import the DMA buffer FD into the memory object
-    glImportMemoryFdEXT(memoryObject, stride * height, GL_HANDLE_TYPE_OPAQUE_FD_EXT, info.planes[0].fd);
-    
     GLenum glError = glGetError();
+    if (glError != GL_NO_ERROR) {
+        g_logger.error("UICEFWebView: Failed to create memory object: " + std::to_string(glError));
+        return;
+    }
+    g_logger.info("UICEFWebView: Memory object created successfully, id=" + std::to_string(memoryObject));
+    
+    // Calculate buffer size properly
+    GLuint64 bufferSize = static_cast<GLuint64>(stride) * static_cast<GLuint64>(height);
+    g_logger.info("UICEFWebView: Importing FD=" + std::to_string(info.planes[0].fd) + 
+                  ", size=" + std::to_string(bufferSize) + 
+                  ", stride=" + std::to_string(stride) + 
+                  ", height=" + std::to_string(height));
+    
+    // Import the DMA buffer FD into the memory object
+    glImportMemoryFdEXT(memoryObject, bufferSize, GL_HANDLE_TYPE_OPAQUE_FD_EXT, info.planes[0].fd);
+    
+    glError = glGetError();
     if (glError != GL_NO_ERROR) {
         g_logger.error("UICEFWebView: Failed to import DMA buffer FD: " + std::to_string(glError));
         glDeleteMemoryObjectsEXT(1, &memoryObject);
         return;
     }
+    g_logger.info("UICEFWebView: DMA buffer FD imported successfully");
 
     // Create texture directly from memory object
     GLuint tempTex;
+    g_logger.info("UICEFWebView: Creating texture from memory object...");
     glGenTextures(1, &tempTex);
     glBindTexture(GL_TEXTURE_2D, tempTex);
+    
+    glError = glGetError();
+    if (glError != GL_NO_ERROR) {
+        g_logger.error("UICEFWebView: Failed to create/bind texture: " + std::to_string(glError));
+        glDeleteMemoryObjectsEXT(1, &memoryObject);
+        return;
+    }
+    g_logger.info("UICEFWebView: Texture created and bound, id=" + std::to_string(tempTex));
     
     // Set texture parameters
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    
+    g_logger.info("UICEFWebView: Creating texture storage - width=" + std::to_string(width) + 
+                  ", height=" + std::to_string(height) + 
+                  ", offset=" + std::to_string(info.planes[0].offset));
     
     // Create texture storage from memory object
     glTexStorageMem2DEXT(GL_TEXTURE_2D, 1, GL_RGBA8, width, height, memoryObject, info.planes[0].offset);
