@@ -22,6 +22,7 @@ public:
     // CEF-specific methods
     void onCEFPaint(const void* buffer, int width, int height, const CefRenderHandler::RectList& dirtyRects);
     void onCEFAcceleratedPaint(const CefAcceleratedPaintInfo& info);
+    void implementCPUFallback(const CefAcceleratedPaintInfo& info, int width, int height, int stride);
     void onBrowserCreated(CefRefPtr<CefBrowser> browser);
     
     // Static methods for managing all WebViews
@@ -78,7 +79,39 @@ private:
     int m_lastHeight;
     Point m_lastMousePos;
     
+    // GPU acceleration with GLX shared context + EGL sidecar
+#if defined(__linux__)
+    // GLX shared context for CEF thread
+    static bool s_glxContextInitialized;
+    static void* s_x11Display;
+    static void* s_glxContext;
+    static void* s_glxPbuffer;
+    
+    // EGL sidecar for DMA buffer import
+    static bool s_eglSidecarInitialized;
+    static void* s_eglDisplay;
+    
+    // Double-buffering for GPU acceleration
+    GLuint m_acceleratedTextures[2];
+    GLuint m_currentTextureIndex;
+    GLsync m_textureFences[2];
+    bool m_acceleratedTexturesCreated;
+    GLuint m_readFbo;
+    
+    // Frame management
+    GLuint m_lastReadyTexture;
+    GLsync m_lastFence;
+    int m_writeIndex;
+#endif
+    
     // Static tracking of all active WebViews
     static std::vector<UICEFWebView*> s_activeWebViews;
+    
+    // GPU acceleration methods
+    static void initializeGLXSharedContext();
+    static void initializeEGLSidecar();
+    static void cleanupGPUResources();
+    void createAcceleratedTextures(int width, int height);
+    void processAcceleratedPaintGPU(const CefAcceleratedPaintInfo& info);
 #endif
 }; 
