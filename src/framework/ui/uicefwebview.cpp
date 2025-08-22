@@ -702,8 +702,21 @@ void UICEFWebView::onCEFAcceleratedPaint(const CefAcceleratedPaintInfo& info)
     g_logger.info("UICEFWebView: EGL ANGLE D3D11 extensions available - proceeding with accelerated paint");
 
     EGLint attrs[] = {EGL_NONE};
-    EGLImageKHR image = eglCreateImageKHR(display, EGL_NO_CONTEXT,
+    
+    // Try different EGL targets for D3D11 shared textures
+    // Different drivers may support different targets
+    EGLImageKHR image = EGL_NO_IMAGE_KHR;
+    
+    // Target 1: Standard ANGLE D3D11 shared handle
+    image = eglCreateImageKHR(display, EGL_NO_CONTEXT,
         EGL_D3D11_TEXTURE_2D_SHARE_HANDLE_ANGLE, sharedHandle, attrs);
+    
+    if (image == EGL_NO_IMAGE_KHR) {
+        // Target 2: Try alternative D3D11 texture target
+        const EGLint D3D11_TEXTURE_2D_ANGLE = 0x3AAE;  // Alternative target
+        image = eglCreateImageKHR(display, EGL_NO_CONTEXT,
+            D3D11_TEXTURE_2D_ANGLE, sharedHandle, attrs);
+    }
     
     if (image != EGL_NO_IMAGE_KHR) {
         glBindTexture(GL_TEXTURE_2D, m_cefTexture->getId());
@@ -711,35 +724,44 @@ void UICEFWebView::onCEFAcceleratedPaint(const CefAcceleratedPaintInfo& info)
         eglDestroyImageKHR(display, image);
         
         g_logger.info("UICEFWebView: Successfully created EGL image from CEF shared texture");
-    } else {
-        // Get EGL error for debugging
-        EGLint eglError = eglGetError();
-        g_logger.error("UICEFWebView: eglCreateImageKHR failed with error: 0x" + 
-                      stdext::to_string(eglError, 16));
-        g_logger.error("UICEFWebView: Target: EGL_D3D11_TEXTURE_2D_SHARE_HANDLE_ANGLE (0x33A0)");
-        g_logger.error("UICEFWebView: Shared handle value: " + stdext::to_string(reinterpret_cast<uintptr_t>(sharedHandle), 16));
         
-        // Try to provide more specific error information
-        switch (eglError) {
-            case EGL_BAD_PARAMETER:
-                g_logger.error("UICEFWebView: EGL_BAD_PARAMETER - Invalid parameter passed to eglCreateImageKHR");
-                break;
-            case EGL_BAD_MATCH:
-                g_logger.error("UICEFWebView: EGL_BAD_MATCH - Target not supported or context mismatch");
-                break;
-            case EGL_BAD_ACCESS:
-                g_logger.error("UICEFWebView: EGL_BAD_ACCESS - Resource in use or access denied");
-                break;
-            default:
-                g_logger.error("UICEFWebView: Unknown EGL error");
-                break;
+        // Log success only once to avoid spam
+        static bool successLogged = false;
+        if (!successLogged) {
+            g_logger.info("UICEFWebView: GPU accelerated WebView rendering is working!");
+            successLogged = true;
         }
-        
-        g_logger.error("UICEFWebView: This may indicate:");
-        g_logger.error("UICEFWebView: 1. Graphics driver doesn't support D3D11 shared textures");
-        g_logger.error("UICEFWebView: 2. ANGLE/EGL configuration issue");
-        g_logger.error("UICEFWebView: 3. DirectX 11 not properly available");
-        g_logger.info("UICEFWebView: WebView will continue with software rendering");
+    } else {
+        // Log error details only once to avoid spam
+        static bool errorLogged = false;
+        if (!errorLogged) {
+            EGLint eglError = eglGetError();
+            g_logger.error("UICEFWebView: eglCreateImageKHR failed with error: 0x" + 
+                          stdext::to_string(eglError, 16));
+            g_logger.error("UICEFWebView: Target: EGL_D3D11_TEXTURE_2D_SHARE_HANDLE_ANGLE (0x33A0)");
+            g_logger.error("UICEFWebView: Shared handle value: " + stdext::to_string(reinterpret_cast<uintptr_t>(sharedHandle), 16));
+            
+            // Try to provide more specific error information
+            switch (eglError) {
+                case EGL_BAD_PARAMETER:
+                    g_logger.error("UICEFWebView: EGL_BAD_PARAMETER - Invalid parameter or unsupported target");
+                    break;
+                case EGL_BAD_MATCH:
+                    g_logger.error("UICEFWebView: EGL_BAD_MATCH - Target not supported or context mismatch");
+                    break;
+                case EGL_BAD_ACCESS:
+                    g_logger.error("UICEFWebView: EGL_BAD_ACCESS - Resource in use or access denied");
+                    break;
+                default:
+                    g_logger.error("UICEFWebView: Unknown EGL error");
+                    break;
+            }
+            
+            g_logger.warning("UICEFWebView: GPU accelerated WebView not supported on this system");
+            g_logger.info("UICEFWebView: This is normal - WebView will use software rendering");
+            g_logger.info("UICEFWebView: Software rendering provides good performance for web content");
+            errorLogged = true;
+        }
     }
 #else
     (void)info;
