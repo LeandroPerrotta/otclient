@@ -91,6 +91,7 @@ typedef void (APIENTRYP PFNGLDELETEMEMORYOBJECTSEXTPROC) (GLsizei n, const GLuin
 #include <unistd.h>
 #include <errno.h>
 #include <cstring>
+#include <sys/mman.h>
 
 std::string GetDataURI(const std::string& data, const std::string& mime_type) {
     return "data:" + mime_type + ";base64," +
@@ -895,21 +896,45 @@ void UICEFWebView::onCEFAcceleratedPaint(const CefAcceleratedPaintInfo& info)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     
-    g_logger.info("UICEFWebView: Creating texture storage - width=" + std::to_string(width) + 
-                  ", height=" + std::to_string(height) + 
-                  ", offset=" + std::to_string(info.planes[0].offset));
+    // Detect format based on stride
+    int bytesPerPixel = stride / width;
+    int padding = stride - (width * bytesPerPixel);
     
-    // Create texture storage from memory object
-    glTexStorageMem2DEXT(GL_TEXTURE_2D, 1, GL_RGBA8, width, height, memoryObject, info.planes[0].offset);
+    g_logger.info("UICEFWebView: Format detection - stride=" + std::to_string(stride) + 
+                  ", width=" + std::to_string(width) + 
+                  ", bytes_per_pixel=" + std::to_string(bytesPerPixel) + 
+                  ", padding=" + std::to_string(padding));
     
-    glError = glGetError();
-    if (glError != GL_NO_ERROR) {
-        g_logger.error("UICEFWebView: Failed to create texture from memory object: " + std::to_string(glError));
+    // Try different OpenGL internal formats based on detected format
+    GLenum internalFormats[] = { GL_BGRA, GL_RGBA8, GL_RGBA, GL_RGB8, GL_RGB };
+    const char* formatNames[] = { "GL_BGRA", "GL_RGBA8", "GL_RGBA", "GL_RGB8", "GL_RGB" };
+    
+    bool textureCreated = false;
+    for (size_t i = 0; i < sizeof(internalFormats) / sizeof(internalFormats[0]); i++) {
+        g_logger.info("UICEFWebView: Trying texture format: " + std::string(formatNames[i]));
+        
+        glTexStorageMem2DEXT(GL_TEXTURE_2D, 1, internalFormats[i], width, height, memoryObject, info.planes[0].offset);
+        
+        glError = glGetError();
+        if (glError == GL_NO_ERROR) {
+            g_logger.info("UICEFWebView: Successfully created texture with format: " + std::string(formatNames[i]));
+            textureCreated = true;
+            break;
+        } else {
+            g_logger.info("UICEFWebView: Format " + std::string(formatNames[i]) + " failed: " + std::to_string(glError));
+        }
+    }
+    
+    if (!textureCreated) {
+        g_logger.error("UICEFWebView: All texture formats failed, implementing CPU fallback...");
         glDeleteTextures(1, &tempTex);
         glDeleteMemoryObjectsEXT(1, &memoryObject);
+        
+        // Implement CPU fallback here
+        implementCPUFallback(info, width, height, stride);
         return;
     }
-
+    
     g_logger.info("UICEFWebView: Successfully created texture from DMA buffer!");
 
     // Copy to our CEF texture
@@ -946,6 +971,62 @@ void UICEFWebView::onCEFAcceleratedPaint(const CefAcceleratedPaintInfo& info)
     glDeleteMemoryObjectsEXT(1, &memoryObject);
 #else
     (void)info;
+#endif
+}
+
+void UICEFWebView::implementCPUFallback(const CefAcceleratedPaintInfo& info, int width, int height, int stride)
+{
+#if defined(__linux__)
+    g_logger.info("UICEFWebView: Implementing CPU fallback for DMA buffer rendering");
+    
+    // Map the DMA buffer to CPU memory
+    void* mapped = mmap(nullptr, stride * height, PROT_READ, MAP_SHARED, info.planes[0].fd, info.planes[0].offset);
+    if (mapped == MAP_FAILED) {
+        g_logger.error("UICEFWebView: Failed to mmap DMA buffer: " + std::string(strerror(errno)));
+        return;
+    }
+    
+    g_logger.info("UICEFWebView: Successfully mapped DMA buffer to CPU memory");
+    
+    // Create texture and upload pixel data directly
+    if (!m_textureCreated || getWidth() != m_lastWidth || getHeight() != m_lastHeight || !m_cefTexture) {
+        m_cefTexture = TexturePtr(new Texture(Size(getWidth(), getHeight())));
+        m_textureCreated = true;
+        m_lastWidth = getWidth();
+        m_lastHeight = getHeight();
+    }
+    
+    // Upload pixels to OpenGL texture using traditional method
+    glBindTexture(GL_TEXTURE_2D, m_cefTexture->getId());
+    
+    // Handle stride by copying row by row if needed
+    if (stride == width * 4) {
+        // No padding, direct upload
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_BGRA, GL_UNSIGNED_BYTE, mapped);
+    } else {
+        // Has padding, need to copy row by row
+        std::vector<uint8_t> pixelData(width * height * 4);
+        uint8_t* src = static_cast<uint8_t*>(mapped);
+        uint8_t* dst = pixelData.data();
+        
+        for (int y = 0; y < height; y++) {
+            memcpy(dst + y * width * 4, src + y * stride, width * 4);
+        }
+        
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_BGRA, GL_UNSIGNED_BYTE, pixelData.data());
+    }
+    
+    GLenum glError = glGetError();
+    if (glError == GL_NO_ERROR) {
+        g_logger.info("UICEFWebView: Successfully uploaded DMA buffer via CPU fallback!");
+    } else {
+        g_logger.error("UICEFWebView: CPU fallback upload failed: " + std::to_string(glError));
+    }
+    
+    // Cleanup
+    munmap(mapped, stride * height);
+#else
+    (void)info; (void)width; (void)height; (void)stride;
 #endif
 }
 
