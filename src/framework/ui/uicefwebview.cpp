@@ -59,11 +59,18 @@
 #  include <EGL/eglext.h>
 #  include <GL/glx.h>
 #  include <drm/drm_fourcc.h>
+// Undef X11 macros that conflict with CEF
+#  ifdef Success
+#    undef Success
+#  endif
+#  ifdef None
+#    undef None
+#  endif
 
 // OpenGL memory object extension defines
 #ifndef GL_EXT_memory_object_fd
 #define GL_EXT_memory_object_fd 1
-#define GL_HANDLE_TYPE_OPAQUE_FD          0x9586
+#define GL_HANDLE_TYPE_OPAQUE_FD_EXT      0x9586
 typedef void (APIENTRYP PFNGLCREATEMEMORYOBJECTSEXTPROC) (GLsizei n, GLuint *memoryObjects);
 typedef void (APIENTRYP PFNGLIMPORTMEMORYFDEXTPROC) (GLuint memory, GLuint64 size, GLenum handleType, GLint fd);
 typedef void (APIENTRYP PFNGLTEXSTORAGEMEM2DEXTPROC) (GLenum target, GLsizei levels, GLenum internalFormat, GLsizei width, GLsizei height, GLuint memory, GLuint64 offset);
@@ -858,7 +865,7 @@ void UICEFWebView::onCEFAcceleratedPaint(const CefAcceleratedPaintInfo& info)
                   ", height=" + std::to_string(height));
     
     // Import the DMA buffer FD into the memory object (GL takes ownership of duplicatedFd)
-    glImportMemoryFdEXT(memoryObject, bufferSize, GL_HANDLE_TYPE_OPAQUE_FD, duplicatedFd);
+    glImportMemoryFdEXT(memoryObject, bufferSize, GL_HANDLE_TYPE_OPAQUE_FD_EXT, duplicatedFd);
     
     glError = glGetError();
     if (glError != GL_NO_ERROR) {
