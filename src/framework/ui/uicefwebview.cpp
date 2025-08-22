@@ -835,11 +835,15 @@ bool UICEFWebView::onKeyDown(uchar keyCode, int keyboardModifiers)
     if (m_browser) {
         CefRefPtr<CefBrowserHost> host = m_browser->GetHost();
         if (host) {
-            CefKeyEvent event;
+            CefKeyEvent event = {};  // Initialize all fields to zero
             event.type = KEYEVENT_RAWKEYDOWN;
             event.modifiers = getCefModifiers();
             event.windows_key_code = translateKeyCode(keyCode);
             event.native_key_code = event.windows_key_code;
+            event.is_system_key = 0;
+            event.character = 0;
+            event.unmodified_character = 0;
+            event.focus_on_editable_field = 0;
             host->SendKeyEvent(event);
         }
     }
@@ -852,11 +856,15 @@ bool UICEFWebView::onKeyPress(uchar keyCode, int keyboardModifiers, int autoRepe
     if (m_browser && autoRepeatTicks > 0) {
         CefRefPtr<CefBrowserHost> host = m_browser->GetHost();
         if (host) {
-            CefKeyEvent event;
+            CefKeyEvent event = {};  // Initialize all fields to zero
             event.type = KEYEVENT_RAWKEYDOWN;
             event.modifiers = getCefModifiers();
             event.windows_key_code = translateKeyCode(keyCode);
             event.native_key_code = event.windows_key_code;
+            event.is_system_key = 0;
+            event.character = 0;
+            event.unmodified_character = 0;
+            event.focus_on_editable_field = 0;
             host->SendKeyEvent(event);
         }
     }
@@ -871,13 +879,15 @@ bool UICEFWebView::onKeyText(const std::string& keyText)
         if (host) {
             std::u16string chars = cp1252ToUtf16(keyText);
             for (char16_t ch : chars) {
-                CefKeyEvent event;
+                CefKeyEvent event = {};  // Initialize all fields to zero
                 event.type = KEYEVENT_CHAR;
                 event.modifiers = getCefModifiers();
                 event.character = ch;
                 event.unmodified_character = ch;
                 event.windows_key_code = static_cast<int>(ch);
                 event.native_key_code = event.windows_key_code;
+                event.is_system_key = 0;
+                event.focus_on_editable_field = 0;
                 host->SendKeyEvent(event);
             }
         }
@@ -891,11 +901,15 @@ bool UICEFWebView::onKeyUp(uchar keyCode, int keyboardModifiers)
     if (m_browser) {
         CefRefPtr<CefBrowserHost> host = m_browser->GetHost();
         if (host) {
-            CefKeyEvent event;
+            CefKeyEvent event = {};  // Initialize all fields to zero
             event.type = KEYEVENT_KEYUP;
             event.modifiers = getCefModifiers();
             event.windows_key_code = translateKeyCode(keyCode);
             event.native_key_code = event.windows_key_code;
+            event.is_system_key = 0;
+            event.character = 0;
+            event.unmodified_character = 0;
+            event.focus_on_editable_field = 0;
             host->SendKeyEvent(event);
         }
     }
