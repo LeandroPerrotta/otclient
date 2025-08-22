@@ -55,20 +55,30 @@ public:
         // command_line->AppendSwitchWithValue("use-adapter-luid", this->GetGpuLuid());
 #else
         // Linux-specific OpenGL flags and GPU setup (same as main process)
-        // For AMD/Mesa drivers, try native OpenGL first, then ANGLE as fallback
-        command_line->AppendSwitchWithValue("use-gl", "desktop");
+        // Try multiple GL backends to ensure compatibility
+        
+        // Force specific GPU backend - try EGL first as it's most compatible with Mesa
+        command_line->AppendSwitchWithValue("use-gl", "egl");
         command_line->AppendSwitchWithValue("ozone-platform", "x11");
 
-        // Enable GPU acceleration across processes
+        // Force GPU process creation and disable fallbacks
         command_line->AppendSwitch("enable-gpu");
         command_line->AppendSwitch("enable-gpu-compositing");
         command_line->AppendSwitch("enable-gpu-rasterization");
         command_line->AppendSwitch("disable-software-rasterizer");
-        command_line->AppendSwitch("disable-gpu-sandbox"); // Sometimes needed for shared textures
+        command_line->AppendSwitch("disable-gpu-sandbox");
         
-        // Additional flags for better Mesa/AMD compatibility
+        // Force GPU to be used even if blocklisted
         command_line->AppendSwitch("ignore-gpu-blocklist");
+        command_line->AppendSwitch("ignore-gpu-blacklist"); // Legacy flag name
+        command_line->AppendSwitch("disable-gpu-driver-bug-workarounds");
+        
+        // Additional acceleration flags
         command_line->AppendSwitch("enable-accelerated-2d-canvas");
+        command_line->AppendSwitch("enable-accelerated-video-decode");
+        
+        // Disable features that might interfere
+        command_line->AppendSwitch("disable-features=VizDisplayCompositor");
 #endif
         
         // Performance flags for all processes (not GPU-specific)
