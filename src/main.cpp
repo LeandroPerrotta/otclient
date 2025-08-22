@@ -189,7 +189,11 @@ bool InitializeCEF(int argc, const char* argv[]) {
     command_line->AppendSwitch("disable-background-networking");
     command_line->AppendSwitch("disable-sync");
     command_line->AppendSwitch("disable-background-mode");
-    command_line->AppendSwitch("disable-features=PushMessaging,BackgroundSync");
+    command_line->AppendSwitch("disable-features=PushMessaging,BackgroundSync,GCM");
+    command_line->AppendSwitch("disable-component-extensions-with-background-pages");
+    command_line->AppendSwitch("disable-default-apps");
+    command_line->AppendSwitch("disable-extensions");
+    command_line->AppendSwitch("no-service-autorun");
 
     // 4) Configuração de CEF
     CefSettings settings;
@@ -247,7 +251,11 @@ bool InitializeCEF(int argc, const char* argv[]) {
     command_line->AppendSwitch("disable-background-networking");
     command_line->AppendSwitch("disable-sync");
     command_line->AppendSwitch("disable-background-mode");
-    command_line->AppendSwitch("disable-features=PushMessaging,BackgroundSync");
+    command_line->AppendSwitch("disable-features=PushMessaging,BackgroundSync,GCM");
+    command_line->AppendSwitch("disable-component-extensions-with-background-pages");
+    command_line->AppendSwitch("disable-default-apps");
+    command_line->AppendSwitch("disable-extensions");
+    command_line->AppendSwitch("no-service-autorun");
 
     // Configure CEF settings
     CefSettings settings;

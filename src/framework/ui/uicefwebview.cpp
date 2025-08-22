@@ -682,11 +682,24 @@ void UICEFWebView::onCEFAcceleratedPaint(const CefAcceleratedPaintInfo& info)
     // Check if EGL_D3D11_TEXTURE_2D_SHARE_HANDLE_ANGLE is supported
     // This extension is required for D3D11 shared texture support
     const char* extensions = eglQueryString(display, EGL_EXTENSIONS);
-    if (!extensions || !strstr(extensions, "EGL_ANGLE_d3d_share_handle_client_buffer")) {
-        g_logger.warning("UICEFWebView: EGL_ANGLE_d3d_share_handle_client_buffer extension not supported");
+    if (!extensions) {
+        g_logger.warning("UICEFWebView: Could not query EGL extensions");
         g_logger.info("UICEFWebView: Falling back to software rendering for WebView");
         return;
     }
+    
+    // Check for required ANGLE D3D11 extensions
+    bool hasD3DShareHandle = strstr(extensions, "EGL_ANGLE_d3d_share_handle_client_buffer") != nullptr;
+    bool hasD3DSurfaceTexture = strstr(extensions, "EGL_ANGLE_surface_d3d_texture_2d_share_handle") != nullptr;
+    
+    if (!hasD3DShareHandle && !hasD3DSurfaceTexture) {
+        g_logger.warning("UICEFWebView: Required EGL ANGLE D3D11 extensions not supported");
+        g_logger.info("UICEFWebView: Available extensions: " + std::string(extensions));
+        g_logger.info("UICEFWebView: Falling back to software rendering for WebView");
+        return;
+    }
+    
+    g_logger.info("UICEFWebView: EGL ANGLE D3D11 extensions available - proceeding with accelerated paint");
 
     EGLint attrs[] = {EGL_NONE};
     EGLImageKHR image = eglCreateImageKHR(display, EGL_NO_CONTEXT,
@@ -704,7 +717,28 @@ void UICEFWebView::onCEFAcceleratedPaint(const CefAcceleratedPaintInfo& info)
         g_logger.error("UICEFWebView: eglCreateImageKHR failed with error: 0x" + 
                       stdext::to_string(eglError, 16));
         g_logger.error("UICEFWebView: Target: EGL_D3D11_TEXTURE_2D_SHARE_HANDLE_ANGLE (0x33A0)");
-        g_logger.error("UICEFWebView: This may indicate incompatible graphics driver or missing D3D11/ANGLE support");
+        g_logger.error("UICEFWebView: Shared handle value: " + stdext::to_string(reinterpret_cast<uintptr_t>(sharedHandle), 16));
+        
+        // Try to provide more specific error information
+        switch (eglError) {
+            case EGL_BAD_PARAMETER:
+                g_logger.error("UICEFWebView: EGL_BAD_PARAMETER - Invalid parameter passed to eglCreateImageKHR");
+                break;
+            case EGL_BAD_MATCH:
+                g_logger.error("UICEFWebView: EGL_BAD_MATCH - Target not supported or context mismatch");
+                break;
+            case EGL_BAD_ACCESS:
+                g_logger.error("UICEFWebView: EGL_BAD_ACCESS - Resource in use or access denied");
+                break;
+            default:
+                g_logger.error("UICEFWebView: Unknown EGL error");
+                break;
+        }
+        
+        g_logger.error("UICEFWebView: This may indicate:");
+        g_logger.error("UICEFWebView: 1. Graphics driver doesn't support D3D11 shared textures");
+        g_logger.error("UICEFWebView: 2. ANGLE/EGL configuration issue");
+        g_logger.error("UICEFWebView: 3. DirectX 11 not properly available");
         g_logger.info("UICEFWebView: WebView will continue with software rendering");
     }
 #else
