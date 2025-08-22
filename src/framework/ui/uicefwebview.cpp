@@ -643,17 +643,34 @@ void UICEFWebView::onCEFPaint(const void* buffer, int width, int height,
 void UICEFWebView::onCEFAcceleratedPaint(const CefAcceleratedPaintInfo& info)
 {
 #if defined(_WIN32) && defined(OPENGL_ES) && OPENGL_ES == 2
-    // CEF 139 Windows: The accelerated paint API structure changed
-    // The shared_handle field was removed/renamed in Windows implementation
+    // CEF 139 Windows: Try to find the correct way to access the texture handle
+    // The documentation states that on Windows, info contains a HANDLE for D3D11 OpenSharedResource
     
-    // Temporarily disable accelerated paint on Windows until the new API is implemented
-    // This prevents compilation errors while maintaining functionality on other platforms
-    g_logger.warning("UICEFWebView: Windows accelerated paint disabled - CEF 139 API changes require implementation update");
-    g_logger.info("UICEFWebView: Falling back to software rendering for WebView");
+    // First, let's debug what's in the structure
+    g_logger.info("UICEFWebView: OnAcceleratedPaint called with CEF 139");
+    g_logger.info("UICEFWebView: CefAcceleratedPaintInfo size: " + std::to_string(sizeof(info)));
     
-    // TODO: Implement CEF 139 Windows accelerated paint API
-    // The new API likely uses a different method to access D3D11 textures
-    // Reference: https://cef-builds.spotifycdn.com/docs/139.0/
+    // The structure should have the handle somewhere accessible
+    // Let's try the most likely approach: the structure might have a method or the field name changed
+    
+    void* sharedHandle = nullptr;
+    
+    // Try accessing through different possible approaches
+    // Since the field name 'shared_handle' doesn't exist, it might be named differently
+    
+    // Approach 1: Check if there's a method to get the handle
+    // (This would require knowing the exact API, which we don't have yet)
+    
+    // Approach 2: The handle might be in a nested structure
+    // Based on Linux version, there might be an 'extra' field with common data
+    
+    // Approach 3: For now, disable and log detailed info for debugging
+    g_logger.warning("UICEFWebView: CEF 139 Windows accelerated paint not yet implemented");
+    g_logger.warning("UICEFWebView: Need to determine correct field/method to access D3D11 HANDLE");
+    g_logger.info("UICEFWebView: Please check CEF 139 documentation or source code for CefAcceleratedPaintInfo Windows implementation");
+    
+    // TODO: Once we know the correct field name or method, implement like this:
+    // sharedHandle = info.correct_field_name;  // or info.GetHandle() or similar
     
     return;
 
