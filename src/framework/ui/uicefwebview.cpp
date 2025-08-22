@@ -786,13 +786,13 @@ void UICEFWebView::onCEFAcceleratedPaint(const CefAcceleratedPaintInfo& info)
 
     // Get OpenGL function pointers for memory objects
     PFNGLCREATEMEMORYOBJECTSEXTPROC glCreateMemoryObjectsEXT = 
-        (PFNGLCREATEMEMORYOBJECTSEXTPROC)glGetProcAddress("glCreateMemoryObjectsEXT");
+        (PFNGLCREATEMEMORYOBJECTSEXTPROC)eglGetProcAddress("glCreateMemoryObjectsEXT");
     PFNGLIMPORTMEMORYFDEXTPROC glImportMemoryFdEXT = 
-        (PFNGLIMPORTMEMORYFDEXTPROC)glGetProcAddress("glImportMemoryFdEXT");
+        (PFNGLIMPORTMEMORYFDEXTPROC)eglGetProcAddress("glImportMemoryFdEXT");
     PFNGLTEXSTORAGEMEM2DEXTPROC glTexStorageMem2DEXT = 
-        (PFNGLTEXSTORAGEMEM2DEXTPROC)glGetProcAddress("glTexStorageMem2DEXT");
+        (PFNGLTEXSTORAGEMEM2DEXTPROC)eglGetProcAddress("glTexStorageMem2DEXT");
     PFNGLDELETEMEMORYOBJECTSEXTPROC glDeleteMemoryObjectsEXT = 
-        (PFNGLDELETEMEMORYOBJECTSEXTPROC)glGetProcAddress("glDeleteMemoryObjectsEXT");
+        (PFNGLDELETEMEMORYOBJECTSEXTPROC)eglGetProcAddress("glDeleteMemoryObjectsEXT");
 
     if (!glCreateMemoryObjectsEXT || !glImportMemoryFdEXT || !glTexStorageMem2DEXT || !glDeleteMemoryObjectsEXT) {
         g_logger.error("UICEFWebView: Required GL_EXT_memory_object_fd functions not available");
