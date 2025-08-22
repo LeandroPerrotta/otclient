@@ -633,6 +633,12 @@ if(EXTRA_LIBS)
     set(framework_LIBRARIES ${framework_LIBRARIES} ${EXTRA_LIBS})
 endif()
 
+# Add DirectX 11 libraries for CEF accelerated paint on Windows
+if(WIN32 AND USE_CEF)
+    set(framework_LIBRARIES ${framework_LIBRARIES} d3d11 dxgi d3dcompiler)
+    message(STATUS "Added DirectX 11 libraries to framework for CEF accelerated paint")
+endif()
+
 include_directories(${framework_INCLUDE_DIRS})
 message(STATUS "framework_DEFINITIONS: ${framework_DEFINITIONS}")
 add_definitions(${framework_DEFINITIONS})
