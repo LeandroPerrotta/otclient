@@ -95,6 +95,7 @@ if(USE_CEF)
             set(CEF_SEARCH_INCLUDE_PATHS
                 "/opt/otclient-cef"
                 "$ENV{HOME}/.local/share/otclient-cef"
+                "${CMAKE_SOURCE_DIR}/cef"
                 "${CMAKE_SOURCE_DIR}/cef_binary_*"
             )
             
@@ -147,8 +148,8 @@ if(USE_CEF)
     # Add CEF definitions
     add_compile_definitions(USE_CEF)
     
-    # Include CEF directories
-    include_directories(${CEF_INCLUDE_DIRS})
+    # Include CEF directories as SYSTEM to suppress warnings from external library
+    include_directories(SYSTEM ${CEF_INCLUDE_DIRS})
     link_directories(${CEF_LIBRARY_DIRS})
     
     # Windows-specific: Configure runtime library search

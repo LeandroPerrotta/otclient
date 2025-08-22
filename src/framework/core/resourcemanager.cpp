@@ -347,14 +347,18 @@ std::string ResourceManager::getBaseDir()
 
 std::string ResourceManager::getUserDir()
 {
-    // PHYSFS_getUserDir() is deprecated, use PHYSFS_getPrefDir() instead
-    // or fall back to platform-specific home directory
-    const char* prefDir = PHYSFS_getPrefDir("otclient", "otclient");
-    if (prefDir) {
-        return std::string(prefDir);
+    // PHYSFS_getUserDir() is deprecated but we need to maintain compatibility
+    // Suppress the deprecation warning for this specific usage
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+    const char* userDir = PHYSFS_getUserDir();
+#pragma GCC diagnostic pop
+    
+    if (userDir) {
+        return std::string(userDir);
     }
     
-    // Fallback to base directory if getPrefDir fails
+    // Fallback to base directory if getUserDir fails
     return PHYSFS_getBaseDir();
 }
 
