@@ -69,6 +69,7 @@
 #  endif
 #endif
 #include "cefphysfsresourcehandler.h"
+#include <thread>
 
 std::string GetDataURI(const std::string& data, const std::string& mime_type) {
     return "data:" + mime_type + ";base64," +
@@ -647,6 +648,8 @@ void UICEFWebView::onCEFPaint(const void* buffer, int width, int height,
 
 void UICEFWebView::onCEFAcceleratedPaint(const CefAcceleratedPaintInfo& info)
 {
+    g_logger.info("UICEFWebView: onCEFAcceleratedPaint called on thread " + std::to_string(std::hash<std::thread::id>{}(std::this_thread::get_id())));
+    
 #if defined(_WIN32) && defined(OPENGL_ES) && OPENGL_ES == 2
     HANDLE sharedHandle = static_cast<HANDLE>(info.shared_texture_handle);
     if (!sharedHandle) {
@@ -735,10 +738,28 @@ void UICEFWebView::onCEFAcceleratedPaint(const CefAcceleratedPaintInfo& info)
         m_lastHeight = getHeight();
     }
 
+    // Get EGL display - try current first, then default display
     EGLDisplay display = eglGetCurrentDisplay();
+    bool needsContextRestore = false;
+    
     if (display == EGL_NO_DISPLAY) {
-        g_logger.error("UICEFWebView: No EGL display available");
-        return;
+        g_logger.info("UICEFWebView: No current EGL display, trying default display...");
+        display = eglGetDisplay(EGL_DEFAULT_DISPLAY);
+        if (display == EGL_NO_DISPLAY) {
+            g_logger.error("UICEFWebView: Failed to get EGL default display");
+            return;
+        }
+        
+        // Initialize EGL if needed
+        EGLint major, minor;
+        if (!eglInitialize(display, &major, &minor)) {
+            g_logger.error("UICEFWebView: Failed to initialize EGL display, error=" + stdext::dec_to_hex(eglGetError()));
+            return;
+        }
+        g_logger.info("UICEFWebView: Initialized EGL " + std::to_string(major) + "." + std::to_string(minor));
+        needsContextRestore = true;
+    } else {
+        g_logger.info("UICEFWebView: Using current EGL display");
     }
 
     // Check for EGL_EXT_image_dma_buf_import extension
@@ -806,6 +827,15 @@ void UICEFWebView::onCEFAcceleratedPaint(const CefAcceleratedPaintInfo& info)
     } else {
         g_logger.info("UICEFWebView: Successfully created EGL image with format " + stdext::dec_to_hex(drm_format));
     }
+
+    // Ensure we have an OpenGL context
+    EGLContext context = eglGetCurrentContext();
+    if (context == EGL_NO_CONTEXT) {
+        g_logger.error("UICEFWebView: No OpenGL context available for texture operations");
+        eglDestroyImage(display, image);
+        return;
+    }
+    g_logger.info("UICEFWebView: OpenGL context is available");
 
     // Check for required OpenGL extension
     auto glEGLImageTargetTexture2DOESFn =
