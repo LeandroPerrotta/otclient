@@ -92,6 +92,7 @@ typedef void (APIENTRYP PFNGLDELETEMEMORYOBJECTSEXTPROC) (GLsizei n, const GLuin
 #include <errno.h>
 #include <cstring>
 #include <sys/mman.h>
+#include <fcntl.h>
 
 std::string GetDataURI(const std::string& data, const std::string& mime_type) {
     return "data:" + mime_type + ";base64," +
@@ -780,12 +781,7 @@ void UICEFWebView::onCEFAcceleratedPaint(const CefAcceleratedPaintInfo& info)
         return;
     }
     
-    g_logger.info("UICEFWebView: Both GL_EXT_memory_object and GL_EXT_memory_object_fd extensions available");
-    g_logger.info("UICEFWebView: Due to Mesa driver issues, using CPU fallback for now...");
-    
-    // Skip memory object approach due to Mesa crashes, go straight to CPU fallback
-    implementCPUFallback(info, width, height, stride);
-    return;
+    g_logger.info("UICEFWebView: Both GL_EXT_memory_object and GL_EXT_memory_object_fd extensions available - using direct OpenGL import");
 
     // Use default DRM format - we'll try different formats if this fails
     uint32_t drm_format = DRM_FORMAT_ARGB8888; // Default BGRA format
@@ -842,26 +838,36 @@ void UICEFWebView::onCEFAcceleratedPaint(const CefAcceleratedPaintInfo& info)
     }
     g_logger.info("UICEFWebView: Memory object created successfully, id=" + std::to_string(memoryObject));
     
-    // Duplicate the FD so both CEF and GL can manage their own copies
-    int duplicatedFd = dup(info.planes[0].fd);
-    if (duplicatedFd == -1) {
-        g_logger.error("UICEFWebView: Failed to duplicate FD: " + std::string(strerror(errno)));
+    // First, check if the original FD is valid
+    if (fcntl(info.planes[0].fd, F_GETFD) == -1) {
+        g_logger.error("UICEFWebView: Original FD " + std::to_string(info.planes[0].fd) + " is invalid: " + std::string(strerror(errno)));
         glDeleteMemoryObjectsEXT(1, &memoryObject);
         return;
     }
     
-    // Calculate buffer size - try to get actual size first, then fallback to stride*height
+    // Duplicate the FD so both CEF and GL can manage their own copies
+    int duplicatedFd = dup(info.planes[0].fd);
+    if (duplicatedFd == -1) {
+        g_logger.error("UICEFWebView: Failed to duplicate FD " + std::to_string(info.planes[0].fd) + ": " + std::string(strerror(errno)));
+        glDeleteMemoryObjectsEXT(1, &memoryObject);
+        return;
+    }
+    g_logger.info("UICEFWebView: Successfully duplicated FD " + std::to_string(info.planes[0].fd) + " -> " + std::to_string(duplicatedFd));
+    
+    // Calculate buffer size more conservatively
+    // Use the actual lseek size if available, otherwise calculate properly
     GLuint64 bufferSize = 0;
     off_t actualSize = lseek(duplicatedFd, 0, SEEK_END);
     if (actualSize > 0) {
         bufferSize = static_cast<GLuint64>(actualSize);
-        g_logger.info("UICEFWebView: Actual DMA buffer size: " + std::to_string(bufferSize));
+        g_logger.info("UICEFWebView: Actual DMA buffer size from lseek: " + std::to_string(bufferSize));
     } else {
-        // Fallback: calculate minimum size and round up to page boundary
-        GLuint64 minSize = static_cast<GLuint64>(stride) * static_cast<GLuint64>(height) + info.planes[0].offset;
-        bufferSize = ((minSize + 4095) / 4096) * 4096; // Round up to page size
+        // More conservative calculation - ensure we don't underestimate
+        GLuint64 minSize = static_cast<GLuint64>(stride) * static_cast<GLuint64>(height) + static_cast<GLuint64>(info.planes[0].offset);
+        // Round up to next 64KB boundary (common DMA buffer alignment)
+        bufferSize = ((minSize + 65535) / 65536) * 65536;
         g_logger.info("UICEFWebView: Using calculated buffer size: " + std::to_string(bufferSize) + 
-                      " (min=" + std::to_string(minSize) + ")");
+                      " (min=" + std::to_string(minSize) + ", rounded to 64KB boundary)");
     }
     
     g_logger.info("UICEFWebView: Importing duplicated FD=" + std::to_string(duplicatedFd) + 
@@ -910,25 +916,36 @@ void UICEFWebView::onCEFAcceleratedPaint(const CefAcceleratedPaintInfo& info)
                   ", bytes_per_pixel=" + std::to_string(bytesPerPixel) + 
                   ", padding=" + std::to_string(padding));
     
-    // Try different OpenGL internal formats - CEF likely uses BGRA like in OnPaint
-    // For glTexStorageMem2DEXT, we need proper internal formats
-    GLenum internalFormats[] = { GL_RGBA8, GL_SRGB8_ALPHA8, GL_RGBA, GL_RGB8, GL_SRGB8 };
-    const char* formatNames[] = { "GL_RGBA8", "GL_SRGB8_ALPHA8", "GL_RGBA", "GL_RGB8", "GL_SRGB8" };
+    // Try only the most compatible formats first, then fallback to others
+    // Start with GL_RGBA8 which should work with BGRA data
+    GLenum internalFormats[] = { GL_RGBA8 };
+    const char* formatNames[] = { "GL_RGBA8" };
     
-    bool textureCreated = false;
-    for (size_t i = 0; i < sizeof(internalFormats) / sizeof(internalFormats[0]); i++) {
-        g_logger.info("UICEFWebView: Trying texture format: " + std::string(formatNames[i]));
+    // Try creating texture storage with error checking at each step
+    g_logger.info("UICEFWebView: Attempting texture creation with GL_RGBA8...");
+    
+    // Try a more conservative approach - create texture storage step by step
+    glTexStorageMem2DEXT(GL_TEXTURE_2D, 1, GL_RGBA8, width, height, memoryObject, info.planes[0].offset);
+    
+    glError = glGetError();
+    bool textureCreated = (glError == GL_NO_ERROR);
+    
+    if (!textureCreated) {
+        g_logger.error("UICEFWebView: glTexStorageMem2DEXT failed with GL_RGBA8: " + std::to_string(glError));
         
-        glTexStorageMem2DEXT(GL_TEXTURE_2D, 1, internalFormats[i], width, height, memoryObject, info.planes[0].offset);
+        // Try with different parameters - maybe the issue is with levels or offset
+        g_logger.info("UICEFWebView: Trying with zero offset...");
+        glTexStorageMem2DEXT(GL_TEXTURE_2D, 1, GL_RGBA8, width, height, memoryObject, 0);
         
         glError = glGetError();
         if (glError == GL_NO_ERROR) {
-            g_logger.info("UICEFWebView: Successfully created texture with format: " + std::string(formatNames[i]));
+            g_logger.info("UICEFWebView: Success with zero offset!");
             textureCreated = true;
-            break;
         } else {
-            g_logger.info("UICEFWebView: Format " + std::string(formatNames[i]) + " failed: " + std::to_string(glError));
+            g_logger.error("UICEFWebView: Still failed with zero offset: " + std::to_string(glError));
         }
+    } else {
+        g_logger.info("UICEFWebView: Successfully created texture with GL_RGBA8!");
     }
     
     if (!textureCreated) {
