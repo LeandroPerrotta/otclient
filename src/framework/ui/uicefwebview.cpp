@@ -875,13 +875,26 @@ void UICEFWebView::initializeSharedGLContext()
     s_sharedEGLDisplay = mainDisplay;
     s_mainEGLContext = mainContext;
     
+    // Choose a simple EGL config for shared context
+    EGLConfig config;
+    EGLint numConfigs;
+    EGLint configAttribs[] = {
+        EGL_RENDERABLE_TYPE, EGL_OPENGL_BIT,
+        EGL_NONE
+    };
+    
+    if (!eglChooseConfig(mainDisplay, configAttribs, &config, 1, &numConfigs) || numConfigs == 0) {
+        g_logger.error("UICEFWebView: Failed to choose EGL config");
+        return;
+    }
+    
     // Create shared context
     EGLint contextAttribs[] = {
         EGL_CONTEXT_CLIENT_VERSION, 2,
         EGL_NONE
     };
     
-    EGLContext sharedContext = eglCreateContext(mainDisplay, eglGetCurrentConfig(), mainContext, contextAttribs);
+    EGLContext sharedContext = eglCreateContext(mainDisplay, config, mainContext, contextAttribs);
     if (sharedContext == EGL_NO_CONTEXT) {
         g_logger.error("UICEFWebView: Failed to create shared EGL context: " + stdext::dec_to_hex(eglGetError()));
         return;
@@ -1123,11 +1136,30 @@ void UICEFWebView::drawSelf(Fw::DrawPane drawPane)
                 // Texture is ready, render it
                 Rect rect = getRect();
                 
-                // Create temporary texture wrapper for OTClient's system
-                TexturePtr acceleratedTexture = TexturePtr(new Texture(m_acceleratedTextures[m_currentTextureIndex], Size(getWidth(), getHeight())));
+                // Copy accelerated texture to our CEF texture for rendering
+                if (!m_cefTexture || getWidth() != m_lastWidth || getHeight() != m_lastHeight) {
+                    m_cefTexture = TexturePtr(new Texture(Size(getWidth(), getHeight())));
+                    m_textureCreated = true;
+                    m_lastWidth = getWidth();
+                    m_lastHeight = getHeight();
+                }
+                
+                // Copy from accelerated texture to CEF texture
+                static GLuint copyFbo = 0;
+                if (copyFbo == 0) {
+                    glGenFramebuffers(1, &copyFbo);
+                }
+                
+                glBindFramebuffer(GL_READ_FRAMEBUFFER, copyFbo);
+                glFramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, m_acceleratedTextures[m_currentTextureIndex], 0);
+                
+                glBindTexture(GL_TEXTURE_2D, m_cefTexture->getId());
+                glCopyTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 0, 0, getWidth(), getHeight());
+                
+                glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
                 
                 g_painter->setOpacity(1.0);
-                g_painter->drawTexturedRect(rect, acceleratedTexture);
+                g_painter->drawTexturedRect(rect, m_cefTexture);
                 
                 g_logger.info("UICEFWebView: Rendered accelerated texture " + std::to_string(m_currentTextureIndex));
                 return;
