@@ -748,23 +748,8 @@ void UICEFWebView::onCEFAcceleratedPaint(const CefAcceleratedPaintInfo& info)
         return;
     }
 
-    // Try different DRM formats based on CEF's format info
-    uint32_t drm_format = DRM_FORMAT_ARGB8888; // Default
-    
-    // Map CEF format to DRM format if available
-    if (info.extra.format != 0) {
-        switch (info.extra.format) {
-            case 1: // BGRA8888
-                drm_format = DRM_FORMAT_ARGB8888;
-                break;
-            case 2: // RGBA8888
-                drm_format = DRM_FORMAT_ABGR8888;
-                break;
-            default:
-                g_logger.info("UICEFWebView: Unknown CEF format " + std::to_string(info.extra.format) + ", using ARGB8888");
-                break;
-        }
-    }
+    // Use default DRM format - we'll try different formats if this fails
+    uint32_t drm_format = DRM_FORMAT_ARGB8888; // Default BGRA format
 
     // Validate dimensions
     int width = info.extra.coded_size.width;
@@ -794,13 +779,32 @@ void UICEFWebView::onCEFAcceleratedPaint(const CefAcceleratedPaintInfo& info)
     EGLImage image = eglCreateImage(display, EGL_NO_CONTEXT, EGL_LINUX_DMA_BUF_EXT, nullptr, attrs);
     if (image == EGL_NO_IMAGE) {
         EGLint error = eglGetError();
-        g_logger.error("eglCreateImage failed, eglError=" + stdext::dec_to_hex(error));
+        g_logger.error("eglCreateImage failed with format " + stdext::dec_to_hex(drm_format) + ", eglError=" + stdext::dec_to_hex(error));
         
-        // Try fallback approach: copy pixel data directly if possible
-        g_logger.info("UICEFWebView: Attempting fallback pixel copy method...");
-        
-        // For now, just return - we'll implement pixel copy fallback later if needed
-        return;
+        // Try alternative formats
+        if (drm_format == DRM_FORMAT_ARGB8888) {
+            g_logger.info("UICEFWebView: Trying alternative format DRM_FORMAT_ABGR8888...");
+            const EGLAttrib attrs_alt[] = {
+                EGL_WIDTH, static_cast<EGLAttrib>(width),
+                EGL_HEIGHT, static_cast<EGLAttrib>(height),
+                EGL_LINUX_DRM_FOURCC_EXT, static_cast<EGLAttrib>(DRM_FORMAT_ABGR8888),
+                EGL_DMA_BUF_PLANE0_FD_EXT, static_cast<EGLAttrib>(info.planes[0].fd),
+                EGL_DMA_BUF_PLANE0_OFFSET_EXT, static_cast<EGLAttrib>(info.planes[0].offset),
+                EGL_DMA_BUF_PLANE0_PITCH_EXT, static_cast<EGLAttrib>(stride),
+                EGL_NONE
+            };
+            image = eglCreateImage(display, EGL_NO_CONTEXT, EGL_LINUX_DMA_BUF_EXT, nullptr, attrs_alt);
+            if (image == EGL_NO_IMAGE) {
+                g_logger.error("eglCreateImage failed with alternative format, eglError=" + stdext::dec_to_hex(eglGetError()));
+                return;
+            } else {
+                g_logger.info("UICEFWebView: Successfully created EGL image with alternative format!");
+            }
+        } else {
+            return;
+        }
+    } else {
+        g_logger.info("UICEFWebView: Successfully created EGL image with format " + stdext::dec_to_hex(drm_format));
     }
 
     // Check for required OpenGL extension
