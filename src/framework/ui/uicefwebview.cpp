@@ -780,7 +780,12 @@ void UICEFWebView::onCEFAcceleratedPaint(const CefAcceleratedPaintInfo& info)
         return;
     }
     
-    g_logger.info("UICEFWebView: Both GL_EXT_memory_object and GL_EXT_memory_object_fd extensions available - using direct OpenGL import");
+    g_logger.info("UICEFWebView: Both GL_EXT_memory_object and GL_EXT_memory_object_fd extensions available");
+    g_logger.info("UICEFWebView: Due to Mesa driver issues, using CPU fallback for now...");
+    
+    // Skip memory object approach due to Mesa crashes, go straight to CPU fallback
+    implementCPUFallback(info, width, height, stride);
+    return;
 
     // Use default DRM format - we'll try different formats if this fails
     uint32_t drm_format = DRM_FORMAT_ARGB8888; // Default BGRA format
