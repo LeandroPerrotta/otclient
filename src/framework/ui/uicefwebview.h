@@ -79,7 +79,27 @@ private:
     int m_lastHeight;
     Point m_lastMousePos;
     
+    // GPU acceleration with shared context
+#if defined(__linux__)
+    static bool s_sharedContextInitialized;
+    static void* s_sharedEGLDisplay;
+    static void* s_sharedEGLContext;
+    static void* s_mainEGLContext;
+    
+    // Double-buffering for GPU acceleration
+    GLuint m_acceleratedTextures[2];
+    GLuint m_currentTextureIndex;
+    GLsync m_textureFences[2];
+    bool m_acceleratedTexturesCreated;
+#endif
+    
     // Static tracking of all active WebViews
     static std::vector<UICEFWebView*> s_activeWebViews;
+    
+    // GPU acceleration methods
+    static void initializeSharedGLContext();
+    static void cleanupSharedGLContext();
+    void createAcceleratedTextures(int width, int height);
+    void processAcceleratedPaintGPU(const CefAcceleratedPaintInfo& info);
 #endif
 }; 

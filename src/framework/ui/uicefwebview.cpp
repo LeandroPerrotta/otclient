@@ -106,6 +106,13 @@ extern bool g_cefInitialized;
 // Static member initialization
 std::vector<UICEFWebView*> UICEFWebView::s_activeWebViews;
 
+#if defined(__linux__)
+bool UICEFWebView::s_sharedContextInitialized = false;
+void* UICEFWebView::s_sharedEGLDisplay = nullptr;
+void* UICEFWebView::s_sharedEGLContext = nullptr; 
+void* UICEFWebView::s_mainEGLContext = nullptr;
+#endif
+
 static int getCefModifiers()
 {
     int mods = 0;
@@ -372,8 +379,8 @@ public:
                 // CRITICAL: Must process immediately! CEF releases the resource after this callback returns
                 // We cannot use g_dispatcher.scheduleEvent because the FD will be invalid by then
                 if (m_webview) {
-                    g_logger.info("UICEFWebView: Processing accelerated paint immediately in CEF thread");
-                    m_webview->onCEFAcceleratedPaint(info);
+                    g_logger.info("UICEFWebView: Processing accelerated paint with GPU pipeline in CEF thread");
+                    m_webview->processAcceleratedPaintGPU(info);
                 }
             }
         }
@@ -461,10 +468,24 @@ UICEFWebView::UICEFWebView()
 
 UICEFWebView::UICEFWebView(UIWidgetPtr parent)
     : UIWebView(parent), m_browser(nullptr), m_client(nullptr), m_cefTexture(nullptr), m_cefImage(nullptr), m_textureCreated(false), m_lastWidth(0), m_lastHeight(0), m_lastMousePos(0, 0)
+#if defined(__linux__)
+    , m_currentTextureIndex(0), m_acceleratedTexturesCreated(false)
+#endif
 {
     setSize(Size(800, 600)); // Set initial size
     setDraggable(true); // Enable dragging for scrollbar interaction
     s_activeWebViews.push_back(this);
+    
+#if defined(__linux__)
+    // Initialize GPU acceleration resources
+    m_acceleratedTextures[0] = 0;
+    m_acceleratedTextures[1] = 0;
+    m_textureFences[0] = nullptr;
+    m_textureFences[1] = nullptr;
+    
+    // Initialize shared context for CEF thread
+    initializeSharedGLContext();
+#endif
 }
 
 UICEFWebView::~UICEFWebView()
@@ -833,6 +854,174 @@ void UICEFWebView::onCEFAcceleratedPaint(const CefAcceleratedPaintInfo& info)
 #endif
 }
 
+void UICEFWebView::initializeSharedGLContext()
+{
+#if defined(__linux__)
+    if (s_sharedContextInitialized) {
+        return;
+    }
+    
+    g_logger.info("UICEFWebView: Initializing shared EGL context for CEF thread...");
+    
+    // Get current main thread context
+    EGLDisplay mainDisplay = eglGetCurrentDisplay();
+    EGLContext mainContext = eglGetCurrentContext();
+    
+    if (mainDisplay == EGL_NO_DISPLAY || mainContext == EGL_NO_CONTEXT) {
+        g_logger.error("UICEFWebView: No main EGL context available for sharing");
+        return;
+    }
+    
+    s_sharedEGLDisplay = mainDisplay;
+    s_mainEGLContext = mainContext;
+    
+    // Create shared context
+    EGLint contextAttribs[] = {
+        EGL_CONTEXT_CLIENT_VERSION, 2,
+        EGL_NONE
+    };
+    
+    EGLContext sharedContext = eglCreateContext(mainDisplay, eglGetCurrentConfig(), mainContext, contextAttribs);
+    if (sharedContext == EGL_NO_CONTEXT) {
+        g_logger.error("UICEFWebView: Failed to create shared EGL context: " + stdext::dec_to_hex(eglGetError()));
+        return;
+    }
+    
+    s_sharedEGLContext = sharedContext;
+    s_sharedContextInitialized = true;
+    
+    g_logger.info("UICEFWebView: Shared EGL context created successfully");
+#endif
+}
+
+void UICEFWebView::cleanupSharedGLContext()
+{
+#if defined(__linux__)
+    if (s_sharedContextInitialized && s_sharedEGLContext) {
+        eglDestroyContext((EGLDisplay)s_sharedEGLDisplay, (EGLContext)s_sharedEGLContext);
+        s_sharedEGLContext = nullptr;
+        s_sharedContextInitialized = false;
+        g_logger.info("UICEFWebView: Shared EGL context cleaned up");
+    }
+#endif
+}
+
+void UICEFWebView::processAcceleratedPaintGPU(const CefAcceleratedPaintInfo& info)
+{
+#if defined(__linux__)
+    // This runs in CEF UI thread with shared OpenGL context
+    
+    if (!s_sharedContextInitialized) {
+        g_logger.error("UICEFWebView: Shared GL context not initialized");
+        return;
+    }
+    
+    // Make shared context current for this thread
+    EGLSurface currentSurface = eglGetCurrentSurface(EGL_DRAW);
+    if (!eglMakeCurrent((EGLDisplay)s_sharedEGLDisplay, currentSurface, currentSurface, (EGLContext)s_sharedEGLContext)) {
+        g_logger.error("UICEFWebView: Failed to make shared context current: " + stdext::dec_to_hex(eglGetError()));
+        return;
+    }
+    
+    int width = info.extra.coded_size.width;
+    int height = info.extra.coded_size.height;
+    int stride = info.planes[0].stride;
+    
+    g_logger.info("UICEFWebView: GPU processing in CEF thread - " + std::to_string(width) + "x" + std::to_string(height));
+    
+    // Create double-buffered textures if needed
+    createAcceleratedTextures(width, height);
+    
+    // Get next texture index for double buffering
+    int nextIndex = (m_currentTextureIndex + 1) % 2;
+    
+    // Wait for previous frame to complete if needed
+    if (m_textureFences[nextIndex]) {
+        GLenum result = glClientWaitSync(m_textureFences[nextIndex], GL_SYNC_FLUSH_COMMANDS_BIT, 0);
+        if (result == GL_WAIT_FAILED) {
+            g_logger.warning("UICEFWebView: Fence wait failed");
+        }
+        glDeleteSync(m_textureFences[nextIndex]);
+        m_textureFences[nextIndex] = nullptr;
+    }
+    
+    // Import DMA buffer and copy to our persistent texture
+    // [Implementation of EGL image import goes here - using the working approach]
+    
+    // For now, use the working CPU approach but in the correct thread
+    void* mapped = mmap(nullptr, stride * height, PROT_READ, MAP_SHARED, info.planes[0].fd, info.planes[0].offset);
+    if (mapped == MAP_FAILED) {
+        g_logger.error("UICEFWebView: Failed to mmap DMA buffer: " + std::string(strerror(errno)));
+        return;
+    }
+    
+    // Upload directly to persistent texture
+    glBindTexture(GL_TEXTURE_2D, m_acceleratedTextures[nextIndex]);
+    
+    if (stride == width * 4) {
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_BGRA, GL_UNSIGNED_BYTE, mapped);
+    } else {
+        // Copy removing padding
+        std::vector<uint8_t> pixelData(width * height * 4);
+        uint8_t* src = static_cast<uint8_t*>(mapped);
+        for (int y = 0; y < height; y++) {
+            memcpy(pixelData.data() + y * width * 4, src + y * stride, width * 4);
+        }
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_BGRA, GL_UNSIGNED_BYTE, pixelData.data());
+    }
+    
+    munmap(mapped, stride * height);
+    
+    // Create fence to signal completion
+    m_textureFences[nextIndex] = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
+    
+    // Update current index
+    m_currentTextureIndex = nextIndex;
+    
+    g_logger.info("UICEFWebView: GPU processing completed, texture " + std::to_string(nextIndex) + " ready");
+    
+    // Restore previous context
+    eglMakeCurrent((EGLDisplay)s_sharedEGLDisplay, currentSurface, currentSurface, (EGLContext)s_mainEGLContext);
+#endif
+}
+
+void UICEFWebView::createAcceleratedTextures(int width, int height)
+{
+#if defined(__linux__)
+    if (!m_acceleratedTexturesCreated || width != m_lastWidth || height != m_lastHeight) {
+        // Clean up old textures
+        if (m_acceleratedTexturesCreated) {
+            glDeleteTextures(2, m_acceleratedTextures);
+            for (int i = 0; i < 2; i++) {
+                if (m_textureFences[i]) {
+                    glDeleteSync(m_textureFences[i]);
+                    m_textureFences[i] = nullptr;
+                }
+            }
+        }
+        
+        // Create new textures
+        glGenTextures(2, m_acceleratedTextures);
+        for (int i = 0; i < 2; i++) {
+            glBindTexture(GL_TEXTURE_2D, m_acceleratedTextures[i]);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        }
+        
+        m_acceleratedTexturesCreated = true;
+        m_lastWidth = width;
+        m_lastHeight = height;
+        
+        g_logger.info("UICEFWebView: Created double-buffered textures " + 
+                      std::to_string(m_acceleratedTextures[0]) + " and " + 
+                      std::to_string(m_acceleratedTextures[1]));
+    }
+#endif
+}
+
 void UICEFWebView::implementCPUFallback(const CefAcceleratedPaintInfo& info, int width, int height, int stride)
 {
 #if defined(__linux__)
@@ -924,7 +1113,30 @@ void UICEFWebView::drawSelf(Fw::DrawPane drawPane)
 {
     // Render CEF content using multi-threaded rendering
     
-    // Render only CEF content - no UIWidget background
+#if defined(__linux__)
+    // Check if we have accelerated textures ready
+    if (m_acceleratedTexturesCreated && m_acceleratedTextures[m_currentTextureIndex] != 0) {
+        // Check if current texture is ready (fence signaled)
+        if (m_textureFences[m_currentTextureIndex]) {
+            GLenum result = glClientWaitSync(m_textureFences[m_currentTextureIndex], 0, 0);
+            if (result == GL_ALREADY_SIGNALED || result == GL_CONDITION_SATISFIED) {
+                // Texture is ready, render it
+                Rect rect = getRect();
+                
+                // Create temporary texture wrapper for OTClient's system
+                TexturePtr acceleratedTexture = TexturePtr(new Texture(m_acceleratedTextures[m_currentTextureIndex], Size(getWidth(), getHeight())));
+                
+                g_painter->setOpacity(1.0);
+                g_painter->drawTexturedRect(rect, acceleratedTexture);
+                
+                g_logger.info("UICEFWebView: Rendered accelerated texture " + std::to_string(m_currentTextureIndex));
+                return;
+            }
+        }
+    }
+#endif
+    
+    // Fallback to regular CEF texture or UIWidget background
     if (m_textureCreated && m_cefTexture) {
         Rect rect = getRect();
         
