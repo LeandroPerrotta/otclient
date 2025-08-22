@@ -382,9 +382,7 @@ public:
             }
             if (type == PET_VIEW) {
                 // CRITICAL: Must process immediately! CEF releases the resource after this callback returns
-                // We cannot use g_dispatcher.scheduleEvent because the FD will be invalid by then
                 if (m_webview) {
-                    g_logger.info("UICEFWebView: Processing accelerated paint with GPU pipeline in CEF thread");
                     m_webview->processAcceleratedPaintGPU(info);
                 }
             }
@@ -481,7 +479,6 @@ UICEFWebView::UICEFWebView()
     m_textureFences[1] = nullptr;
     
     // Initialize EGL sidecar for DMA buffer import
-    g_logger.info("UICEFWebView: Constructor (no parent) - initializing EGL sidecar...");
     initializeEGLSidecar();
 #endif
 }
@@ -504,7 +501,6 @@ UICEFWebView::UICEFWebView(UIWidgetPtr parent)
     m_textureFences[1] = nullptr;
     
     // Initialize EGL sidecar for DMA buffer import
-    g_logger.info("UICEFWebView: Constructor - initializing EGL sidecar...");
     initializeEGLSidecar();
 #endif
 }
@@ -712,11 +708,6 @@ void UICEFWebView::onCEFPaint(const void* buffer, int width, int height,
 
 void UICEFWebView::onCEFAcceleratedPaint(const CefAcceleratedPaintInfo& info)
 {
-    g_logger.info("UICEFWebView: onCEFAcceleratedPaint called on thread " + std::to_string(std::hash<std::thread::id>{}(std::this_thread::get_id())));
-    
-    // CRITICAL: We must process the DMA buffer immediately because CEF will release it after this function returns
-    // We cannot schedule this for later execution - the FD will be invalid by then
-    
 #if defined(_WIN32) && defined(OPENGL_ES) && OPENGL_ES == 2
     HANDLE sharedHandle = static_cast<HANDLE>(info.shared_texture_handle);
     if (!sharedHandle) {
@@ -786,31 +777,16 @@ void UICEFWebView::onCEFAcceleratedPaint(const CefAcceleratedPaintInfo& info)
 #elif defined(__linux__)
     // Validate basic requirements
     if (info.plane_count <= 0 || info.planes[0].fd == -1) {
-        g_logger.warning("UICEFWebView: No shared texture handle available");
         return;
     }
-
-    // Log detailed info for debugging
-    g_logger.info("UICEFWebView: Accelerated paint - plane_count=" + std::to_string(info.plane_count));
-    g_logger.info("UICEFWebView: Plane 0 - fd=" + std::to_string(info.planes[0].fd) + 
-                  ", offset=" + std::to_string(info.planes[0].offset) + 
-                  ", stride=" + std::to_string(info.planes[0].stride));
-    g_logger.info("UICEFWebView: coded_size=" + std::to_string(info.extra.coded_size.width) + 
-                  "x" + std::to_string(info.extra.coded_size.height));
 
     // IMMEDIATE PROCESSING: Copy DMA buffer data to CPU memory NOW before CEF releases it
     int width = info.extra.coded_size.width;
     int height = info.extra.coded_size.height;
     int stride = info.planes[0].stride;
     
-    // Validate parameters
-    if (width <= 0 || height <= 0 || width > 8192 || height > 8192) {
-        g_logger.error("UICEFWebView: Invalid dimensions " + std::to_string(width) + "x" + std::to_string(height));
-        return;
-    }
-    
-    if (stride <= 0 || stride < width * 4) {
-        g_logger.error("UICEFWebView: Invalid stride " + std::to_string(stride) + " for width " + std::to_string(width));
+    // Quick validation
+    if (width <= 0 || height <= 0 || width > 8192 || height > 8192 || stride <= 0) {
         return;
     }
     
@@ -818,36 +794,28 @@ void UICEFWebView::onCEFAcceleratedPaint(const CefAcceleratedPaintInfo& info)
     size_t mapSize = stride * height;
     void* mapped = mmap(nullptr, mapSize, PROT_READ, MAP_SHARED, info.planes[0].fd, info.planes[0].offset);
     if (mapped == MAP_FAILED) {
-        g_logger.error("UICEFWebView: Failed to mmap DMA buffer: " + std::string(strerror(errno)));
         return;
     }
-    
-    g_logger.info("UICEFWebView: Successfully mapped DMA buffer immediately");
     
     // Copy pixel data to our own buffer (removing stride padding)
     std::vector<uint8_t> pixelData(width * height * 4);
     uint8_t* src = static_cast<uint8_t*>(mapped);
     uint8_t* dst = pixelData.data();
     
-    int padding = stride - (width * 4);
-    
     if (stride == width * 4) {
         // No padding, direct copy
         memcpy(dst, src, width * height * 4);
-        g_logger.info("UICEFWebView: Direct copy (no padding)");
     } else {
         // Copy row by row to remove padding
         for (int y = 0; y < height; y++) {
             memcpy(dst + y * width * 4, src + y * stride, width * 4);
         }
-        g_logger.info("UICEFWebView: Row-by-row copy (removed " + std::to_string(padding) + " bytes padding per row)");
     }
     
     // Unmap immediately - we have our copy now
     munmap(mapped, mapSize);
-    g_logger.info("UICEFWebView: DMA buffer unmapped, data copied to local buffer");
     
-    // NOW schedule the OpenGL upload on the main thread with our copied data
+    // Schedule the OpenGL upload on the main thread with our copied data
     g_dispatcher.scheduleEvent([this, pixelData = std::move(pixelData), width, height]() mutable {
         if (!m_textureCreated || getWidth() != m_lastWidth || getHeight() != m_lastHeight || !m_cefTexture) {
             m_cefTexture = TexturePtr(new Texture(Size(getWidth(), getHeight())));
@@ -859,13 +827,6 @@ void UICEFWebView::onCEFAcceleratedPaint(const CefAcceleratedPaintInfo& info)
         // Upload to OpenGL texture on main thread with OpenGL context
         glBindTexture(GL_TEXTURE_2D, m_cefTexture->getId());
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_BGRA, GL_UNSIGNED_BYTE, pixelData.data());
-        
-        GLenum glError = glGetError();
-        if (glError == GL_NO_ERROR) {
-            g_logger.info("UICEFWebView: Successfully uploaded accelerated frame via immediate processing!");
-        } else {
-            g_logger.error("UICEFWebView: OpenGL upload failed: " + std::to_string(glError));
-        }
     }, 0);
 
         // The rest of the function is no longer needed - we process immediately above
@@ -958,33 +919,20 @@ void UICEFWebView::initializeEGLSidecar()
 {
 #if defined(__linux__)
     if (s_eglSidecarInitialized) {
-        g_logger.info("UICEFWebView: EGL sidecar already initialized");
         return;
     }
     
-    g_logger.info("UICEFWebView: Initializing EGL sidecar for DMA buffer import...");
-    
-    // Create EGL display for sidecar - try default display first
+    // Create EGL display for sidecar
     EGLDisplay eglDisplay = eglGetDisplay(EGL_DEFAULT_DISPLAY);
     if (eglDisplay == EGL_NO_DISPLAY) {
-        g_logger.error("UICEFWebView: Failed to get EGL default display");
-        return;
-    }
-    g_logger.info("UICEFWebView: Got EGL default display");
-    
-    if (eglDisplay == EGL_NO_DISPLAY) {
-        g_logger.error("UICEFWebView: Failed to get EGL display");
         return;
     }
     
     // Initialize EGL
     EGLint major, minor;
     if (!eglInitialize(eglDisplay, &major, &minor)) {
-        g_logger.error("UICEFWebView: Failed to initialize EGL: " + stdext::dec_to_hex(eglGetError()));
         return;
     }
-    
-    g_logger.info("UICEFWebView: EGL sidecar initialized " + std::to_string(major) + "." + std::to_string(minor));
     
     // Check for required extensions
     const char* extensions = eglQueryString(eglDisplay, EGL_EXTENSIONS);
@@ -992,14 +940,18 @@ void UICEFWebView::initializeEGLSidecar()
         !strstr(extensions, "EGL_EXT_image_dma_buf_import") ||
         !strstr(extensions, "EGL_KHR_image_base") ||
         !strstr(extensions, "EGL_KHR_gl_texture_2D_image")) {
-        g_logger.error("UICEFWebView: Required EGL extensions not available");
         return;
     }
     
-    g_logger.info("UICEFWebView: EGL extensions available: EGL_EXT_image_dma_buf_import, EGL_KHR_image_base, EGL_KHR_gl_texture_2D_image");
-    
     s_eglDisplay = eglDisplay;
     s_eglSidecarInitialized = true;
+    
+    // Log success only once
+    static bool logged = false;
+    if (!logged) {
+        g_logger.info("UICEFWebView: EGL sidecar initialized successfully");
+        logged = true;
+    }
 #endif
 }
 
@@ -1036,14 +988,9 @@ void UICEFWebView::cleanupGPUResources()
 void UICEFWebView::processAcceleratedPaintGPU(const CefAcceleratedPaintInfo& info)
 {
 #if defined(__linux__)
-    // This runs in CEF UI thread - must process immediately before CEF releases resources
-    
     if (!s_eglSidecarInitialized) {
-        g_logger.error("UICEFWebView: EGL sidecar not initialized");
         return;
     }
-    
-    g_logger.info("UICEFWebView: Processing DMA buffer immediately in CEF thread");
     
     // Extract parameters
     const int fd = info.planes[0].fd;
@@ -1052,19 +999,11 @@ void UICEFWebView::processAcceleratedPaintGPU(const CefAcceleratedPaintInfo& inf
     const int stride = info.planes[0].stride;
     const int offset = info.planes[0].offset;
     
-    g_logger.info("UICEFWebView: DMA buffer - " + std::to_string(width) + "x" + std::to_string(height) + 
-                  ", fd=" + std::to_string(fd) + ", stride=" + std::to_string(stride));
-    
-    // IMMEDIATE PROCESSING: Copy DMA buffer data NOW before CEF releases it
-    // We'll do the EGLImage import and immediately copy to CPU memory
-    // Then schedule OpenGL upload on main thread
-    
-    // Get EGL function pointers
-    auto eglCreateImageKHRFn = (PFNEGLCREATEIMAGEKHRPROC)eglGetProcAddress("eglCreateImageKHR");
-    auto eglDestroyImageKHRFn = (PFNEGLDESTROYIMAGEKHRPROC)eglGetProcAddress("eglDestroyImageKHR");
+    // Get EGL function pointers (cache them)
+    static auto eglCreateImageKHRFn = (PFNEGLCREATEIMAGEKHRPROC)eglGetProcAddress("eglCreateImageKHR");
+    static auto eglDestroyImageKHRFn = (PFNEGLDESTROYIMAGEKHRPROC)eglGetProcAddress("eglDestroyImageKHR");
     
     if (!eglCreateImageKHRFn || !eglDestroyImageKHRFn) {
-        g_logger.error("UICEFWebView: EGL KHR image functions not available");
         return;
     }
     
@@ -1093,12 +1032,8 @@ void UICEFWebView::processAcceleratedPaintGPU(const CefAcceleratedPaintInfo& inf
         };
         img = eglCreateImageKHRFn((EGLDisplay)s_eglDisplay, EGL_NO_CONTEXT, EGL_LINUX_DMA_BUF_EXT, nullptr, imgAttrsAlt);
         if (img == EGL_NO_IMAGE_KHR) {
-            g_logger.error("UICEFWebView: Failed to create EGLImage from DMA buffer: " + stdext::dec_to_hex(eglGetError()));
             return;
         }
-        g_logger.info("UICEFWebView: Created EGLImage with alternative format ABGR8888");
-    } else {
-        g_logger.info("UICEFWebView: Created EGLImage with format ARGB8888");
     }
     
     // 2) Since we don't have OpenGL context in CEF thread, use CPU fallback with EGLImage
@@ -1108,12 +1043,9 @@ void UICEFWebView::processAcceleratedPaintGPU(const CefAcceleratedPaintInfo& inf
     size_t mapSize = stride * height;
     void* mapped = mmap(nullptr, mapSize, PROT_READ, MAP_SHARED, fd, offset);
     if (mapped == MAP_FAILED) {
-        g_logger.error("UICEFWebView: Failed to mmap DMA buffer: " + std::string(strerror(errno)));
         eglDestroyImageKHRFn((EGLDisplay)s_eglDisplay, img);
         return;
     }
-    
-    g_logger.info("UICEFWebView: Successfully mapped DMA buffer");
     
     // Copy pixel data to our own buffer (removing stride padding)
     std::vector<uint8_t> pixelData(width * height * 4);
@@ -1123,19 +1055,16 @@ void UICEFWebView::processAcceleratedPaintGPU(const CefAcceleratedPaintInfo& inf
     if (stride == width * 4) {
         // No padding, direct copy
         memcpy(dst, src, width * height * 4);
-        g_logger.info("UICEFWebView: Direct copy (no padding)");
     } else {
         // Copy row by row to remove padding
         for (int y = 0; y < height; y++) {
             memcpy(dst + y * width * 4, src + y * stride, width * 4);
         }
-        g_logger.info("UICEFWebView: Row-by-row copy (removed padding)");
     }
     
     // 3) Immediate cleanup - we have our copy now
     munmap(mapped, mapSize);
     eglDestroyImageKHRFn((EGLDisplay)s_eglDisplay, img);
-    g_logger.info("UICEFWebView: DMA buffer processed and cleaned up");
     
     // 4) Schedule OpenGL upload on main thread with copied data
     g_dispatcher.scheduleEvent([this, pixelData = std::move(pixelData), width, height]() mutable {
@@ -1150,12 +1079,15 @@ void UICEFWebView::processAcceleratedPaintGPU(const CefAcceleratedPaintInfo& inf
         glBindTexture(GL_TEXTURE_2D, m_cefTexture->getId());
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_BGRA, GL_UNSIGNED_BYTE, pixelData.data());
         
-        GLenum glError = glGetError();
-        if (glError == GL_NO_ERROR) {
-            g_logger.info("UICEFWebView: Successfully uploaded accelerated frame via EGL sidecar!");
-        } else {
-            g_logger.error("UICEFWebView: OpenGL upload failed: " + std::to_string(glError));
-        }
+                 // Log success only occasionally to avoid spam
+         static int successCount = 0;
+         GLenum glError = glGetError();
+         if (glError == GL_NO_ERROR) {
+             successCount++;
+             if (successCount == 1 || successCount % 100 == 0) {
+                 g_logger.info("UICEFWebView: Accelerated frame uploaded successfully (count: " + std::to_string(successCount) + ")");
+             }
+         }
     }, 0);
 #endif
 }
