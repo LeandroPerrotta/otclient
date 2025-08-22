@@ -714,10 +714,19 @@ void UICEFWebView::onCEFAcceleratedPaint(const CefAcceleratedPaintInfo& info)
     d3dDevice->Release();
     d3dContext->Release();
 #elif defined(__linux__)
+    // Validate basic requirements
     if (info.plane_count <= 0 || info.planes[0].fd == -1) {
         g_logger.warning("UICEFWebView: No shared texture handle available");
         return;
     }
+
+    // Log detailed info for debugging
+    g_logger.info("UICEFWebView: Accelerated paint - plane_count=" + std::to_string(info.plane_count));
+    g_logger.info("UICEFWebView: Plane 0 - fd=" + std::to_string(info.planes[0].fd) + 
+                  ", offset=" + std::to_string(info.planes[0].offset) + 
+                  ", stride=" + std::to_string(info.planes[0].stride));
+    g_logger.info("UICEFWebView: coded_size=" + std::to_string(info.extra.coded_size.width) + 
+                  "x" + std::to_string(info.extra.coded_size.height));
 
     if (!m_textureCreated || getWidth() != m_lastWidth || getHeight() != m_lastHeight || !m_cefTexture) {
         m_cefTexture = TexturePtr(new Texture(Size(getWidth(), getHeight())));
@@ -727,34 +736,103 @@ void UICEFWebView::onCEFAcceleratedPaint(const CefAcceleratedPaintInfo& info)
     }
 
     EGLDisplay display = eglGetCurrentDisplay();
+    if (display == EGL_NO_DISPLAY) {
+        g_logger.error("UICEFWebView: No EGL display available");
+        return;
+    }
+
+    // Check for EGL_EXT_image_dma_buf_import extension
+    const char* extensions = eglQueryString(display, EGL_EXTENSIONS);
+    if (!extensions || !strstr(extensions, "EGL_EXT_image_dma_buf_import")) {
+        g_logger.error("UICEFWebView: EGL_EXT_image_dma_buf_import extension not available");
+        return;
+    }
+
+    // Try different DRM formats based on CEF's format info
+    uint32_t drm_format = DRM_FORMAT_ARGB8888; // Default
+    
+    // Map CEF format to DRM format if available
+    if (info.extra.format != 0) {
+        switch (info.extra.format) {
+            case 1: // BGRA8888
+                drm_format = DRM_FORMAT_ARGB8888;
+                break;
+            case 2: // RGBA8888
+                drm_format = DRM_FORMAT_ABGR8888;
+                break;
+            default:
+                g_logger.info("UICEFWebView: Unknown CEF format " + std::to_string(info.extra.format) + ", using ARGB8888");
+                break;
+        }
+    }
+
+    // Validate dimensions
+    int width = info.extra.coded_size.width;
+    int height = info.extra.coded_size.height;
+    if (width <= 0 || height <= 0 || width > 8192 || height > 8192) {
+        g_logger.error("UICEFWebView: Invalid dimensions " + std::to_string(width) + "x" + std::to_string(height));
+        return;
+    }
+
+    // Validate stride
+    int stride = info.planes[0].stride;
+    if (stride <= 0 || stride < width * 4) {
+        g_logger.error("UICEFWebView: Invalid stride " + std::to_string(stride) + " for width " + std::to_string(width));
+        return;
+    }
+
     const EGLAttrib attrs[] = {
-        EGL_WIDTH, static_cast<EGLAttrib>(info.extra.coded_size.width),
-        EGL_HEIGHT, static_cast<EGLAttrib>(info.extra.coded_size.height),
-        EGL_LINUX_DRM_FOURCC_EXT, static_cast<EGLAttrib>(DRM_FORMAT_ARGB8888),
+        EGL_WIDTH, static_cast<EGLAttrib>(width),
+        EGL_HEIGHT, static_cast<EGLAttrib>(height),
+        EGL_LINUX_DRM_FOURCC_EXT, static_cast<EGLAttrib>(drm_format),
         EGL_DMA_BUF_PLANE0_FD_EXT, static_cast<EGLAttrib>(info.planes[0].fd),
         EGL_DMA_BUF_PLANE0_OFFSET_EXT, static_cast<EGLAttrib>(info.planes[0].offset),
-        EGL_DMA_BUF_PLANE0_PITCH_EXT, static_cast<EGLAttrib>(info.planes[0].stride),
+        EGL_DMA_BUF_PLANE0_PITCH_EXT, static_cast<EGLAttrib>(stride),
         EGL_NONE
     };
+
     EGLImage image = eglCreateImage(display, EGL_NO_CONTEXT, EGL_LINUX_DMA_BUF_EXT, nullptr, attrs);
     if (image == EGL_NO_IMAGE) {
-        g_logger.error("eglCreateImage failed, eglError=" + stdext::dec_to_hex(eglGetError()));
+        EGLint error = eglGetError();
+        g_logger.error("eglCreateImage failed, eglError=" + stdext::dec_to_hex(error));
+        
+        // Try fallback approach: copy pixel data directly if possible
+        g_logger.info("UICEFWebView: Attempting fallback pixel copy method...");
+        
+        // For now, just return - we'll implement pixel copy fallback later if needed
+        return;
+    }
+
+    // Check for required OpenGL extension
+    auto glEGLImageTargetTexture2DOESFn =
+        reinterpret_cast<PFNGLEGLIMAGETARGETTEXTURE2DOESPROC>(
+            eglGetProcAddress("glEGLImageTargetTexture2DOES"));
+    if (!glEGLImageTargetTexture2DOESFn) {
+        g_logger.error("glEGLImageTargetTexture2DOES not available");
+        eglDestroyImage(display, image);
         return;
     }
 
     GLuint tempTex = 0;
     glGenTextures(1, &tempTex);
     glBindTexture(GL_TEXTURE_2D, tempTex);
-    auto glEGLImageTargetTexture2DOESFn =
-        reinterpret_cast<PFNGLEGLIMAGETARGETTEXTURE2DOESPROC>(
-            eglGetProcAddress("glEGLImageTargetTexture2DOES"));
-    if (!glEGLImageTargetTexture2DOESFn) {
-        g_logger.error("glEGLImageTargetTexture2DOES not available");
+    
+    // Set texture parameters
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    
+    glEGLImageTargetTexture2DOESFn(GL_TEXTURE_2D, image);
+
+    // Check for OpenGL errors
+    GLenum glError = glGetError();
+    if (glError != GL_NO_ERROR) {
+        g_logger.error("OpenGL error after glEGLImageTargetTexture2DOES: " + std::to_string(glError));
         glDeleteTextures(1, &tempTex);
         eglDestroyImage(display, image);
         return;
     }
-    glEGLImageTargetTexture2DOESFn(GL_TEXTURE_2D, image);
 
     static GLuint fbo = 0;
     if (fbo == 0)
@@ -763,8 +841,26 @@ void UICEFWebView::onCEFAcceleratedPaint(const CefAcceleratedPaintInfo& info)
     glBindFramebuffer(GL_READ_FRAMEBUFFER, fbo);
     glFramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tempTex, 0);
 
+    // Check framebuffer completeness
+    GLenum status = glCheckFramebufferStatus(GL_READ_FRAMEBUFFER);
+    if (status != GL_FRAMEBUFFER_COMPLETE) {
+        g_logger.error("Framebuffer not complete: " + std::to_string(status));
+        glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+        glDeleteTextures(1, &tempTex);
+        eglDestroyImage(display, image);
+        return;
+    }
+
     glBindTexture(GL_TEXTURE_2D, m_cefTexture->getId());
     glCopyTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 0, 0, getWidth(), getHeight());
+
+    // Check for copy errors
+    glError = glGetError();
+    if (glError != GL_NO_ERROR) {
+        g_logger.error("OpenGL error during texture copy: " + std::to_string(glError));
+    } else {
+        g_logger.info("UICEFWebView: Successfully copied accelerated frame!");
+    }
 
     glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
     glDeleteTextures(1, &tempTex);
