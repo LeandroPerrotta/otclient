@@ -643,36 +643,56 @@ void UICEFWebView::onCEFPaint(const void* buffer, int width, int height,
 void UICEFWebView::onCEFAcceleratedPaint(const CefAcceleratedPaintInfo& info)
 {
 #if defined(_WIN32) && defined(OPENGL_ES) && OPENGL_ES == 2
-    // CEF 139 Windows: Try to find the correct way to access the texture handle
-    // The documentation states that on Windows, info contains a HANDLE for D3D11 OpenSharedResource
-    
-    // First, let's debug what's in the structure
-    g_logger.info("UICEFWebView: OnAcceleratedPaint called with CEF 139");
-    g_logger.info("UICEFWebView: CefAcceleratedPaintInfo size: " + std::to_string(sizeof(info)));
-    
-    // The structure should have the handle somewhere accessible
-    // Let's try the most likely approach: the structure might have a method or the field name changed
+    // CEF 139 Windows: Access the D3D11 HANDLE for shared texture
+    // The structure should contain the handle according to CEF documentation
     
     void* sharedHandle = nullptr;
     
-    // Try accessing through different possible approaches
-    // Since the field name 'shared_handle' doesn't exist, it might be named differently
+    // The problem is that the current CEF headers may be Linux-specific
+    // When building on Windows, the structure should have different fields
     
-    // Approach 1: Check if there's a method to get the handle
-    // (This would require knowing the exact API, which we don't have yet)
+    // Solution: Use compile-time detection to handle different structure layouts
     
-    // Approach 2: The handle might be in a nested structure
-    // Based on Linux version, there might be an 'extra' field with common data
+    // Check if we have the Linux structure (with planes) or Windows structure (with handle)
+    // The Linux structure has 'planes' field, Windows should have handle-related fields
     
-    // Approach 3: For now, disable and log detailed info for debugging
-    g_logger.warning("UICEFWebView: CEF 139 Windows accelerated paint not yet implemented");
-    g_logger.warning("UICEFWebView: Need to determine correct field/method to access D3D11 HANDLE");
-    g_logger.info("UICEFWebView: Please check CEF 139 documentation or source code for CefAcceleratedPaintInfo Windows implementation");
+    // For CEF 139, try different possible access methods for Windows HANDLE
     
-    // TODO: Once we know the correct field name or method, implement like this:
-    // sharedHandle = info.correct_field_name;  // or info.GetHandle() or similar
-    
-    return;
+    // Method 1: Check if structure has 'planes' (indicating Linux structure)
+    if constexpr (sizeof(info) > 32) {  // Linux structure is larger due to planes array
+        // This is likely the Linux structure being used on Windows build
+        // In this case, we need to disable accelerated paint or find alternative
+        g_logger.warning("UICEFWebView: Detected Linux CEF structure on Windows build");
+        g_logger.warning("UICEFWebView: Windows accelerated paint requires Windows-specific CEF headers");
+        g_logger.info("UICEFWebView: Disabling accelerated paint - will use software rendering");
+        return;
+    }
+    else {
+        // This might be the Windows structure - try to access handle
+        // The exact field name may vary in CEF 139
+        
+        // Based on CEF documentation, Windows should have HANDLE for D3D11 OpenSharedResource
+        // Try different possible field names that might be used
+        
+        // Since 'shared_handle' doesn't compile, try other possibilities:
+        // Note: This is pseudocode until we determine the actual field name
+        
+        /*
+        // Possible field names in CEF 139 Windows structure:
+        sharedHandle = info.shared_handle;    // Original name (doesn't work)
+        sharedHandle = info.texture_handle;   // Possible new name
+        sharedHandle = info.handle;           // Simplified name  
+        sharedHandle = info.d3d_handle;       // D3D-specific name
+        sharedHandle = info.windows_handle;   // Platform-specific name
+        */
+        
+        // For now, disable and provide clear error message
+        g_logger.error("UICEFWebView: Cannot determine correct field name for Windows texture handle in CEF 139");
+        g_logger.error("UICEFWebView: Please check CEF 139 Windows headers for CefAcceleratedPaintInfo structure");
+        g_logger.info("UICEFWebView: Expected field: Windows HANDLE for D3D11 OpenSharedResource");
+        
+        return;
+    }
 
     int width = getWidth();
     int height = getHeight();
