@@ -57,12 +57,13 @@
 #  define EGL_EGLEXT_PROTOTYPES
 #  include <EGL/egl.h>
 #  include <EGL/eglext.h>
+#  include <GL/glx.h>
 #  include <drm/drm_fourcc.h>
 
 // OpenGL memory object extension defines
 #ifndef GL_EXT_memory_object_fd
 #define GL_EXT_memory_object_fd 1
-#define GL_HANDLE_TYPE_OPAQUE_FD_EXT      0x9586
+#define GL_HANDLE_TYPE_OPAQUE_FD          0x9586
 typedef void (APIENTRYP PFNGLCREATEMEMORYOBJECTSEXTPROC) (GLsizei n, GLuint *memoryObjects);
 typedef void (APIENTRYP PFNGLIMPORTMEMORYFDEXTPROC) (GLuint memory, GLuint64 size, GLenum handleType, GLint fd);
 typedef void (APIENTRYP PFNGLTEXSTORAGEMEM2DEXTPROC) (GLenum target, GLsizei levels, GLenum internalFormat, GLsizei width, GLsizei height, GLuint memory, GLuint64 offset);
@@ -80,6 +81,9 @@ typedef void (APIENTRYP PFNGLDELETEMEMORYOBJECTSEXTPROC) (GLsizei n, const GLuin
 #endif
 #include "cefphysfsresourcehandler.h"
 #include <thread>
+#include <unistd.h>
+#include <errno.h>
+#include <cstring>
 
 std::string GetDataURI(const std::string& data, const std::string& mime_type) {
     return "data:" + mime_type + ";base64," +
@@ -748,13 +752,27 @@ void UICEFWebView::onCEFAcceleratedPaint(const CefAcceleratedPaintInfo& info)
         m_lastHeight = getHeight();
     }
 
-    // Check for OpenGL memory object extension (much simpler than EGL approach)
+    // Check for both required OpenGL memory object extensions
     const char* gl_extensions = (const char*)glGetString(GL_EXTENSIONS);
-    if (!gl_extensions || !strstr(gl_extensions, "GL_EXT_memory_object_fd")) {
+    if (!gl_extensions) {
+        g_logger.error("UICEFWebView: Failed to get OpenGL extensions");
+        return;
+    }
+    
+    bool hasMemoryObject = strstr(gl_extensions, "GL_EXT_memory_object") != nullptr;
+    bool hasMemoryObjectFd = strstr(gl_extensions, "GL_EXT_memory_object_fd") != nullptr;
+    
+    if (!hasMemoryObject) {
+        g_logger.error("UICEFWebView: GL_EXT_memory_object extension not available");
+        return;
+    }
+    
+    if (!hasMemoryObjectFd) {
         g_logger.error("UICEFWebView: GL_EXT_memory_object_fd extension not available");
         return;
     }
-    g_logger.info("UICEFWebView: GL_EXT_memory_object_fd extension available - using direct OpenGL import");
+    
+    g_logger.info("UICEFWebView: Both GL_EXT_memory_object and GL_EXT_memory_object_fd extensions available - using direct OpenGL import");
 
     // Use default DRM format - we'll try different formats if this fails
     uint32_t drm_format = DRM_FORMAT_ARGB8888; // Default BGRA format
@@ -784,15 +802,15 @@ void UICEFWebView::onCEFAcceleratedPaint(const CefAcceleratedPaintInfo& info)
         EGL_NONE
     };
 
-    // Get OpenGL function pointers for memory objects
+    // Get OpenGL function pointers for memory objects using proper GLX method
     PFNGLCREATEMEMORYOBJECTSEXTPROC glCreateMemoryObjectsEXT = 
-        (PFNGLCREATEMEMORYOBJECTSEXTPROC)eglGetProcAddress("glCreateMemoryObjectsEXT");
+        (PFNGLCREATEMEMORYOBJECTSEXTPROC)glXGetProcAddressARB((const GLubyte*)"glCreateMemoryObjectsEXT");
     PFNGLIMPORTMEMORYFDEXTPROC glImportMemoryFdEXT = 
-        (PFNGLIMPORTMEMORYFDEXTPROC)eglGetProcAddress("glImportMemoryFdEXT");
+        (PFNGLIMPORTMEMORYFDEXTPROC)glXGetProcAddressARB((const GLubyte*)"glImportMemoryFdEXT");
     PFNGLTEXSTORAGEMEM2DEXTPROC glTexStorageMem2DEXT = 
-        (PFNGLTEXSTORAGEMEM2DEXTPROC)eglGetProcAddress("glTexStorageMem2DEXT");
+        (PFNGLTEXSTORAGEMEM2DEXTPROC)glXGetProcAddressARB((const GLubyte*)"glTexStorageMem2DEXT");
     PFNGLDELETEMEMORYOBJECTSEXTPROC glDeleteMemoryObjectsEXT = 
-        (PFNGLDELETEMEMORYOBJECTSEXTPROC)eglGetProcAddress("glDeleteMemoryObjectsEXT");
+        (PFNGLDELETEMEMORYOBJECTSEXTPROC)glXGetProcAddressARB((const GLubyte*)"glDeleteMemoryObjectsEXT");
 
     if (!glCreateMemoryObjectsEXT || !glImportMemoryFdEXT || !glTexStorageMem2DEXT || !glDeleteMemoryObjectsEXT) {
         g_logger.error("UICEFWebView: Required GL_EXT_memory_object_fd functions not available");
@@ -811,15 +829,36 @@ void UICEFWebView::onCEFAcceleratedPaint(const CefAcceleratedPaintInfo& info)
     }
     g_logger.info("UICEFWebView: Memory object created successfully, id=" + std::to_string(memoryObject));
     
-    // Calculate buffer size properly
-    GLuint64 bufferSize = static_cast<GLuint64>(stride) * static_cast<GLuint64>(height);
-    g_logger.info("UICEFWebView: Importing FD=" + std::to_string(info.planes[0].fd) + 
+    // Duplicate the FD so both CEF and GL can manage their own copies
+    int duplicatedFd = dup(info.planes[0].fd);
+    if (duplicatedFd == -1) {
+        g_logger.error("UICEFWebView: Failed to duplicate FD: " + std::string(strerror(errno)));
+        glDeleteMemoryObjectsEXT(1, &memoryObject);
+        return;
+    }
+    
+    // Calculate buffer size - try to get actual size first, then fallback to stride*height
+    GLuint64 bufferSize = 0;
+    off_t actualSize = lseek(duplicatedFd, 0, SEEK_END);
+    if (actualSize > 0) {
+        bufferSize = static_cast<GLuint64>(actualSize);
+        g_logger.info("UICEFWebView: Actual DMA buffer size: " + std::to_string(bufferSize));
+    } else {
+        // Fallback: calculate minimum size and round up to page boundary
+        GLuint64 minSize = static_cast<GLuint64>(stride) * static_cast<GLuint64>(height) + info.planes[0].offset;
+        bufferSize = ((minSize + 4095) / 4096) * 4096; // Round up to page size
+        g_logger.info("UICEFWebView: Using calculated buffer size: " + std::to_string(bufferSize) + 
+                      " (min=" + std::to_string(minSize) + ")");
+    }
+    
+    g_logger.info("UICEFWebView: Importing duplicated FD=" + std::to_string(duplicatedFd) + 
+                  " (original=" + std::to_string(info.planes[0].fd) + ")" +
                   ", size=" + std::to_string(bufferSize) + 
                   ", stride=" + std::to_string(stride) + 
                   ", height=" + std::to_string(height));
     
-    // Import the DMA buffer FD into the memory object
-    glImportMemoryFdEXT(memoryObject, bufferSize, GL_HANDLE_TYPE_OPAQUE_FD_EXT, info.planes[0].fd);
+    // Import the DMA buffer FD into the memory object (GL takes ownership of duplicatedFd)
+    glImportMemoryFdEXT(memoryObject, bufferSize, GL_HANDLE_TYPE_OPAQUE_FD, duplicatedFd);
     
     glError = glGetError();
     if (glError != GL_NO_ERROR) {
