@@ -126,9 +126,6 @@ public:
         // Essential flags for GPU acceleration
         command_line->AppendSwitch("disable-gpu-watchdog"); // Prevent GPU process timeout     
 #else
-        // Linux-specific OpenGL flags and GPU setup
-        command_line->AppendSwitchWithValue("use-gl", "egl-angle");
-        command_line->AppendSwitchWithValue("use-angle", "default");
         command_line->AppendSwitchWithValue("ozone-platform", "x11");
 
         // Enable GPU acceleration across processes
