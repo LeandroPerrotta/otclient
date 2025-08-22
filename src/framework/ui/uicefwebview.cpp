@@ -665,23 +665,47 @@ void UICEFWebView::onCEFAcceleratedPaint(const CefAcceleratedPaintInfo& info)
     }
 
     EGLDisplay display = eglGetCurrentDisplay();
-    if (display == EGL_NO_DISPLAY)
+    if (display == EGL_NO_DISPLAY) {
+        g_logger.warning("UICEFWebView: No EGL display available for accelerated paint");
         return;
+    }
 
     auto eglCreateImageKHR = reinterpret_cast<PFNEGLCREATEIMAGEKHRPROC>(eglGetProcAddress("eglCreateImageKHR"));
     auto eglDestroyImageKHR = reinterpret_cast<PFNEGLDESTROYIMAGEKHRPROC>(eglGetProcAddress("eglDestroyImageKHR"));
     auto glEGLImageTargetTexture2DOES = reinterpret_cast<PFNGLEGLIMAGETARGETTEXTURE2DOESPROC>(eglGetProcAddress("glEGLImageTargetTexture2DOES"));
 
-    if (!eglCreateImageKHR || !eglDestroyImageKHR || !glEGLImageTargetTexture2DOES)
+    if (!eglCreateImageKHR || !eglDestroyImageKHR || !glEGLImageTargetTexture2DOES) {
+        g_logger.warning("UICEFWebView: Required EGL extensions not available for accelerated paint");
         return;
+    }
+
+    // Check if EGL_D3D11_TEXTURE_2D_SHARE_HANDLE_ANGLE is supported
+    // This extension is required for D3D11 shared texture support
+    const char* extensions = eglQueryString(display, EGL_EXTENSIONS);
+    if (!extensions || !strstr(extensions, "EGL_ANGLE_d3d_share_handle_client_buffer")) {
+        g_logger.warning("UICEFWebView: EGL_ANGLE_d3d_share_handle_client_buffer extension not supported");
+        g_logger.info("UICEFWebView: Falling back to software rendering for WebView");
+        return;
+    }
 
     EGLint attrs[] = {EGL_NONE};
     EGLImageKHR image = eglCreateImageKHR(display, EGL_NO_CONTEXT,
         EGL_D3D11_TEXTURE_2D_SHARE_HANDLE_ANGLE, sharedHandle, attrs);
+    
     if (image != EGL_NO_IMAGE_KHR) {
         glBindTexture(GL_TEXTURE_2D, m_cefTexture->getId());
         glEGLImageTargetTexture2DOES(GL_TEXTURE_2D, image);
         eglDestroyImageKHR(display, image);
+        
+        g_logger.info("UICEFWebView: Successfully created EGL image from CEF shared texture");
+    } else {
+        // Get EGL error for debugging
+        EGLint eglError = eglGetError();
+        g_logger.error("UICEFWebView: eglCreateImageKHR failed with error: 0x" + 
+                      stdext::to_string(eglError, 16));
+        g_logger.error("UICEFWebView: Target: EGL_D3D11_TEXTURE_2D_SHARE_HANDLE_ANGLE (0x33A0)");
+        g_logger.error("UICEFWebView: This may indicate incompatible graphics driver or missing D3D11/ANGLE support");
+        g_logger.info("UICEFWebView: WebView will continue with software rendering");
     }
 #else
     (void)info;
