@@ -1039,6 +1039,15 @@ void UICEFWebView::processAcceleratedPaintGPU(const CefAcceleratedPaintInfo& inf
     // Get next texture for double buffering
     GLuint dstTexture = m_acceleratedTextures[m_writeIndex & 1];
     
+    // Get EGL function pointers
+    auto eglCreateImageKHRFn = (PFNEGLCREATEIMAGEKHRPROC)eglGetProcAddress("eglCreateImageKHR");
+    auto eglDestroyImageKHRFn = (PFNEGLDESTROYIMAGEKHRPROC)eglGetProcAddress("eglDestroyImageKHR");
+    
+    if (!eglCreateImageKHRFn || !eglDestroyImageKHRFn) {
+        g_logger.error("UICEFWebView: EGL KHR image functions not available");
+        return;
+    }
+    
     // 1) Create EGLImage from DMA buffer using EGL sidecar
     const EGLint imgAttrs[] = {
         EGL_WIDTH, (EGLint)width,
@@ -1050,7 +1059,7 @@ void UICEFWebView::processAcceleratedPaintGPU(const CefAcceleratedPaintInfo& inf
         EGL_NONE
     };
     
-    EGLImageKHR img = eglCreateImageKHR((EGLDisplay)s_eglDisplay, EGL_NO_CONTEXT, EGL_LINUX_DMA_BUF_EXT, nullptr, imgAttrs);
+    EGLImageKHR img = eglCreateImageKHRFn((EGLDisplay)s_eglDisplay, EGL_NO_CONTEXT, EGL_LINUX_DMA_BUF_EXT, nullptr, imgAttrs);
     if (img == EGL_NO_IMAGE_KHR) {
         // Try alternative format
         const EGLint imgAttrsAlt[] = {
@@ -1062,7 +1071,7 @@ void UICEFWebView::processAcceleratedPaintGPU(const CefAcceleratedPaintInfo& inf
             EGL_DMA_BUF_PLANE0_PITCH_EXT, (EGLint)stride,
             EGL_NONE
         };
-        img = eglCreateImageKHR((EGLDisplay)s_eglDisplay, EGL_NO_CONTEXT, EGL_LINUX_DMA_BUF_EXT, nullptr, imgAttrsAlt);
+        img = eglCreateImageKHRFn((EGLDisplay)s_eglDisplay, EGL_NO_CONTEXT, EGL_LINUX_DMA_BUF_EXT, nullptr, imgAttrsAlt);
         if (img == EGL_NO_IMAGE_KHR) {
             g_logger.error("UICEFWebView: Failed to create EGLImage from DMA buffer: " + stdext::dec_to_hex(eglGetError()));
             return;
@@ -1076,7 +1085,7 @@ void UICEFWebView::processAcceleratedPaintGPU(const CefAcceleratedPaintInfo& inf
     auto glEGLImageTargetTexture2DOES = (PFNGLEGLIMAGETARGETTEXTURE2DOESPROC)eglGetProcAddress("glEGLImageTargetTexture2DOES");
     if (!glEGLImageTargetTexture2DOES) {
         g_logger.error("UICEFWebView: glEGLImageTargetTexture2DOES not available");
-        eglDestroyImageKHR((EGLDisplay)s_eglDisplay, img);
+        eglDestroyImageKHRFn((EGLDisplay)s_eglDisplay, img);
         return;
     }
     
@@ -1099,7 +1108,7 @@ void UICEFWebView::processAcceleratedPaintGPU(const CefAcceleratedPaintInfo& inf
     // 4) Immediate cleanup of temporary resources
     glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
     glDeleteTextures(1, &srcTex);
-    eglDestroyImageKHR((EGLDisplay)s_eglDisplay, img);
+    eglDestroyImageKHRFn((EGLDisplay)s_eglDisplay, img);
     
     // 5) Signal frame ready with fence
     GLsync fence = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
