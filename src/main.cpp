@@ -127,8 +127,9 @@ public:
         command_line->AppendSwitch("disable-gpu-watchdog"); // Prevent GPU process timeout     
 #else
         // Linux-specific OpenGL flags and GPU setup
-        command_line->AppendSwitchWithValue("use-gl", "egl");
-        command_line->AppendSwitchWithValue("use-angle", "gl");
+        command_line->AppendSwitchWithValue("use-gl", "egl-angle");
+        command_line->AppendSwitchWithValue("use-angle", "default");
+        command_line->AppendSwitchWithValue("ozone-platform", "x11");
 
         // Enable GPU acceleration across processes
         command_line->AppendSwitch("enable-gpu");
@@ -140,16 +141,6 @@ public:
         command_line->AppendSwitch("enable-begin-frame-scheduling");
         command_line->AppendSwitch("disable-background-timer-throttling");
         command_line->AppendSwitch("disable-renderer-backgrounding");
-
-        // Disable unused background services to reduce log noise
-        command_line->AppendSwitch("disable-background-networking");
-        command_line->AppendSwitch("disable-sync");
-        command_line->AppendSwitch("disable-background-mode");
-        command_line->AppendSwitch("disable-features=PushMessaging,BackgroundSync,GCM");
-        command_line->AppendSwitch("disable-component-extensions-with-background-pages");
-        command_line->AppendSwitch("disable-default-apps");
-        command_line->AppendSwitch("disable-extensions");
-        command_line->AppendSwitch("no-service-autorun");
 
         // Log the command line AFTER all switches have been added
         rawLogger(stdext::format("cmline: %s", process_type.ToString()).c_str());
