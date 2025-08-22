@@ -118,6 +118,8 @@ public:
     // Simple ANGLE configuration based on working open-source project
     void OnBeforeCommandLineProcessing(const CefString& process_type,
                                        CefRefPtr<CefCommandLine> command_line) override {
+        rawLogger(stdext::format("OnBeforeCommandLineProcessing called for process: %s", process_type.ToString()).c_str());
+        
 #if defined(_WIN32) && defined(OPENGL_ES) && OPENGL_ES == 2
         command_line->AppendSwitch("angle");
         command_line->AppendSwitchWithValue("use-angle", "d3d11");
@@ -127,30 +129,42 @@ public:
         command_line->AppendSwitch("disable-gpu-watchdog"); // Prevent GPU process timeout     
 #else
         // Linux-specific OpenGL flags and GPU setup
-        // Try multiple GL backends to ensure compatibility
+        rawLogger("Configuring GPU settings for Linux...");
         
-        // Force specific GPU backend - try EGL first as it's most compatible with Mesa
+        // Force GPU acceleration - try multiple strategies
+        // Strategy 1: Force specific GL implementation
         command_line->AppendSwitchWithValue("use-gl", "egl");
+        
+        // Strategy 2: Force platform
         command_line->AppendSwitchWithValue("ozone-platform", "x11");
-
-        // Force GPU process creation and disable fallbacks
+        
+        // Strategy 3: Aggressive GPU forcing
         command_line->AppendSwitch("enable-gpu");
-        command_line->AppendSwitch("enable-gpu-compositing");
+        command_line->AppendSwitch("enable-gpu-compositing");  
         command_line->AppendSwitch("enable-gpu-rasterization");
         command_line->AppendSwitch("disable-software-rasterizer");
         command_line->AppendSwitch("disable-gpu-sandbox");
         
-        // Force GPU to be used even if blocklisted
+        // Strategy 4: Ignore all blocklists and workarounds
         command_line->AppendSwitch("ignore-gpu-blocklist");
-        command_line->AppendSwitch("ignore-gpu-blacklist"); // Legacy flag name
+        command_line->AppendSwitch("ignore-gpu-blacklist");
         command_line->AppendSwitch("disable-gpu-driver-bug-workarounds");
+        command_line->AppendSwitch("disable-software-compositing-fallback");
         
-        // Additional acceleration flags
+        // Strategy 5: Force hardware acceleration
         command_line->AppendSwitch("enable-accelerated-2d-canvas");
         command_line->AppendSwitch("enable-accelerated-video-decode");
+        command_line->AppendSwitch("force-gpu-rasterization");
         
-        // Disable features that might interfere
-        command_line->AppendSwitch("disable-features=VizDisplayCompositor");
+        // Strategy 6: Disable problematic features in CEF 139+
+        command_line->AppendSwitch("disable-features=VizDisplayCompositor,UseSkiaRenderer");
+        
+        // Strategy 7: Force specific GPU preferences
+        if (process_type.ToString() == "gpu-process") {
+            rawLogger("Applying GPU-process specific settings...");
+            command_line->AppendSwitch("enable-unsafe-webgpu");
+            command_line->AppendSwitch("use-cmd-decoder=passthrough");
+        }
 
         command_line->AppendSwitch("enable-begin-frame-scheduling");
         command_line->AppendSwitch("disable-background-timer-throttling");
@@ -269,8 +283,10 @@ bool InitializeCEF(int argc, const char* argv[]) {
     settings.windowless_rendering_enabled = true;
     settings.multi_threaded_message_loop = true;  // Enable UI thread for OnAcceleratedPaint
     
-    // Enable GPU acceleration for OnAcceleratedPaint
+    // Force GPU acceleration settings
     settings.external_message_pump = false;
+    
+    // Additional GPU-related settings for CEF 139+
     
     // Find CEF automatically (same logic as CMake)
     std::string cef_root;
