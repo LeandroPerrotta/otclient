@@ -184,6 +184,12 @@ bool InitializeCEF(int argc, const char* argv[]) {
     command_line->AppendSwitch("enable-begin-frame-scheduling");
     command_line->AppendSwitch("disable-background-timer-throttling");
     command_line->AppendSwitch("disable-renderer-backgrounding");
+    
+    // Disable GCM/push messaging to prevent DEPRECATED_ENDPOINT errors
+    command_line->AppendSwitch("disable-background-networking");
+    command_line->AppendSwitch("disable-sync");
+    command_line->AppendSwitch("disable-background-mode");
+    command_line->AppendSwitch("disable-features=PushMessaging,BackgroundSync");
 
     // 4) Configuração de CEF
     CefSettings settings;
@@ -236,6 +242,12 @@ bool InitializeCEF(int argc, const char* argv[]) {
     command_line->AppendSwitch("enable-begin-frame-scheduling");
     command_line->AppendSwitch("disable-background-timer-throttling");
     command_line->AppendSwitch("disable-renderer-backgrounding");
+    
+    // Disable GCM/push messaging to prevent DEPRECATED_ENDPOINT errors
+    command_line->AppendSwitch("disable-background-networking");
+    command_line->AppendSwitch("disable-sync");
+    command_line->AppendSwitch("disable-background-mode");
+    command_line->AppendSwitch("disable-features=PushMessaging,BackgroundSync");
 
     // Configure CEF settings
     CefSettings settings;
