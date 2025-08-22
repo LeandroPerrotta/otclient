@@ -126,8 +126,34 @@ public:
         // Essential flags for GPU acceleration
         command_line->AppendSwitch("disable-gpu-watchdog"); // Prevent GPU process timeout     
 #else
-        // Linux-specific OpenGL flags (no ANGLE on Linux)
-        command_line->AppendSwitchWithValue("use-gl", "desktop"); // Use native OpenGL instead of ANGLE
+        // Linux-specific OpenGL flags and GPU setup
+        command_line->AppendSwitchWithValue("use-gl", "egl");
+        command_line->AppendSwitchWithValue("use-angle", "gl");
+
+        // Enable GPU acceleration across processes
+        command_line->AppendSwitch("enable-gpu");
+        command_line->AppendSwitch("enable-gpu-compositing");
+        command_line->AppendSwitch("enable-gpu-rasterization");
+        command_line->AppendSwitch("disable-software-rasterizer");
+        command_line->AppendSwitch("disable-gpu-sandbox"); // Sometimes needed for shared textures
+
+        command_line->AppendSwitch("enable-begin-frame-scheduling");
+        command_line->AppendSwitch("disable-background-timer-throttling");
+        command_line->AppendSwitch("disable-renderer-backgrounding");
+
+        // Disable unused background services to reduce log noise
+        command_line->AppendSwitch("disable-background-networking");
+        command_line->AppendSwitch("disable-sync");
+        command_line->AppendSwitch("disable-background-mode");
+        command_line->AppendSwitch("disable-features=PushMessaging,BackgroundSync,GCM");
+        command_line->AppendSwitch("disable-component-extensions-with-background-pages");
+        command_line->AppendSwitch("disable-default-apps");
+        command_line->AppendSwitch("disable-extensions");
+        command_line->AppendSwitch("no-service-autorun");
+
+        // Log the command line AFTER all switches have been added
+        rawLogger(stdext::format("cmline: %s", process_type.ToString()).c_str());
+        rawLogger(stdext::format("Command line flags set to: %s", command_line->GetCommandLineString()).c_str());
 #endif
     }
 
@@ -225,36 +251,12 @@ bool InitializeCEF(int argc, const char* argv[]) {
     return true;
 #else
     CefMainArgs main_args(argc, const_cast<char**>(argv));
+    CefRefPtr<CefApp> app = new OTClientBrowserApp();
 
-    int exit_code = CefExecuteProcess(main_args, nullptr, nullptr);
+    int exit_code = CefExecuteProcess(main_args, app, nullptr);
     if (exit_code >= 0) {
         std::exit(exit_code);
     }
-
-    // Parse command line
-    CefRefPtr<CefCommandLine> command_line = CefCommandLine::CreateCommandLine();
-    command_line->InitFromArgv(argc, argv);
-    
-    // Linux GPU acceleration flags
-    command_line->AppendSwitch("enable-gpu");
-    command_line->AppendSwitch("enable-gpu-compositing");
-    command_line->AppendSwitch("enable-gpu-rasterization");
-    command_line->AppendSwitch("disable-software-rasterizer");
-    command_line->AppendSwitch("disable-gpu-sandbox"); // Sometimes needed for shared textures
-    
-    command_line->AppendSwitch("enable-begin-frame-scheduling");
-    command_line->AppendSwitch("disable-background-timer-throttling");
-    command_line->AppendSwitch("disable-renderer-backgrounding");
-    
-    // Disable GCM/push messaging to prevent DEPRECATED_ENDPOINT errors
-    command_line->AppendSwitch("disable-background-networking");
-    command_line->AppendSwitch("disable-sync");
-    command_line->AppendSwitch("disable-background-mode");
-    command_line->AppendSwitch("disable-features=PushMessaging,BackgroundSync,GCM");
-    command_line->AppendSwitch("disable-component-extensions-with-background-pages");
-    command_line->AppendSwitch("disable-default-apps");
-    command_line->AppendSwitch("disable-extensions");
-    command_line->AppendSwitch("no-service-autorun");
 
     // Configure CEF settings
     CefSettings settings;
@@ -391,7 +393,7 @@ bool InitializeCEF(int argc, const char* argv[]) {
     realpath(localesPath.c_str(), abs_locales_path);
     
     g_logger.info(stdext::format("OTClient: CEF cache path: %s", abs_cache_path));
-    
+
     // Configure CEF settings for data persistence
     CefString(&settings.cache_path) = abs_cache_path;
     CefString(&settings.root_cache_path) = abs_cache_path;
@@ -405,7 +407,6 @@ bool InitializeCEF(int argc, const char* argv[]) {
     CefString(&settings.browser_subprocess_path) = subprocess_path;
 
     g_logger.info("OTClient: Initializing CEF...");
-    CefRefPtr<CefApp> app = new OTClientBrowserApp();
     bool result = CefInitialize(main_args, settings, app, nullptr);
     if (result) {
         CefRegisterSchemeHandlerFactory("otclient", "", new CefPhysFsSchemeHandlerFactory);
