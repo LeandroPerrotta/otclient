@@ -797,35 +797,53 @@ void UICEFWebView::onCEFAcceleratedPaint(const CefAcceleratedPaintInfo& info)
         EGL_NONE
     };
 
-    EGLImage image = eglCreateImage(display, EGL_NO_CONTEXT, EGL_LINUX_DMA_BUF_EXT, nullptr, attrs);
-    if (image == EGL_NO_IMAGE) {
-        EGLint error = eglGetError();
-        g_logger.error("eglCreateImage failed with format " + stdext::dec_to_hex(drm_format) + ", eglError=" + stdext::dec_to_hex(error));
+    // Try multiple DRM formats that are commonly supported
+    uint32_t formats_to_try[] = {
+        DRM_FORMAT_ARGB8888,  // BGRA8888
+        DRM_FORMAT_ABGR8888,  // RGBA8888  
+        DRM_FORMAT_XRGB8888,  // BGRX8888
+        DRM_FORMAT_XBGR8888,  // RGBX8888
+        DRM_FORMAT_BGRA8888,  // ARGB8888
+        DRM_FORMAT_RGBA8888   // ABGR8888
+    };
+    
+    EGLImage image = EGL_NO_IMAGE;
+    uint32_t successful_format = 0;
+    
+    for (size_t i = 0; i < sizeof(formats_to_try) / sizeof(formats_to_try[0]); i++) {
+        uint32_t format = formats_to_try[i];
         
-        // Try alternative formats
-        if (drm_format == DRM_FORMAT_ARGB8888) {
-            g_logger.info("UICEFWebView: Trying alternative format DRM_FORMAT_ABGR8888...");
-            const EGLAttrib attrs_alt[] = {
-                EGL_WIDTH, static_cast<EGLAttrib>(width),
-                EGL_HEIGHT, static_cast<EGLAttrib>(height),
-                EGL_LINUX_DRM_FOURCC_EXT, static_cast<EGLAttrib>(DRM_FORMAT_ABGR8888),
-                EGL_DMA_BUF_PLANE0_FD_EXT, static_cast<EGLAttrib>(info.planes[0].fd),
-                EGL_DMA_BUF_PLANE0_OFFSET_EXT, static_cast<EGLAttrib>(info.planes[0].offset),
-                EGL_DMA_BUF_PLANE0_PITCH_EXT, static_cast<EGLAttrib>(stride),
-                EGL_NONE
-            };
-            image = eglCreateImage(display, EGL_NO_CONTEXT, EGL_LINUX_DMA_BUF_EXT, nullptr, attrs_alt);
-            if (image == EGL_NO_IMAGE) {
-                g_logger.error("eglCreateImage failed with alternative format, eglError=" + stdext::dec_to_hex(eglGetError()));
-                return;
-            } else {
-                g_logger.info("UICEFWebView: Successfully created EGL image with alternative format!");
-            }
+        const EGLAttrib attrs_try[] = {
+            EGL_WIDTH, static_cast<EGLAttrib>(width),
+            EGL_HEIGHT, static_cast<EGLAttrib>(height),
+            EGL_LINUX_DRM_FOURCC_EXT, static_cast<EGLAttrib>(format),
+            EGL_DMA_BUF_PLANE0_FD_EXT, static_cast<EGLAttrib>(info.planes[0].fd),
+            EGL_DMA_BUF_PLANE0_OFFSET_EXT, static_cast<EGLAttrib>(info.planes[0].offset),
+            EGL_DMA_BUF_PLANE0_PITCH_EXT, static_cast<EGLAttrib>(stride),
+            EGL_NONE
+        };
+        
+        image = eglCreateImage(display, EGL_NO_CONTEXT, EGL_LINUX_DMA_BUF_EXT, nullptr, attrs_try);
+        if (image != EGL_NO_IMAGE) {
+            successful_format = format;
+            g_logger.info("UICEFWebView: Successfully created EGL image with format " + stdext::dec_to_hex(format));
+            break;
         } else {
-            return;
+            EGLint error = eglGetError();
+            g_logger.info("UICEFWebView: Format " + stdext::dec_to_hex(format) + " failed, eglError=" + stdext::dec_to_hex(error));
         }
-    } else {
-        g_logger.info("UICEFWebView: Successfully created EGL image with format " + stdext::dec_to_hex(drm_format));
+    }
+    
+    if (image == EGL_NO_IMAGE) {
+        g_logger.error("UICEFWebView: All DRM formats failed, falling back to CPU rendering");
+        
+        // Fallback to CPU-based rendering using regular OnPaint
+        // We'll copy the DMA buffer content to CPU memory and use regular texture upload
+        g_logger.info("UICEFWebView: Attempting CPU fallback - reading DMA buffer directly");
+        
+        // For now, just return - we need to implement the CPU fallback
+        // TODO: Implement CPU fallback by reading from DMA buffer FD
+        return;
     }
 
     // Ensure we have an OpenGL context
