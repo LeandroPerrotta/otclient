@@ -60,11 +60,6 @@
 #  include <GL/glx.h>
 #  include <X11/Xlib.h>
 #  include <drm/drm_fourcc.h>
-// Save X11 constants before undefining macros
-#  ifndef X11_NONE_SAVED
-#    define X11_NONE_SAVED
-#    define X11_None None
-#  endif
 // Undef X11 macros that conflict with CEF
 #  ifdef Success
 #    undef Success
@@ -72,6 +67,8 @@
 #  ifdef None
 #    undef None
 #  endif
+// Define X11 constants after undef
+#  define X11_None 0L
 
 // OpenGL memory object extension defines
 #ifndef GL_EXT_memory_object_fd
