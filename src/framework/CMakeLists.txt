@@ -162,7 +162,7 @@ if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE "RelWithDebInfo")
 endif()
 
-set(COMPILER_CXX_EXTRA_FLAGS       "-Wall -Wextra -Wno-unused -Wno-unused-parameter -Wno-unused-result -Wno-missing-field-initializers -Wno-deprecated-declarations -pipe")
+set(COMPILER_CXX_EXTRA_FLAGS       "-Wall -Wextra -Wno-unused -Wno-unused-parameter -Wno-unused-result -pipe")
 set(CMAKE_CXX_FLAGS_DEBUG          "-O0 -g")
 set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O1 -g -fno-omit-frame-pointer")
 set(CMAKE_CXX_FLAGS_RELEASE        "-O2")
