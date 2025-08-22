@@ -60,6 +60,11 @@
 #  include <GL/glx.h>
 #  include <X11/Xlib.h>
 #  include <drm/drm_fourcc.h>
+// Save X11 constants before undefining macros
+#  ifndef X11_NONE_SAVED
+#    define X11_NONE_SAVED
+#    define X11_None None
+#  endif
 // Undef X11 macros that conflict with CEF
 #  ifdef Success
 #    undef Success
@@ -891,7 +896,7 @@ void UICEFWebView::initializeGLXSharedContext()
         GLX_GREEN_SIZE, 8,
         GLX_BLUE_SIZE, 8,
         GLX_ALPHA_SIZE, 8,
-        None
+        X11_None
     };
     
     int numConfigs;
@@ -908,7 +913,7 @@ void UICEFWebView::initializeGLXSharedContext()
     int pbufferAttribs[] = {
         GLX_PBUFFER_WIDTH, 1,
         GLX_PBUFFER_HEIGHT, 1,
-        None
+        X11_None
     };
     
     GLXPbuffer pbuffer = glXCreatePbuffer(x11Display, fbConfig, pbufferAttribs);
@@ -1038,26 +1043,26 @@ void UICEFWebView::processAcceleratedPaintGPU(const CefAcceleratedPaintInfo& inf
     GLuint dstTexture = m_acceleratedTextures[m_writeIndex & 1];
     
     // 1) Create EGLImage from DMA buffer using EGL sidecar
-    const EGLAttrib imgAttrs[] = {
-        EGL_WIDTH, (EGLAttrib)width,
-        EGL_HEIGHT, (EGLAttrib)height,
-        EGL_LINUX_DRM_FOURCC_EXT, (EGLAttrib)DRM_FORMAT_ARGB8888,
-        EGL_DMA_BUF_PLANE0_FD_EXT, (EGLAttrib)fd,
-        EGL_DMA_BUF_PLANE0_OFFSET_EXT, (EGLAttrib)offset,
-        EGL_DMA_BUF_PLANE0_PITCH_EXT, (EGLAttrib)stride,
+    const EGLint imgAttrs[] = {
+        EGL_WIDTH, (EGLint)width,
+        EGL_HEIGHT, (EGLint)height,
+        EGL_LINUX_DRM_FOURCC_EXT, (EGLint)DRM_FORMAT_ARGB8888,
+        EGL_DMA_BUF_PLANE0_FD_EXT, (EGLint)fd,
+        EGL_DMA_BUF_PLANE0_OFFSET_EXT, (EGLint)offset,
+        EGL_DMA_BUF_PLANE0_PITCH_EXT, (EGLint)stride,
         EGL_NONE
     };
     
     EGLImageKHR img = eglCreateImageKHR((EGLDisplay)s_eglDisplay, EGL_NO_CONTEXT, EGL_LINUX_DMA_BUF_EXT, nullptr, imgAttrs);
     if (img == EGL_NO_IMAGE_KHR) {
         // Try alternative format
-        const EGLAttrib imgAttrsAlt[] = {
-            EGL_WIDTH, (EGLAttrib)width,
-            EGL_HEIGHT, (EGLAttrib)height,
-            EGL_LINUX_DRM_FOURCC_EXT, (EGLAttrib)DRM_FORMAT_ABGR8888,
-            EGL_DMA_BUF_PLANE0_FD_EXT, (EGLAttrib)fd,
-            EGL_DMA_BUF_PLANE0_OFFSET_EXT, (EGLAttrib)offset,
-            EGL_DMA_BUF_PLANE0_PITCH_EXT, (EGLAttrib)stride,
+        const EGLint imgAttrsAlt[] = {
+            EGL_WIDTH, (EGLint)width,
+            EGL_HEIGHT, (EGLint)height,
+            EGL_LINUX_DRM_FOURCC_EXT, (EGLint)DRM_FORMAT_ABGR8888,
+            EGL_DMA_BUF_PLANE0_FD_EXT, (EGLint)fd,
+            EGL_DMA_BUF_PLANE0_OFFSET_EXT, (EGLint)offset,
+            EGL_DMA_BUF_PLANE0_PITCH_EXT, (EGLint)stride,
             EGL_NONE
         };
         img = eglCreateImageKHR((EGLDisplay)s_eglDisplay, EGL_NO_CONTEXT, EGL_LINUX_DMA_BUF_EXT, nullptr, imgAttrsAlt);
@@ -1108,7 +1113,7 @@ void UICEFWebView::processAcceleratedPaintGPU(const CefAcceleratedPaintInfo& inf
     g_logger.info("UICEFWebView: GPU processing completed, texture ready with fence");
     
     // Restore context (back to no context for CEF thread)
-    glXMakeContextCurrent((Display*)s_x11Display, None, None, nullptr);
+    glXMakeContextCurrent((Display*)s_x11Display, X11_None, X11_None, nullptr);
 #endif
 }
 
