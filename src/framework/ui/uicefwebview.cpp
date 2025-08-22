@@ -867,23 +867,31 @@ void UICEFWebView::initializeGLXSharedContext()
         return;
     }
     
-    g_logger.info("UICEFWebView: Initializing GLX shared context for CEF thread...");
+#ifndef OPENGL_ES
+    g_logger.info("UICEFWebView: Initializing GLX shared context for CEF thread (GLX mode)...");
     
-    // Get X11 display (assuming we're using X11 windowing)
-    Display* x11Display = XOpenDisplay(nullptr);
+    // Try to get X11 display from current GLX context first
+    Display* x11Display = glXGetCurrentDisplay();
     if (!x11Display) {
-        g_logger.error("UICEFWebView: Failed to open X11 display");
-        return;
+        g_logger.info("UICEFWebView: No current GLX display, trying XOpenDisplay...");
+        x11Display = XOpenDisplay(nullptr);
+        if (!x11Display) {
+            g_logger.error("UICEFWebView: Failed to open X11 display");
+            return;
+        }
+    } else {
+        g_logger.info("UICEFWebView: Using current GLX display");
     }
     
     s_x11Display = x11Display;
     
-    // Get GLX FB config from current context
+    // Get GLX context from current context
     GLXContext mainContext = glXGetCurrentContext();
     if (!mainContext) {
         g_logger.error("UICEFWebView: No main GLX context available");
         return;
     }
+    g_logger.info("UICEFWebView: Found main GLX context");
     
     // Choose a GLX FB config
     int fbConfigAttribs[] = {
@@ -932,20 +940,51 @@ void UICEFWebView::initializeGLXSharedContext()
     s_glxContextInitialized = true;
     
     g_logger.info("UICEFWebView: GLX shared context created successfully");
+#else
+    g_logger.info("UICEFWebView: Initializing shared context for CEF thread (EGL mode)...");
+    
+    // In EGL mode, we can use the current EGL context directly
+    EGLDisplay eglDisplay = eglGetCurrentDisplay();
+    EGLContext eglContext = eglGetCurrentContext();
+    
+    if (eglDisplay == EGL_NO_DISPLAY || eglContext == EGL_NO_CONTEXT) {
+        g_logger.error("UICEFWebView: No current EGL context available");
+        return;
+    }
+    
+    // Store EGL context info for later use
+    s_x11Display = nullptr; // Not needed in EGL mode
+    s_glxContext = eglContext; // Reuse the pointer for EGL context
+    s_glxContextInitialized = true;
+    
+    g_logger.info("UICEFWebView: Using current EGL context for CEF thread");
+#endif
 #endif
 }
 
 void UICEFWebView::initializeEGLSidecar()
 {
 #if defined(__linux__)
-    if (s_eglSidecarInitialized || !s_x11Display) {
+    if (s_eglSidecarInitialized) {
         return;
     }
     
     g_logger.info("UICEFWebView: Initializing EGL sidecar for DMA buffer import...");
     
-    // Create EGL display from X11 display
-    EGLDisplay eglDisplay = eglGetDisplay((EGLNativeDisplayType)s_x11Display);
+    EGLDisplay eglDisplay;
+    
+#ifndef OPENGL_ES
+    // GLX mode - create EGL display from X11 display
+    if (!s_x11Display) {
+        g_logger.error("UICEFWebView: No X11 display available for EGL sidecar");
+        return;
+    }
+    eglDisplay = eglGetDisplay((EGLNativeDisplayType)s_x11Display);
+#else
+    // EGL mode - use current EGL display
+    eglDisplay = eglGetCurrentDisplay();
+#endif
+    
     if (eglDisplay == EGL_NO_DISPLAY) {
         g_logger.error("UICEFWebView: Failed to get EGL display");
         return;
@@ -1017,11 +1056,23 @@ void UICEFWebView::processAcceleratedPaintGPU(const CefAcceleratedPaintInfo& inf
         return;
     }
     
-    // Make GLX shared context current for this thread
+    // Make shared context current for this thread
+#ifndef OPENGL_ES
+    // GLX mode
     if (!glXMakeContextCurrent((Display*)s_x11Display, (GLXPbuffer)s_glxPbuffer, (GLXPbuffer)s_glxPbuffer, (GLXContext)s_glxContext)) {
         g_logger.error("UICEFWebView: Failed to make GLX shared context current");
         return;
     }
+    g_logger.info("UICEFWebView: GLX shared context made current in CEF thread");
+#else
+    // EGL mode - context should already be available
+    EGLContext currentContext = eglGetCurrentContext();
+    if (currentContext == EGL_NO_CONTEXT) {
+        g_logger.error("UICEFWebView: No EGL context in CEF thread");
+        return;
+    }
+    g_logger.info("UICEFWebView: EGL context available in CEF thread");
+#endif
     
     // Extract parameters
     const int fd = info.planes[0].fd;
@@ -1118,8 +1169,14 @@ void UICEFWebView::processAcceleratedPaintGPU(const CefAcceleratedPaintInfo& inf
     
     g_logger.info("UICEFWebView: GPU processing completed, texture ready with fence");
     
-    // Restore context (back to no context for CEF thread)
+    // Restore context
+#ifndef OPENGL_ES
+    // GLX mode - restore to no context for CEF thread
     glXMakeContextCurrent((Display*)s_x11Display, X11_None, X11_None, nullptr);
+#else
+    // EGL mode - context can remain current
+    g_logger.info("UICEFWebView: Keeping EGL context current");
+#endif
 #endif
 }
 
