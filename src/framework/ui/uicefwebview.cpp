@@ -1122,9 +1122,7 @@ void UICEFWebView::processAcceleratedPaintGPU(const CefAcceleratedPaintInfo& inf
             close(dupFd);
             return;
         }
-        
-        g_logger.info(stdext::format("UICEFWebView: OpenGL context validated - max texture size: %d, current texture size: %dx%d", maxTextureSize, width, height));
-
+    
         auto eglCreateImageKHRFn = (PFNEGLCREATEIMAGEKHRPROC)eglGetProcAddress("eglCreateImageKHR");
         auto eglDestroyImageKHRFn = (PFNEGLDESTROYIMAGEKHRPROC)eglGetProcAddress("eglDestroyImageKHR");
         if (!eglCreateImageKHRFn || !eglDestroyImageKHRFn || !ensureGlEglImageProcResolved()) {
@@ -1177,8 +1175,6 @@ void UICEFWebView::processAcceleratedPaintGPU(const CefAcceleratedPaintInfo& inf
         m_textureCreated = true;
         m_lastWidth = getWidth();
         m_lastHeight = getHeight();
-        
-        g_logger.info(stdext::format("UICEFWebView: Created fresh texture %d for GPU acceleration", m_cefTexture->getId()));
 
         glBindTexture(GL_TEXTURE_2D, m_cefTexture->getId());
         
@@ -1223,7 +1219,6 @@ void UICEFWebView::processAcceleratedPaintGPU(const CefAcceleratedPaintInfo& inf
                         GLenum error3 = glGetError();
                         
                         if (error3 == GL_NO_ERROR) {
-                            g_logger.info("UICEFWebView: GL_EXT_memory_object_fd approach successful!");
                             memoryObjectSuccess = true;
                         } else {
                             g_logger.error(stdext::format("ERROR: glTexStorageMem2DEXT failed with error: 0x%x", error3));
