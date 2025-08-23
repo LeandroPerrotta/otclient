@@ -150,6 +150,7 @@ void* UICEFWebView::s_glxMainContext = nullptr;
 void* UICEFWebView::s_glxDrawable = nullptr;
 bool UICEFWebView::s_eglSidecarInitialized = false;
 void* UICEFWebView::s_eglDisplay = nullptr;
+void* UICEFWebView::s_eglContext = nullptr;
 #endif
 
 static int getCefModifiers()
@@ -996,7 +997,42 @@ void UICEFWebView::initializeEGLSidecar()
         return;
     }
     
+    // Create EGL context for texture operations
+    EGLint contextAttribs[] = {
+        EGL_CONTEXT_CLIENT_VERSION, 2,
+        EGL_NONE
+    };
+    
+    // Choose EGL config
+    EGLint configAttribs[] = {
+        EGL_SURFACE_TYPE, EGL_PBUFFER_BIT,
+        EGL_BLUE_SIZE, 8,
+        EGL_GREEN_SIZE, 8,
+        EGL_RED_SIZE, 8,
+        EGL_ALPHA_SIZE, 8,
+        EGL_RENDERABLE_TYPE, EGL_OPENGL_ES2_BIT,
+        EGL_NONE
+    };
+    
+    EGLConfig eglConfig;
+    EGLint numConfigs;
+    if (!eglChooseConfig(eglDisplay, configAttribs, &eglConfig, 1, &numConfigs) || numConfigs == 0) {
+        g_logger.error("UICEFWebView: Failed to choose EGL config");
+        return;
+    }
+    
+    // Create EGL context
+    EGLContext eglContext = eglCreateContext(eglDisplay, eglConfig, EGL_NO_CONTEXT, contextAttribs);
+    if (eglContext == EGL_NO_CONTEXT) {
+        EGLint eglError = eglGetError();
+        g_logger.error(stdext::format("UICEFWebView: Failed to create EGL context: 0x%x", eglError));
+        return;
+    }
+    
+    g_logger.info(stdext::format("UICEFWebView: Created EGL context: %p", eglContext));
+    
     s_eglDisplay = eglDisplay;
+    s_eglContext = eglContext;
     s_eglSidecarInitialized = true;
     
     // Log success only once
@@ -1026,6 +1062,10 @@ void UICEFWebView::cleanupGPUResources()
     }
     
     if (s_eglSidecarInitialized) {
+        if (s_eglContext) {
+            eglDestroyContext((EGLDisplay)s_eglDisplay, (EGLContext)s_eglContext);
+            s_eglContext = nullptr;
+        }
         eglTerminate((EGLDisplay)s_eglDisplay);
         s_eglDisplay = nullptr;
         s_eglSidecarInitialized = false;
@@ -1293,12 +1333,18 @@ void UICEFWebView::processAcceleratedPaintGPU(const CefAcceleratedPaintInfo& inf
         g_logger.info("About to call g_glEGLImageTargetTexture2DOES...");
         
         // Tentar ativar contexto EGL se necessário
-        if (currentEGLDisplay == EGL_NO_DISPLAY && s_eglDisplay != nullptr) {
+        EGLDisplay currentEGLDisplay = eglGetCurrentDisplay();
+        if (currentEGLDisplay == EGL_NO_DISPLAY && s_eglDisplay != nullptr && s_eglContext != nullptr) {
             g_logger.info("No EGL context active, attempting to make EGL context current...");
             
             // Tentar fazer o contexto EGL atual
-            if (eglMakeCurrent((EGLDisplay)s_eglDisplay, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT)) {
-                g_logger.info("Successfully made EGL display current");
+            if (eglMakeCurrent((EGLDisplay)s_eglDisplay, EGL_NO_SURFACE, EGL_NO_SURFACE, (EGLContext)s_eglContext)) {
+                g_logger.info("Successfully made EGL context current");
+                
+                // Verificar se agora temos contexto EGL ativo
+                EGLDisplay newEGLDisplay = eglGetCurrentDisplay();
+                EGLContext newEGLContext = eglGetCurrentContext();
+                g_logger.info(stdext::format("New EGL Context: display=%p, context=%p", newEGLDisplay, newEGLContext));
             } else {
                 EGLint eglError = eglGetError();
                 g_logger.error(stdext::format("Failed to make EGL context current: 0x%x", eglError));

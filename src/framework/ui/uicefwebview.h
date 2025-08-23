@@ -92,6 +92,7 @@ private:
     // EGL sidecar for DMA buffer import
     static bool s_eglSidecarInitialized;
     static void* s_eglDisplay;
+    static void* s_eglContext;
     
     // Double-buffering for GPU acceleration
     GLuint m_acceleratedTextures[2];
