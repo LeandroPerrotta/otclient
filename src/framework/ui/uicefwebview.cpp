@@ -1145,7 +1145,7 @@ void UICEFWebView::processAcceleratedPaintGPU(const CefAcceleratedPaintInfo& inf
             if (includeModifier) {
                 attrs.push_back(EGL_DMA_BUF_PLANE0_MODIFIER_LO_EXT);
                 attrs.push_back(static_cast<EGLint>(modifier & 0xffffffff));
-                attrs.push_back(EGL_DMA_BUF_MODIFIER_HI_EXT);
+                attrs.push_back(EGL_DMA_BUF_PLANE0_MODIFIER_HI_EXT);
                 attrs.push_back(static_cast<EGLint>(modifier >> 32));
             }
             attrs.push_back(EGL_NONE);
