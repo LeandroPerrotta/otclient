@@ -997,57 +997,22 @@ void UICEFWebView::initializeEGLSidecar()
         return;
     }
     
-    // Create EGL context for texture operations
-    // Use OpenGL Desktop context to match the GLX context
-    eglBindAPI(EGL_OPENGL_API);  // Important: bind to OpenGL Desktop, not OpenGL ES
+    g_logger.info("UICEFWebView: Required EGL extensions found");
     
-    EGLint contextAttribs[] = {
-        EGL_CONTEXT_MAJOR_VERSION, 3,
-        EGL_CONTEXT_MINOR_VERSION, 3,
-        EGL_CONTEXT_OPENGL_PROFILE_MASK, EGL_CONTEXT_OPENGL_COMPATIBILITY_PROFILE_BIT,
-        EGL_NONE
-    };
-    
-    // Choose EGL config for OpenGL Desktop
-    EGLint configAttribs[] = {
-        EGL_SURFACE_TYPE, EGL_PBUFFER_BIT,
-        EGL_BLUE_SIZE, 8,
-        EGL_GREEN_SIZE, 8,
-        EGL_RED_SIZE, 8,
-        EGL_ALPHA_SIZE, 8,
-        EGL_RENDERABLE_TYPE, EGL_OPENGL_BIT,  // OpenGL Desktop, not ES
-        EGL_NONE
-    };
-    
-    EGLConfig eglConfig;
-    EGLint numConfigs;
-    if (!eglChooseConfig(eglDisplay, configAttribs, &eglConfig, 1, &numConfigs) || numConfigs == 0) {
-        g_logger.error("UICEFWebView: Failed to choose EGL config for OpenGL Desktop");
-        return;
-    }
-    
-    g_logger.info(stdext::format("UICEFWebView: Chosen EGL config, numConfigs: %d", numConfigs));
-    
-    // Create EGL context
-    EGLContext eglContext = eglCreateContext(eglDisplay, eglConfig, EGL_NO_CONTEXT, contextAttribs);
-    if (eglContext == EGL_NO_CONTEXT) {
-        EGLint eglError = eglGetError();
-        g_logger.error(stdext::format("UICEFWebView: Failed to create EGL context: 0x%x", eglError));
-        return;
-    }
-    
-    g_logger.info(stdext::format("UICEFWebView: Created EGL context: %p", eglContext));
-    
+    // NÃO criar contexto EGL separado - usar apenas o display para EGLImage
+    // O contexto GLX existente deve ser suficiente para glEGLImageTargetTexture2DOES
     s_eglDisplay = eglDisplay;
-    s_eglContext = eglContext;
+    s_eglContext = nullptr; // Não criar contexto EGL separado
     s_eglSidecarInitialized = true;
     
     // Log success only once
     static bool logged = false;
     if (!logged) {
-        g_logger.info("UICEFWebView: EGL sidecar initialized successfully");
+        g_logger.info("UICEFWebView: EGL sidecar initialized successfully (display only, no separate context)");
         logged = true;
     }
+
+
 #endif
 }
 
@@ -1069,12 +1034,10 @@ void UICEFWebView::cleanupGPUResources()
     }
     
     if (s_eglSidecarInitialized) {
-        if (s_eglContext) {
-            eglDestroyContext((EGLDisplay)s_eglDisplay, (EGLContext)s_eglContext);
-            s_eglContext = nullptr;
-        }
+        // Não destruir contexto EGL pois não criamos um separado
         eglTerminate((EGLDisplay)s_eglDisplay);
         s_eglDisplay = nullptr;
+        s_eglContext = nullptr;
         s_eglSidecarInitialized = false;
     }
     
@@ -1339,49 +1302,13 @@ void UICEFWebView::processAcceleratedPaintGPU(const CefAcceleratedPaintInfo& inf
         // Log imediatamente antes da chamada crítica
         g_logger.info("About to call g_glEGLImageTargetTexture2DOES...");
         
-        // Verificar contextos atuais
-        EGLDisplay currentEGLDisplay = eglGetCurrentDisplay();
-        g_logger.info(stdext::format("Current EGL Display: %p (expected: %p)", currentEGLDisplay, s_eglDisplay));
-        
-        // Abordagem 1: Tentar ativar contexto EGL se necessário
-        bool eglContextActivated = false;
-        if (currentEGLDisplay == EGL_NO_DISPLAY && s_eglDisplay != nullptr && s_eglContext != nullptr) {
-            g_logger.info("Attempting to activate EGL context...");
-            
-            // Verificar se o contexto EGL ainda é válido
-            EGLBoolean isValid = eglMakeCurrent(EGL_NO_DISPLAY, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
-            g_logger.info(stdext::format("EGL reset result: %d", isValid));
-            
-            // Tentar fazer o contexto EGL atual
-            if (eglMakeCurrent((EGLDisplay)s_eglDisplay, EGL_NO_SURFACE, EGL_NO_SURFACE, (EGLContext)s_eglContext)) {
-                g_logger.info("Successfully activated EGL context");
-                eglContextActivated = true;
-                
-                // Verificar se agora temos contexto EGL ativo
-                EGLDisplay newEGLDisplay = eglGetCurrentDisplay();
-                EGLContext newEGLContext = eglGetCurrentContext();
-                g_logger.info(stdext::format("New EGL Context: display=%p, context=%p", newEGLDisplay, newEGLContext));
-            } else {
-                EGLint eglError = eglGetError();
-                g_logger.error(stdext::format("Failed to activate EGL context: 0x%x", eglError));
-            }
-        }
-        
-        if (!eglContextActivated) {
-            g_logger.info("No EGL context active - trying direct approach with GLX context");
-            g_logger.info("Some drivers support glEGLImageTargetTexture2DOES in GLX context");
-        }
-        
-        // Tentar a chamada independentemente do contexto EGL
-        g_logger.info("Calling g_glEGLImageTargetTexture2DOES...");
-        
         // Verificar se temos a extensão GL_EXT_memory_object_fd como alternativa
         const char* extensions = (const char*)glGetString(GL_EXTENSIONS);
         bool hasMemoryObjectFd = (extensions && strstr(extensions, "GL_EXT_memory_object_fd"));
         g_logger.info(stdext::format("GL_EXT_memory_object_fd support: %s", hasMemoryObjectFd ? "YES" : "NO"));
         
-        if (!eglContextActivated && hasMemoryObjectFd) {
-            g_logger.info("Attempting GL_EXT_memory_object_fd fallback...");
+        if (hasMemoryObjectFd) {
+            g_logger.info("Attempting GL_EXT_memory_object_fd approach...");
             
             // Tentar usar GL_EXT_memory_object_fd como alternativa
             PFNGLCREATEMEMORYOBJECTSEXTPROC glCreateMemoryObjectsEXT = 
@@ -1412,6 +1339,7 @@ void UICEFWebView::processAcceleratedPaintGPU(const CefAcceleratedPaintInfo& inf
                     g_logger.info("GL_EXT_memory_object_fd approach successful!");
                     glDeleteMemoryObjectsEXT(1, &memoryObject);
                     glBindTexture(GL_TEXTURE_2D, 0);
+                    eglDestroyImageKHRFn((EGLDisplay)s_eglDisplay, img);
                     close(dupFd);
                     return; // Sucesso, sair da função
                 } else {
@@ -1423,46 +1351,32 @@ void UICEFWebView::processAcceleratedPaintGPU(const CefAcceleratedPaintInfo& inf
             }
         }
         
-        // Se chegou aqui, tentar a abordagem original (que pode crashar)
-        g_logger.info("Falling back to original EGLImage approach...");
-        
-        // Adicionar proteção contra crash
-        g_logger.info("WARNING: This may crash due to libgallium issue. Consider using CPU fallback.");
+        // Fallback para EGLImage approach (sem tentar ativar contexto EGL)
+        g_logger.info("Trying EGLImage approach with existing GLX context...");
         
         // Tentar detectar se vamos crashar verificando se a função é válida
         if (g_glEGLImageTargetTexture2DOES == nullptr) {
-            g_logger.error("g_glEGLImageTargetTexture2DOES is NULL - using CPU fallback");
-            goto cpu_fallback;
+            g_logger.error("g_glEGLImageTargetTexture2DOES is NULL - GPU acceleration failed");
+            eglDestroyImageKHRFn((EGLDisplay)s_eglDisplay, img);
+            close(dupFd);
+            return;
         }
         
-        try {
-            g_glEGLImageTargetTexture2DOES(GL_TEXTURE_2D, (GLeglImageOES)img);
-            g_logger.info("g_glEGLImageTargetTexture2DOES call completed");
-            
-            GLenum glError = glGetError();
-            g_logger.info(stdext::format("OpenGL error after g_glEGLImageTargetTexture2DOES: 0x%x", glError));
-            
-            if (glError != GL_NO_ERROR) {
-                g_logger.error("OpenGL error detected - falling back to CPU approach");
-                goto cpu_fallback;
-            }
-        } catch (...) {
-            g_logger.error("Exception caught during g_glEGLImageTargetTexture2DOES - using CPU fallback");
-            goto cpu_fallback;
+        g_logger.info("Attempting g_glEGLImageTargetTexture2DOES with GLX context...");
+        g_glEGLImageTargetTexture2DOES(GL_TEXTURE_2D, (GLeglImageOES)img);
+        g_logger.info("g_glEGLImageTargetTexture2DOES call completed");
+        
+        GLenum glError = glGetError();
+        g_logger.info(stdext::format("OpenGL error after g_glEGLImageTargetTexture2DOES: 0x%x", glError));
+        
+        if (glError != GL_NO_ERROR) {
+            g_logger.error(stdext::format("GPU acceleration failed with OpenGL error: 0x%x", glError));
+        } else {
+            g_logger.info("GPU acceleration successful!");
         }
         
         glBindTexture(GL_TEXTURE_2D, 0);
         eglDestroyImageKHRFn((EGLDisplay)s_eglDisplay, img);
-        close(dupFd);
-        return; // Sucesso
-        
-    cpu_fallback:
-        g_logger.info("Using CPU fallback for texture creation");
-        glBindTexture(GL_TEXTURE_2D, 0);
-        eglDestroyImageKHRFn((EGLDisplay)s_eglDisplay, img);
-        
-        // Implementar CPU fallback usando mmap
-        implementCPUFallback(dupFd, offset, width, height, stride);
         close(dupFd);
     }, 0);
 #endif
