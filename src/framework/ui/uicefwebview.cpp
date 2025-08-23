@@ -1091,32 +1091,37 @@ void UICEFWebView::processAcceleratedPaintGPU(const CefAcceleratedPaintInfo& inf
     }    
 
     g_dispatcher.scheduleEvent([this, dupFd, width, height, stride, offset, modifier]() {
-        // Static counter to prevent infinite retry loops
-        static std::unordered_map<void*, int> retryCounter;
-        int& attempts = retryCounter[this];
-        const int MAX_ATTEMPTS = 3; // Limit to 3 attempts maximum
-        
-        if (attempts >= MAX_ATTEMPTS) {
-            g_logger.fatal(stdext::format("UICEFWebView: GPU acceleration failed after %d attempts - aborting application!", MAX_ATTEMPTS));
-            close(dupFd);
-            std::abort();
-        }
-        attempts++;
+        // Static counter to prevent infinite retry loops - ONLY increments on ERRORS
+        static std::unordered_map<void*, int> errorCounter;
         
         // Ensure the main GLX context is current on this thread
         if (!s_glxMainContext || !s_glxDrawable || !s_x11Display) {
-            g_logger.fatal("UICEFWebView: No GLX context or drawable available - GPU acceleration required!");
+            int& attempts = errorCounter[this];
+            attempts++;
+            if (attempts >= 3) {
+                g_logger.fatal("UICEFWebView: No GLX context or drawable available - GPU acceleration required!");
+                close(dupFd);
+                std::abort();
+            }
+            g_logger.error(stdext::format("UICEFWebView: No GLX context or drawable available (attempt %d/3)", attempts));
             close(dupFd);
-            std::abort();
+            return;
         }
         
         // Validate current OpenGL context before proceeding
         GLXContext currentContext = glXGetCurrentContext();
         if (currentContext != s_glxMainContext) {
             if (!glXMakeCurrent((Display*)s_x11Display, (GLXDrawable)s_glxDrawable, (GLXContext)s_glxMainContext)) {
-                g_logger.fatal("UICEFWebView: Failed to make GLX context current - GPU acceleration required!");
+                int& attempts = errorCounter[this];
+                attempts++;
+                if (attempts >= 3) {
+                    g_logger.fatal("UICEFWebView: Failed to make GLX context current - GPU acceleration required!");
+                    close(dupFd);
+                    std::abort();
+                }
+                g_logger.error(stdext::format("UICEFWebView: Failed to make GLX context current (attempt %d/3)", attempts));
                 close(dupFd);
-                std::abort();
+                return;
             }
         }
         
@@ -1141,9 +1146,16 @@ void UICEFWebView::processAcceleratedPaintGPU(const CefAcceleratedPaintInfo& inf
         auto eglCreateImageKHRFn = (PFNEGLCREATEIMAGEKHRPROC)eglGetProcAddress("eglCreateImageKHR");
         auto eglDestroyImageKHRFn = (PFNEGLDESTROYIMAGEKHRPROC)eglGetProcAddress("eglDestroyImageKHR");
         if (!eglCreateImageKHRFn || !eglDestroyImageKHRFn || !ensureGlEglImageProcResolved()) {
-            g_logger.fatal("UICEFWebView: Failed to get EGL functions - GPU acceleration required!");
+            int& attempts = errorCounter[this];
+            attempts++;
+            if (attempts >= 3) {
+                g_logger.fatal("UICEFWebView: Failed to get EGL functions - GPU acceleration required!");
+                close(dupFd);
+                std::abort();
+            }
+            g_logger.error(stdext::format("UICEFWebView: Failed to get EGL functions (attempt %d/3)", attempts));
             close(dupFd);
-            std::abort();
+            return;
         }
 
         auto buildAttrs = [&](bool includeModifier) {
@@ -1179,9 +1191,16 @@ void UICEFWebView::processAcceleratedPaintGPU(const CefAcceleratedPaintInfo& inf
         }
 
         if (img == EGL_NO_IMAGE_KHR) {
-            g_logger.fatal("UICEFWebView: Failed to create EGL image - GPU acceleration required!");
+            int& attempts = errorCounter[this];
+            attempts++;
+            if (attempts >= 3) {
+                g_logger.fatal("UICEFWebView: Failed to create EGL image - GPU acceleration required!");
+                close(dupFd);
+                std::abort();
+            }
+            g_logger.error(stdext::format("UICEFWebView: Failed to create EGL image (attempt %d/3)", attempts));
             close(dupFd);
-            std::abort();
+            return;
         }
 
         if (!m_textureCreated || getWidth() != m_lastWidth || getHeight() != m_lastHeight || !m_cefTexture) {
@@ -1231,10 +1250,12 @@ void UICEFWebView::processAcceleratedPaintGPU(const CefAcceleratedPaintInfo& inf
                         if (error3 == GL_NO_ERROR) {
                             g_logger.info("UICEFWebView: GL_EXT_memory_object_fd approach successful!");
                             memoryObjectSuccess = true;
-                            attempts = 0; // Reset counter on success
+                            errorCounter[this] = 0; // Reset error counter on success
                         } else {
                             g_logger.error(stdext::format("ERROR: glTexStorageMem2DEXT failed with error: 0x%x", error3));
-                            if (attempts >= MAX_ATTEMPTS - 1) {
+                            int& attempts = errorCounter[this];
+                            attempts++;
+                            if (attempts >= 3) {
                                 g_logger.fatal(stdext::format("FATAL: glTexStorageMem2DEXT consistently failing - GPU acceleration required!"));
                                 glDeleteMemoryObjectsEXT(1, &memoryObject);
                                 eglDestroyImageKHRFn((EGLDisplay)s_eglDisplay, img);
@@ -1243,7 +1264,9 @@ void UICEFWebView::processAcceleratedPaintGPU(const CefAcceleratedPaintInfo& inf
                         }
                     } else {
                         g_logger.error(stdext::format("ERROR: glImportMemoryFdEXT failed with error: 0x%x", error2));
-                        if (attempts >= MAX_ATTEMPTS - 1) {
+                        int& attempts = errorCounter[this];
+                        attempts++;
+                        if (attempts >= 3) {
                             g_logger.fatal(stdext::format("FATAL: glImportMemoryFdEXT consistently failing - GPU acceleration required!"));
                             glDeleteMemoryObjectsEXT(1, &memoryObject);
                             eglDestroyImageKHRFn((EGLDisplay)s_eglDisplay, img);
@@ -1256,7 +1279,9 @@ void UICEFWebView::processAcceleratedPaintGPU(const CefAcceleratedPaintInfo& inf
                     glDeleteMemoryObjectsEXT(1, &memoryObject);
                 } else {
                     g_logger.error(stdext::format("ERROR: glCreateMemoryObjectsEXT failed with error: 0x%x", error1));
-                    if (attempts >= MAX_ATTEMPTS - 1) {
+                    int& attempts = errorCounter[this];
+                    attempts++;
+                    if (attempts >= 3) {
                         g_logger.fatal(stdext::format("FATAL: glCreateMemoryObjectsEXT consistently failing - GPU acceleration required!"));
                         eglDestroyImageKHRFn((EGLDisplay)s_eglDisplay, img);
                         close(dupFd);
@@ -1264,10 +1289,18 @@ void UICEFWebView::processAcceleratedPaintGPU(const CefAcceleratedPaintInfo& inf
                     }
                 }
             } else {
-                g_logger.fatal("UICEFWebView: GL_EXT_memory_object_fd functions not available - GPU acceleration required!");
+                int& attempts = errorCounter[this];
+                attempts++;
+                if (attempts >= 3) {
+                    g_logger.fatal("UICEFWebView: GL_EXT_memory_object_fd functions not available - GPU acceleration required!");
+                    eglDestroyImageKHRFn((EGLDisplay)s_eglDisplay, img);
+                    close(dupFd);
+                    std::abort();
+                }
+                g_logger.error(stdext::format("UICEFWebView: GL_EXT_memory_object_fd functions not available (attempt %d/3)", attempts));
                 eglDestroyImageKHRFn((EGLDisplay)s_eglDisplay, img);
                 close(dupFd);
-                std::abort();
+                return;
             }
         }
         
@@ -1276,10 +1309,18 @@ void UICEFWebView::processAcceleratedPaintGPU(const CefAcceleratedPaintInfo& inf
             g_logger.info("Trying EGLImage approach with existing GLX context...");
             
             if (g_glEGLImageTargetTexture2DOES == nullptr) {
-                g_logger.fatal("g_glEGLImageTargetTexture2DOES is NULL - GPU acceleration required!");
+                int& attempts = errorCounter[this];
+                attempts++;
+                if (attempts >= 3) {
+                    g_logger.fatal("g_glEGLImageTargetTexture2DOES is NULL - GPU acceleration required!");
+                    eglDestroyImageKHRFn((EGLDisplay)s_eglDisplay, img);
+                    if (!hasMemoryObjectFd) close(dupFd);
+                    std::abort();
+                }
+                g_logger.error(stdext::format("g_glEGLImageTargetTexture2DOES is NULL (attempt %d/3)", attempts));
                 eglDestroyImageKHRFn((EGLDisplay)s_eglDisplay, img);
                 if (!hasMemoryObjectFd) close(dupFd);
-                std::abort();
+                return;
             }
             
             // Ensure texture is bound correctly
@@ -1290,8 +1331,9 @@ void UICEFWebView::processAcceleratedPaintGPU(const CefAcceleratedPaintInfo& inf
             GLenum glError = glGetError();
             if (glError != GL_NO_ERROR) {
                 g_logger.error(stdext::format("ERROR: GPU acceleration failed with OpenGL error: 0x%x (GL_INVALID_OPERATION=0x502)", glError));
-                // After multiple failures, crash the application
-                if (attempts >= MAX_ATTEMPTS - 1) {
+                int& attempts = errorCounter[this];
+                attempts++;
+                if (attempts >= 3) {
                     g_logger.fatal("FATAL: GPU acceleration consistently failing - aborting application!");
                     eglDestroyImageKHRFn((EGLDisplay)s_eglDisplay, img);
                     if (!hasMemoryObjectFd) close(dupFd);
@@ -1299,7 +1341,7 @@ void UICEFWebView::processAcceleratedPaintGPU(const CefAcceleratedPaintInfo& inf
                 }
             } else {
                 g_logger.info("UICEFWebView: GPU acceleration successful via EGLImage!");
-                attempts = 0; // Reset counter on success
+                errorCounter[this] = 0; // Reset error counter on success
             }
         }
         
