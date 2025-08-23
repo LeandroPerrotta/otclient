@@ -817,8 +817,9 @@ void UICEFWebView::onCEFAcceleratedPaint(const CefAcceleratedPaintInfo& info)
         attrs);
 
     if (pbuffer == EGL_NO_SURFACE) {
-        g_logger.error("eglCreatePbufferFromClientBuffer failed, eglError=" +
-                       stdext::dec_to_hex(eglGetError()));
+        EGLint eglError = eglGetError();
+        g_logger.error(stdext::format("eglCreatePbufferFromClientBuffer failed - EGL error: 0x%x (%s)", 
+                                    eglError, getEGLErrorString(eglError)));
         tex->Release();
         d3dDevice->Release();
         d3dContext->Release();
@@ -1073,6 +1074,44 @@ static bool isDmaBufModifierSupported(EGLDisplay display, EGLint format, uint64_
 #endif
 }
 
+static const char* getEGLErrorString(EGLint error)
+{
+    switch (error) {
+        case EGL_SUCCESS:
+            return "EGL_SUCCESS";
+        case EGL_NOT_INITIALIZED:
+            return "EGL_NOT_INITIALIZED - EGL is not initialized, or could not be initialized, for the specified EGL display connection";
+        case EGL_BAD_ACCESS:
+            return "EGL_BAD_ACCESS - EGL cannot access a requested resource (for example a context is bound in another thread)";
+        case EGL_BAD_ALLOC:
+            return "EGL_BAD_ALLOC - EGL failed to allocate resources for the requested operation";
+        case EGL_BAD_ATTRIBUTE:
+            return "EGL_BAD_ATTRIBUTE - An unrecognized attribute or attribute value was passed in the attribute list";
+        case EGL_BAD_CONTEXT:
+            return "EGL_BAD_CONTEXT - An EGLContext argument does not name a valid EGL rendering context";
+        case EGL_BAD_CONFIG:
+            return "EGL_BAD_CONFIG - An EGLConfig argument does not name a valid EGL frame buffer configuration";
+        case EGL_BAD_CURRENT_SURFACE:
+            return "EGL_BAD_CURRENT_SURFACE - The current surface of the calling thread is a window, pixel buffer or pixmap that is no longer valid";
+        case EGL_BAD_DISPLAY:
+            return "EGL_BAD_DISPLAY - An EGLDisplay argument does not name a valid EGL display connection";
+        case EGL_BAD_SURFACE:
+            return "EGL_BAD_SURFACE - An EGLSurface argument does not name a valid surface (window, pixel buffer or pixmap) configured for GL rendering";
+        case EGL_BAD_MATCH:
+            return "EGL_BAD_MATCH - Arguments are inconsistent (for example, a valid context requires buffers not supplied by a valid surface)";
+        case EGL_BAD_PARAMETER:
+            return "EGL_BAD_PARAMETER - One or more argument values are invalid";
+        case EGL_BAD_NATIVE_PIXMAP:
+            return "EGL_BAD_NATIVE_PIXMAP - A NativePixmapType argument does not refer to a valid native pixmap";
+        case EGL_BAD_NATIVE_WINDOW:
+            return "EGL_BAD_NATIVE_WINDOW - A NativeWindowType argument does not refer to a valid native window";
+        case EGL_CONTEXT_LOST:
+            return "EGL_CONTEXT_LOST - A power management event has occurred. The application must destroy all contexts and reinitialise OpenGL ES state and objects to continue rendering";
+        default:
+            return "Unknown EGL error";
+    }
+}
+
 void UICEFWebView::processAcceleratedPaintGPU(const CefAcceleratedPaintInfo& info)
 {
 #if defined(__linux__)
@@ -1194,13 +1233,19 @@ void UICEFWebView::processAcceleratedPaintGPU(const CefAcceleratedPaintInfo& inf
         EGLImageKHR img = eglCreateImageKHRFn((EGLDisplay)s_eglDisplay, EGL_NO_CONTEXT, EGL_LINUX_DMA_BUF_EXT, nullptr, imgAttrs.data());
 
         if (img == EGL_NO_IMAGE_KHR && useModifier) {
-            g_logger.info("UICEFWebView: EGL image creation failed with modifier, trying without modifier");
+            EGLint eglError = eglGetError();
+            g_logger.info(stdext::format("UICEFWebView: EGL image creation failed with modifier (error: 0x%x - %s), trying without modifier", 
+                                       eglError, getEGLErrorString(eglError)));
             imgAttrs = buildAttrs(false);
             img = eglCreateImageKHRFn((EGLDisplay)s_eglDisplay, EGL_NO_CONTEXT, EGL_LINUX_DMA_BUF_EXT, nullptr, imgAttrs.data());
         }
 
         if (img == EGL_NO_IMAGE_KHR) {
-            g_logger.error("UICEFWebView: Failed to create EGL image");
+            EGLint eglError = eglGetError();
+            g_logger.error(stdext::format("UICEFWebView: Failed to create EGL image - EGL error: 0x%x (%s)", 
+                                        eglError, getEGLErrorString(eglError)));
+            g_logger.error(stdext::format("UICEFWebView: EGL image parameters - width: %d, height: %d, stride: %d, offset: %d, fd: %d, modifier: 0x%llx, useModifier: %s", 
+                                        width, height, stride, offset, dupFd, modifier, useModifier ? "true" : "false"));
             close(dupFd);
             return;
         }
