@@ -80,16 +80,6 @@ typedef void (APIENTRYP PFNGLTEXSTORAGEMEM2DEXTPROC) (GLenum target, GLsizei lev
 typedef void (APIENTRYP PFNGLDELETEMEMORYOBJECTSEXTPROC) (GLsizei n, const GLuint *memoryObjects);
 #endif
 
-// Define BGRA format constants if not available
-#ifndef GL_BGRA8_EXT
-#define GL_BGRA8_EXT 0x93A1
-#endif
-
-// Define DRM BGRA format if not available
-#ifndef DRM_FORMAT_BGRA8888
-#define DRM_FORMAT_BGRA8888 0x34324742 /* [31:0] B:G:R:A 8:8:8:8 little endian */
-#endif
-
 // glEGLImageTargetTexture2DOES extension
 #ifndef GLeglImageOES
 typedef void* GLeglImageOES;
@@ -1099,9 +1089,7 @@ void UICEFWebView::processAcceleratedPaintGPU(const CefAcceleratedPaintInfo& inf
         return;
     }    
 
-    // SAFETY: Don't capture 'this' directly to avoid dangling pointer crashes
-    // Process GPU acceleration immediately in current thread instead of scheduling
-    {
+    g_dispatcher.scheduleEvent([this, dupFd, width, height, stride, offset, modifier]() {
         // Ensure the main GLX context is current on this thread
         if (!s_glxMainContext || !s_glxDrawable || !s_x11Display) {
             g_logger.error("UICEFWebView: No GLX context or drawable available");
@@ -1147,7 +1135,7 @@ void UICEFWebView::processAcceleratedPaintGPU(const CefAcceleratedPaintInfo& inf
             std::vector<EGLint> attrs = {
                 EGL_WIDTH, width,
                 EGL_HEIGHT, height,
-                EGL_LINUX_DRM_FOURCC_EXT, DRM_FORMAT_BGRA8888,
+                EGL_LINUX_DRM_FOURCC_EXT, DRM_FORMAT_ARGB8888,
                 EGL_DMA_BUF_PLANE0_FD_EXT, dupFd,
                 EGL_DMA_BUF_PLANE0_OFFSET_EXT, offset,
                 EGL_DMA_BUF_PLANE0_PITCH_EXT, stride
@@ -1163,7 +1151,7 @@ void UICEFWebView::processAcceleratedPaintGPU(const CefAcceleratedPaintInfo& inf
         };
 
         bool useModifier = modifier != DRM_FORMAT_MOD_INVALID &&
-                           isDmaBufModifierSupported((EGLDisplay)s_eglDisplay, DRM_FORMAT_BGRA8888, modifier);
+                           isDmaBufModifierSupported((EGLDisplay)s_eglDisplay, DRM_FORMAT_ARGB8888, modifier);
 
         auto imgAttrs = buildAttrs(useModifier);
 
@@ -1227,8 +1215,7 @@ void UICEFWebView::processAcceleratedPaintGPU(const CefAcceleratedPaintInfo& inf
                     
                     if (error2 == GL_NO_ERROR) {
                         // Use the memory object to create the texture
-                        // CRITICAL: Use GL_BGRA8 to match CEF's output format
-                        glTexStorageMem2DEXT(GL_TEXTURE_2D, 1, GL_BGRA8_EXT, width, height, memoryObject, offset);
+                        glTexStorageMem2DEXT(GL_TEXTURE_2D, 1, GL_RGBA8, width, height, memoryObject, offset);
                         GLenum error3 = glGetError();
                         
                         if (error3 == GL_NO_ERROR) {
@@ -1322,7 +1309,7 @@ void UICEFWebView::processAcceleratedPaintGPU(const CefAcceleratedPaintInfo& inf
         if (!memoryObjectSuccess && !hasMemoryObjectFd) {
             close(dupFd);
         }
-    }
+    }, 0);
 #endif
 }
 
