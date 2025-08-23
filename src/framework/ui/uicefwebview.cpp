@@ -79,6 +79,12 @@ typedef void (APIENTRYP PFNGLIMPORTMEMORYFDEXTPROC) (GLuint memory, GLuint64 siz
 typedef void (APIENTRYP PFNGLTEXSTORAGEMEM2DEXTPROC) (GLenum target, GLsizei levels, GLenum internalFormat, GLsizei width, GLsizei height, GLuint memory, GLuint64 offset);
 typedef void (APIENTRYP PFNGLDELETEMEMORYOBJECTSEXTPROC) (GLsizei n, const GLuint *memoryObjects);
 #endif
+
+// glEGLImageTargetTexture2DOES extension
+#ifndef GLeglImageOES
+typedef void* GLeglImageOES;
+#endif
+typedef void (*PFNGLEGLIMAGETARGETTEXTURE2DOESPROC)(GLenum target, GLeglImageOES image);
 #elif defined(_WIN32) && defined(OPENGL_ES) && OPENGL_ES == 2
 #  include <EGL/egl.h>
 #  include <EGL/eglext.h>
@@ -97,6 +103,32 @@ typedef void (APIENTRYP PFNGLDELETEMEMORYOBJECTSEXTPROC) (GLsizei n, const GLuin
 #include <sys/mman.h>
 #include <fcntl.h>
 
+// typedef (geralmente já vem de gl2ext.h, mas garantimos)
+#ifndef PFNGLEGLIMAGETARGETTEXTURE2DOESPROC_DEFINED
+typedef void (*PFNGLEGLIMAGETARGETTEXTURE2DOESPROC)(GLenum, GLeglImageOES);
+#define PFNGLEGLIMAGETARGETTEXTURE2DOESPROC_DEFINED
+#endif
+
+static PFNGLEGLIMAGETARGETTEXTURE2DOESPROC g_glEGLImageTargetTexture2DOES = nullptr;
+
+static void* resolveGLProc(const char* name) {
+#ifdef GLX_VERSION_1_3
+  if (glXGetCurrentContext() != nullptr) {
+    // Estamos em um contexto GLX → resolva pelo driver GL
+    return (void*)glXGetProcAddressARB((const GLubyte*)name);
+  }
+#endif
+  // Caso contrário, tente EGL (se o contexto/loader for EGL)
+  return (void*)eglGetProcAddress(name);
+}
+
+static bool ensureGlEglImageProcResolved() {
+  if (g_glEGLImageTargetTexture2DOES) return true;
+  g_glEGLImageTargetTexture2DOES =
+      (PFNGLEGLIMAGETARGETTEXTURE2DOESPROC)resolveGLProc("glEGLImageTargetTexture2DOES");
+  return g_glEGLImageTargetTexture2DOES != nullptr;
+}
+
 std::string GetDataURI(const std::string& data, const std::string& mime_type) {
     return "data:" + mime_type + ";base64," +
            CefURIEncode(CefBase64Encode(data.data(), data.size()), false)
@@ -114,6 +146,8 @@ bool UICEFWebView::s_glxContextInitialized = false;
 void* UICEFWebView::s_x11Display = nullptr;
 void* UICEFWebView::s_glxContext = nullptr;
 void* UICEFWebView::s_glxPbuffer = nullptr;
+void* UICEFWebView::s_glxMainContext = nullptr;
+void* UICEFWebView::s_glxDrawable = nullptr;
 bool UICEFWebView::s_eglSidecarInitialized = false;
 void* UICEFWebView::s_eglDisplay = nullptr;
 #endif
@@ -480,6 +514,8 @@ UICEFWebView::UICEFWebView()
     
     // Initialize EGL sidecar for DMA buffer import
     initializeEGLSidecar();
+    // Initialize shared GLX context
+    initializeGLXSharedContext();
 #endif
 }
 
@@ -502,6 +538,8 @@ UICEFWebView::UICEFWebView(UIWidgetPtr parent)
     
     // Initialize EGL sidecar for DMA buffer import
     initializeEGLSidecar();
+    // Initialize shared GLX context
+    initializeGLXSharedContext();
 #endif
 }
 
@@ -854,14 +892,17 @@ void UICEFWebView::initializeGLXSharedContext()
     
     s_x11Display = x11Display;
     g_logger.info("UICEFWebView: Found X11 display from GLX");
-    
-    // Get main GLX context
+
+    // Get main GLX context and drawable
     GLXContext mainContext = glXGetCurrentContext();
-    if (!mainContext) {
-        g_logger.error("UICEFWebView: No main GLX context available");
+    GLXDrawable mainDrawable = glXGetCurrentDrawable();
+    if (!mainContext || !mainDrawable) {
+        g_logger.error("UICEFWebView: No main GLX context or drawable available");
         return;
     }
-    g_logger.info("UICEFWebView: Found main GLX context");
+    g_logger.info("UICEFWebView: Found main GLX context and drawable");
+    s_glxMainContext = mainContext;
+    s_glxDrawable = (void*)mainDrawable;
     
     // Choose a GLX FB config
     int fbConfigAttribs[] = {
@@ -967,6 +1008,8 @@ void UICEFWebView::cleanupGPUResources()
         }
         s_glxContext = nullptr;
         s_glxPbuffer = nullptr;
+        s_glxMainContext = nullptr;
+        s_glxDrawable = nullptr;
         s_glxContextInitialized = false;
     }
     
@@ -985,109 +1028,186 @@ void UICEFWebView::cleanupGPUResources()
 #endif
 }
 
+static bool isDmaBufModifierSupported(EGLDisplay display, EGLint format, uint64_t modifier)
+{
+#if defined(__linux__)
+    auto eglQueryDmaBufFormatsEXTFn = (PFNEGLQUERYDMABUFFORMATSEXTPROC)eglGetProcAddress("eglQueryDmaBufFormatsEXT");
+    auto eglQueryDmaBufModifiersEXTFn = (PFNEGLQUERYDMABUFMODIFIERSEXTPROC)eglGetProcAddress("eglQueryDmaBufModifiersEXT");
+    if (!eglQueryDmaBufFormatsEXTFn || !eglQueryDmaBufModifiersEXTFn) {
+        return false;
+    }
+
+    EGLint numFormats = 0;
+    if (!eglQueryDmaBufFormatsEXTFn(display, 0, nullptr, &numFormats) || numFormats <= 0) {
+        return false;
+    }
+    std::vector<EGLint> formats(numFormats);
+    if (!eglQueryDmaBufFormatsEXTFn(display, numFormats, formats.data(), &numFormats)) {
+        return false;
+    }
+    if (std::find(formats.begin(), formats.end(), format) == formats.end()) {
+        return false;
+    }
+
+    EGLint numModifiers = 0;
+    if (!eglQueryDmaBufModifiersEXTFn(display, format, 0, nullptr, nullptr, &numModifiers) || numModifiers <= 0) {
+        return false;
+    }
+    std::vector<EGLuint64KHR> modifiers(numModifiers);
+    std::vector<EGLBoolean> externalOnly(numModifiers);
+    if (!eglQueryDmaBufModifiersEXTFn(display, format, numModifiers, modifiers.data(), externalOnly.data(), &numModifiers)) {
+        return false;
+    }
+
+    return std::find(modifiers.begin(), modifiers.end(), modifier) != modifiers.end();
+#else
+    (void)display; (void)format; (void)modifier; return false;
+#endif
+}
+
 void UICEFWebView::processAcceleratedPaintGPU(const CefAcceleratedPaintInfo& info)
 {
 #if defined(__linux__)
     if (!s_eglSidecarInitialized) {
         return;
     }
-    
-    // Extract parameters
+
     const int fd = info.planes[0].fd;
     const int width = info.extra.coded_size.width;
     const int height = info.extra.coded_size.height;
     const int stride = info.planes[0].stride;
     const int offset = info.planes[0].offset;
-    
-    // Get EGL function pointers (cache them)
-    static auto eglCreateImageKHRFn = (PFNEGLCREATEIMAGEKHRPROC)eglGetProcAddress("eglCreateImageKHR");
-    static auto eglDestroyImageKHRFn = (PFNEGLDESTROYIMAGEKHRPROC)eglGetProcAddress("eglDestroyImageKHR");
-    
-    if (!eglCreateImageKHRFn || !eglDestroyImageKHRFn) {
+    const uint64_t modifier = info.modifier;
+
+    if (fd < 0) {
         return;
     }
-    
-    // 1) Create EGLImage from DMA buffer using EGL sidecar
-    const EGLint imgAttrs[] = {
-        EGL_WIDTH, (EGLint)width,
-        EGL_HEIGHT, (EGLint)height,
-        EGL_LINUX_DRM_FOURCC_EXT, (EGLint)DRM_FORMAT_ARGB8888,
-        EGL_DMA_BUF_PLANE0_FD_EXT, (EGLint)fd,
-        EGL_DMA_BUF_PLANE0_OFFSET_EXT, (EGLint)offset,
-        EGL_DMA_BUF_PLANE0_PITCH_EXT, (EGLint)stride,
-        EGL_NONE
-    };
-    
-    EGLImageKHR img = eglCreateImageKHRFn((EGLDisplay)s_eglDisplay, EGL_NO_CONTEXT, EGL_LINUX_DMA_BUF_EXT, nullptr, imgAttrs);
-    if (img == EGL_NO_IMAGE_KHR) {
-        // Try alternative format
-        const EGLint imgAttrsAlt[] = {
-            EGL_WIDTH, (EGLint)width,
-            EGL_HEIGHT, (EGLint)height,
-            EGL_LINUX_DRM_FOURCC_EXT, (EGLint)DRM_FORMAT_ABGR8888,
-            EGL_DMA_BUF_PLANE0_FD_EXT, (EGLint)fd,
-            EGL_DMA_BUF_PLANE0_OFFSET_EXT, (EGLint)offset,
-            EGL_DMA_BUF_PLANE0_PITCH_EXT, (EGLint)stride,
-            EGL_NONE
-        };
-        img = eglCreateImageKHRFn((EGLDisplay)s_eglDisplay, EGL_NO_CONTEXT, EGL_LINUX_DMA_BUF_EXT, nullptr, imgAttrsAlt);
-        if (img == EGL_NO_IMAGE_KHR) {
+
+    g_dispatcher.scheduleEvent([this, fd, width, height, stride, offset, modifier]() {
+        // Ensure the main GLX context is current on this thread
+        if (!s_glxMainContext || !s_glxDrawable || !s_x11Display) {
+            g_logger.error("UICEFWebView: No GLX context or drawable available");
             return;
         }
-    }
-    
-    // 2) Since we don't have OpenGL context in CEF thread, use CPU fallback with EGLImage
-    // This is still GPU-accelerated because CEF renders with GPU, we just copy via CPU
-    
-    // Map the DMA buffer immediately while FD is valid
-    size_t mapSize = stride * height;
-    void* mapped = mmap(nullptr, mapSize, PROT_READ, MAP_SHARED, fd, offset);
-    if (mapped == MAP_FAILED) {
-        eglDestroyImageKHRFn((EGLDisplay)s_eglDisplay, img);
-        return;
-    }
-    
-    // Copy pixel data to our own buffer (removing stride padding)
-    std::vector<uint8_t> pixelData(width * height * 4);
-    uint8_t* src = static_cast<uint8_t*>(mapped);
-    uint8_t* dst = pixelData.data();
-    
-    if (stride == width * 4) {
-        // No padding, direct copy
-        memcpy(dst, src, width * height * 4);
-    } else {
-        // Copy row by row to remove padding
-        for (int y = 0; y < height; y++) {
-            memcpy(dst + y * width * 4, src + y * stride, width * 4);
+        if (!glXMakeCurrent((Display*)s_x11Display, (GLXDrawable)s_glxDrawable, (GLXContext)s_glxMainContext)) {
+            g_logger.error("UICEFWebView: Failed to make GLX context current");
+            return;
         }
-    }
-    
-    // 3) Immediate cleanup - we have our copy now
-    munmap(mapped, mapSize);
-    eglDestroyImageKHRFn((EGLDisplay)s_eglDisplay, img);
-    
-    // 4) Schedule OpenGL upload on main thread with copied data
-    g_dispatcher.scheduleEvent([this, pixelData = std::move(pixelData), width, height]() mutable {
+        auto eglCreateImageKHRFn = (PFNEGLCREATEIMAGEKHRPROC)eglGetProcAddress("eglCreateImageKHR");
+        auto eglDestroyImageKHRFn = (PFNEGLDESTROYIMAGEKHRPROC)eglGetProcAddress("eglDestroyImageKHR");
+        if (!eglCreateImageKHRFn || !eglDestroyImageKHRFn || !ensureGlEglImageProcResolved()) {
+            g_logger.error("UICEFWebView: Failed to get EGL functions");
+            return;
+        }
+
+        int dupFd = fcntl(fd, F_DUPFD_CLOEXEC, 0);
+        if (dupFd < 0) {
+            g_logger.error("UICEFWebView: Failed to duplicate FD");
+            return;
+        }
+
+        auto buildAttrs = [&](bool includeModifier) {
+            std::vector<EGLint> attrs = {
+                EGL_WIDTH, width,
+                EGL_HEIGHT, height,
+                EGL_LINUX_DRM_FOURCC_EXT, DRM_FORMAT_ARGB8888,
+                EGL_DMA_BUF_PLANE0_FD_EXT, dupFd,
+                EGL_DMA_BUF_PLANE0_OFFSET_EXT, offset,
+                EGL_DMA_BUF_PLANE0_PITCH_EXT, stride
+            };
+            if (includeModifier) {
+                attrs.push_back(EGL_DMA_BUF_PLANE0_MODIFIER_LO_EXT);
+                attrs.push_back(static_cast<EGLint>(modifier & 0xffffffff));
+                attrs.push_back(EGL_DMA_BUF_PLANE0_MODIFIER_HI_EXT);
+                attrs.push_back(static_cast<EGLint>(modifier >> 32));
+            }
+            attrs.push_back(EGL_NONE);
+            return attrs;
+        };
+
+
+        g_logger.info(stdext::format("modifier=0x%016llx (hi=0x%08x lo=0x%08x)",
+            (unsigned long long)modifier,
+            (unsigned int)(modifier >> 32),
+            (unsigned int)(modifier & 0xffffffffu)
+        ));
+        bool useModifier = modifier != DRM_FORMAT_MOD_INVALID &&
+                           isDmaBufModifierSupported((EGLDisplay)s_eglDisplay, DRM_FORMAT_ARGB8888, modifier);
+        g_logger.info(stdext::format("modifiers: DRM_FORMAT_MOD_INVALID=0x%016llx useModifier=%d",
+                            (unsigned long long)DRM_FORMAT_MOD_INVALID, useModifier ? 1 : 0));
+
+        auto imgAttrs = buildAttrs(useModifier);
+
+        auto dumpAttrs = [&](const std::vector<EGLint>& a){
+            std::string s;
+            for (size_t i=0;i<a.size();i+=2){
+                if (a[i]==EGL_NONE){ s += "EGL_NONE"; break; }
+                s += std::to_string(a[i]) + "=" + std::to_string(a[i+1]) + " ";
+            }
+            g_logger.info(stdext::format("eglCreateImage attrs: %s", s.c_str()));
+        };
+        dumpAttrs(imgAttrs);
+
+        EGLImageKHR img = eglCreateImageKHRFn((EGLDisplay)s_eglDisplay, EGL_NO_CONTEXT, EGL_LINUX_DMA_BUF_EXT, nullptr, imgAttrs.data());
+
+        if (img == EGL_NO_IMAGE_KHR && useModifier) {
+            imgAttrs = buildAttrs(false);
+            dumpAttrs(imgAttrs);
+            img = eglCreateImageKHRFn((EGLDisplay)s_eglDisplay, EGL_NO_CONTEXT, EGL_LINUX_DMA_BUF_EXT, nullptr, imgAttrs.data());
+        }
+
+        if (img == EGL_NO_IMAGE_KHR) {
+            g_logger.error("UICEFWebView: Failed to create EGL image");
+            return;
+        }
+
         if (!m_textureCreated || getWidth() != m_lastWidth || getHeight() != m_lastHeight || !m_cefTexture) {
             m_cefTexture = TexturePtr(new Texture(Size(getWidth(), getHeight())));
             m_textureCreated = true;
             m_lastWidth = getWidth();
             m_lastHeight = getHeight();
         }
-        
-        // Upload to OpenGL texture on main thread with OpenGL context
+
+        g_logger.info(stdext::format("GL_EXTENSIONS=%s", (const char*)glGetString(GL_EXTENSIONS)));
+        g_logger.info("UICEFWebView: EGLImage valid: " + std::to_string(img != EGL_NO_IMAGE_KHR));
+        g_logger.info(stdext::format("CEF GPU Paint: coded_size=%dx%d, plane0: stride=%d offset=%d modifier=0x%llx",
+            width, height, stride, offset,
+            static_cast<unsigned long long>(modifier)));
+
+        g_logger.info(stdext::format("CEF Texture State: getWidth()=%d, getHeight()=%d, texCreated=%d",
+            getWidth(), getHeight(), m_textureCreated ? 1 : 0));
+                    
+        auto logCurrent = [&]{
+            EGLDisplay curDpy = eglGetCurrentDisplay();
+            EGLContext curCtx = eglGetCurrentContext();
+            EGLSurface curSurf = eglGetCurrentSurface(EGL_DRAW);
+            g_logger.info(stdext::format("EGL current: dpy=%p ctx=%p surf=%p", curDpy, curCtx, curSurf));
+
+            void* glxCtx = nullptr;
+            void* glxDpy = nullptr;
+            #ifdef GLX_VERSION_1_3
+            glxCtx = (void*)glXGetCurrentContext();
+            glxDpy = (void*)glXGetCurrentDisplay();
+            g_logger.info(stdext::format("GLX current: dpy=%p ctx=%p", glxDpy, glxCtx) );
+            #endif
+        };
+        logCurrent();
+
+
         glBindTexture(GL_TEXTURE_2D, m_cefTexture->getId());
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_BGRA, GL_UNSIGNED_BYTE, pixelData.data());
-        
-                 // Log success only occasionally to avoid spam
-         static int successCount = 0;
-         GLenum glError = glGetError();
-         if (glError == GL_NO_ERROR) {
-             successCount++;
-             if (successCount == 1 || successCount % 100 == 0) {
-                 g_logger.info("UICEFWebView: Accelerated frame uploaded successfully (count: " + std::to_string(successCount) + ")");
-             }
-         }
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+        g_glEGLImageTargetTexture2DOES(GL_TEXTURE_2D, (GLeglImageOES)img);
+        GLenum glError = glGetError();
+        glBindTexture(GL_TEXTURE_2D, 0);
+
+        eglDestroyImageKHRFn((EGLDisplay)s_eglDisplay, img);
+
+        if (glError != GL_NO_ERROR) {
+            g_logger.error("UICEFWebView: Failed to bind EGL image to texture");
+            return;
+        }
+
+        close(dupFd);
     }, 0);
 #endif
 }
@@ -1136,15 +1256,16 @@ void UICEFWebView::createAcceleratedTextures(int width, int height)
 #endif
 }
 
-void UICEFWebView::implementCPUFallback(const CefAcceleratedPaintInfo& info, int width, int height, int stride)
+void UICEFWebView::implementCPUFallback(int fd, int offset, int width, int height, int stride)
 {
 #if defined(__linux__)
     g_logger.info("UICEFWebView: Implementing CPU fallback for DMA buffer rendering");
-    
+
     // Map the DMA buffer to CPU memory
-    void* mapped = mmap(nullptr, stride * height, PROT_READ, MAP_SHARED, info.planes[0].fd, info.planes[0].offset);
+    void* mapped = mmap(nullptr, stride * height, PROT_READ, MAP_SHARED, fd, offset);
     if (mapped == MAP_FAILED) {
         g_logger.error("UICEFWebView: Failed to mmap DMA buffer: " + std::string(strerror(errno)));
+        close(fd);
         return;
     }
     
@@ -1184,11 +1305,12 @@ void UICEFWebView::implementCPUFallback(const CefAcceleratedPaintInfo& info, int
     } else {
         g_logger.error("UICEFWebView: CPU fallback upload failed: " + std::to_string(glError));
     }
-    
+
     // Cleanup
     munmap(mapped, stride * height);
+    close(fd);
 #else
-    (void)info; (void)width; (void)height; (void)stride;
+    (void)fd; (void)offset; (void)width; (void)height; (void)stride;
 #endif
 }
 

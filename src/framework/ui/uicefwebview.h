@@ -22,7 +22,7 @@ public:
     // CEF-specific methods
     void onCEFPaint(const void* buffer, int width, int height, const CefRenderHandler::RectList& dirtyRects);
     void onCEFAcceleratedPaint(const CefAcceleratedPaintInfo& info);
-    void implementCPUFallback(const CefAcceleratedPaintInfo& info, int width, int height, int stride);
+    void implementCPUFallback(int fd, int offset, int width, int height, int stride);
     void onBrowserCreated(CefRefPtr<CefBrowser> browser);
     
     // Static methods for managing all WebViews
@@ -86,7 +86,9 @@ private:
     static void* s_x11Display;
     static void* s_glxContext;
     static void* s_glxPbuffer;
-    
+    static void* s_glxMainContext;
+    static void* s_glxDrawable;
+
     // EGL sidecar for DMA buffer import
     static bool s_eglSidecarInitialized;
     static void* s_eglDisplay;
