@@ -1325,26 +1325,41 @@ void UICEFWebView::processAcceleratedPaintGPU(const CefAcceleratedPaintInfo& inf
                 
                 GLuint memoryObject;
                 glCreateMemoryObjectsEXT(1, &memoryObject);
+                GLenum error1 = glGetError();
+                g_logger.info(stdext::format("glCreateMemoryObjectsEXT result: memoryObject=%u, error=0x%x", memoryObject, error1));
                 
                 // Calcular o tamanho do buffer
                 GLuint64 size = (GLuint64)height * stride;
                 
+                // IMPORTANTE: glImportMemoryFdEXT toma posse do FD, não devemos fechá-lo depois
+                g_logger.info(stdext::format("Importing FD %d with size %llu", dupFd, size));
                 glImportMemoryFdEXT(memoryObject, size, GL_HANDLE_TYPE_OPAQUE_FD_EXT, dupFd);
+                GLenum error2 = glGetError();
+                g_logger.info(stdext::format("glImportMemoryFdEXT result: error=0x%x", error2));
                 
-                // Usar o memory object para criar a textura
-                glTexStorageMem2DEXT(GL_TEXTURE_2D, 1, GL_RGBA8, width, height, memoryObject, offset);
-                
-                GLenum glError = glGetError();
-                if (glError == GL_NO_ERROR) {
-                    g_logger.info("GL_EXT_memory_object_fd approach successful!");
+                if (error2 != GL_NO_ERROR) {
+                    g_logger.error(stdext::format("glImportMemoryFdEXT failed: 0x%x", error2));
                     glDeleteMemoryObjectsEXT(1, &memoryObject);
-                    glBindTexture(GL_TEXTURE_2D, 0);
-                    eglDestroyImageKHRFn((EGLDisplay)s_eglDisplay, img);
-                    close(dupFd);
-                    return; // Sucesso, sair da função
+                    // Se falhou, o FD pode ainda estar válido, continuar para próxima abordagem
                 } else {
-                    g_logger.error(stdext::format("GL_EXT_memory_object_fd failed with error: 0x%x", glError));
-                    glDeleteMemoryObjectsEXT(1, &memoryObject);
+                    // Usar o memory object para criar a textura
+                    g_logger.info(stdext::format("Creating texture storage: %dx%d", width, height));
+                    glTexStorageMem2DEXT(GL_TEXTURE_2D, 1, GL_RGBA8, width, height, memoryObject, offset);
+                    GLenum error3 = glGetError();
+                    g_logger.info(stdext::format("glTexStorageMem2DEXT result: error=0x%x", error3));
+                    
+                    if (error3 == GL_NO_ERROR) {
+                        g_logger.info("GL_EXT_memory_object_fd approach successful!");
+                        glDeleteMemoryObjectsEXT(1, &memoryObject);
+                        glBindTexture(GL_TEXTURE_2D, 0);
+                        eglDestroyImageKHRFn((EGLDisplay)s_eglDisplay, img);
+                        // NÃO fechar dupFd aqui - glImportMemoryFdEXT já tomou posse
+                        return; // Sucesso, sair da função
+                    } else {
+                        g_logger.error(stdext::format("glTexStorageMem2DEXT failed with error: 0x%x", error3));
+                        glDeleteMemoryObjectsEXT(1, &memoryObject);
+                        // Se falhou, o FD pode ainda estar válido, continuar para próxima abordagem
+                    }
                 }
             } else {
                 g_logger.error("GL_EXT_memory_object_fd functions not available");
@@ -1363,6 +1378,18 @@ void UICEFWebView::processAcceleratedPaintGPU(const CefAcceleratedPaintInfo& inf
         }
         
         g_logger.info("Attempting g_glEGLImageTargetTexture2DOES with GLX context...");
+        
+        // Verificar se a textura está bound corretamente
+        GLint currentTexture;
+        glGetIntegerv(GL_TEXTURE_BINDING_2D, &currentTexture);
+        g_logger.info(stdext::format("Current bound texture: %d, expected: %u", currentTexture, m_cefTexture->getId()));
+        
+        // Garantir que a textura está bound
+        glBindTexture(GL_TEXTURE_2D, m_cefTexture->getId());
+        
+        // Verificar se a EGLImage é válida
+        g_logger.info(stdext::format("EGLImage pointer: %p", img));
+        
         g_glEGLImageTargetTexture2DOES(GL_TEXTURE_2D, (GLeglImageOES)img);
         g_logger.info("g_glEGLImageTargetTexture2DOES call completed");
         
@@ -1370,14 +1397,16 @@ void UICEFWebView::processAcceleratedPaintGPU(const CefAcceleratedPaintInfo& inf
         g_logger.info(stdext::format("OpenGL error after g_glEGLImageTargetTexture2DOES: 0x%x", glError));
         
         if (glError != GL_NO_ERROR) {
-            g_logger.error(stdext::format("GPU acceleration failed with OpenGL error: 0x%x", glError));
+            g_logger.error(stdext::format("GPU acceleration failed with OpenGL error: 0x%x (GL_INVALID_OPERATION=0x502)", glError));
+            // Mesmo com erro, a textura pode ter sido parcialmente configurada
+            // Não retornar aqui, continuar com a limpeza
         } else {
             g_logger.info("GPU acceleration successful!");
         }
         
         glBindTexture(GL_TEXTURE_2D, 0);
         eglDestroyImageKHRFn((EGLDisplay)s_eglDisplay, img);
-        close(dupFd);
+        close(dupFd);  // Fechar apenas uma vez, no final
     }, 0);
 #endif
 }
