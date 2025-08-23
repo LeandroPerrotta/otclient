@@ -1171,19 +1171,18 @@ void UICEFWebView::processAcceleratedPaintGPU(const CefAcceleratedPaintInfo& inf
             return;
         }
 
-        if (!m_textureCreated || getWidth() != m_lastWidth || getHeight() != m_lastHeight || !m_cefTexture) {
-            m_cefTexture = TexturePtr(new Texture(Size(getWidth(), getHeight())));
-            m_textureCreated = true;
-            m_lastWidth = getWidth();
-            m_lastHeight = getHeight();
-        }
+        // CRITICAL FIX: Always recreate texture for each frame
+        // Reusing textures with glTexStorageMem2DEXT/glEGLImageTargetTexture2DOES causes GL_INVALID_OPERATION
+        m_cefTexture = TexturePtr(new Texture(Size(getWidth(), getHeight())));
+        m_textureCreated = true;
+        m_lastWidth = getWidth();
+        m_lastHeight = getHeight();
+        
+        g_logger.info(stdext::format("UICEFWebView: Created fresh texture %d for GPU acceleration", m_cefTexture->getId()));
 
         glBindTexture(GL_TEXTURE_2D, m_cefTexture->getId());
-        // POTENTIAL FIX: Don't pre-allocate texture storage for EGLImage
-        // glEGLImageTargetTexture2DOES expects uninitialized texture
-        // glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
         
-        // Instead, just set texture parameters that are safe for EGLImage
+        // Set texture parameters that are safe for EGLImage
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
