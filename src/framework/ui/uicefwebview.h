@@ -1,6 +1,8 @@
 #pragma once
 
 #include "uiwebview.h"
+#include <mutex>
+#include <atomic>
 
 #ifdef USE_CEF
 #include "include/cef_browser.h"
@@ -22,7 +24,6 @@ public:
     // CEF-specific methods
     void onCEFPaint(const void* buffer, int width, int height, const CefRenderHandler::RectList& dirtyRects);
     void onCEFAcceleratedPaint(const CefAcceleratedPaintInfo& info);
-    void implementCPUFallback(int fd, int offset, int width, int height, int stride);
     void onBrowserCreated(CefRefPtr<CefBrowser> browser);
     
     // Static methods for managing all WebViews
@@ -107,8 +108,12 @@ private:
     int m_writeIndex;
 #endif
     
-    // Static tracking of all active WebViews
+    // Static tracking of all active WebViews (thread-safe)
     static std::vector<UICEFWebView*> s_activeWebViews;
+    static std::mutex s_activeWebViewsMutex;
+    
+    // Instance validity flag (for scheduled events)
+    std::atomic<bool> m_isValid;
     
     // GPU acceleration methods
     static void initializeGLXSharedContext();
