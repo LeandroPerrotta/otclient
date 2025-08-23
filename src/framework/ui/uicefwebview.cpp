@@ -1101,50 +1101,35 @@ void UICEFWebView::processAcceleratedPaintGPU(const CefAcceleratedPaintInfo& inf
     const int offset = info.planes[0].offset;
     const uint64_t modifier = info.modifier;
 
-    // Log detalhado dos parâmetros recebidos
-    g_logger.info(stdext::format("CEF AcceleratedPaint: fd=%d, size=%dx%d, stride=%d, offset=%d, modifier=0x%llx", 
-                                fd, width, height, stride, offset, modifier));
-
     if (fd < 0) {
         g_logger.error(stdext::format("UICEFWebView: Invalid FD received: %d", fd));
         return;
     }
 
-    g_dispatcher.scheduleEvent([this, fd, width, height, stride, offset, modifier]() {
+    // Verificar se o FD é válido usando fcntl
+    int flags = fcntl(fd, F_GETFL);
+    if (flags == -1) {
+        g_logger.error(stdext::format("UICEFWebView: FD %d is invalid (fcntl F_GETFL failed): %s", fd, strerror(errno)));
+        return;
+    }
+
+    int dupFd = fcntl(fd, F_DUPFD_CLOEXEC, 0);
+    if (dupFd < 0) {
+        g_logger.error(stdext::format("UICEFWebView: Failed to duplicate FD %d: %s (errno=%d)", fd, strerror(errno), errno));
+        return;
+    }    
+
+    g_dispatcher.scheduleEvent([this, dupFd, width, height, stride, offset, modifier]() {
         // Ensure the main GLX context is current on this thread
         if (!s_glxMainContext || !s_glxDrawable || !s_x11Display) {
             g_logger.error("UICEFWebView: No GLX context or drawable available");
             return;
         }
-        
-        // Log do contexto antes de fazer o switch
-        std::thread::id threadId = std::this_thread::get_id();
-        g_logger.info(stdext::format("processAcceleratedPaintGPU on thread ID: %s", 
-                                    std::to_string(std::hash<std::thread::id>{}(threadId)).c_str()));
-        
-#ifdef GLX_VERSION_1_3
-        Display* beforeDisplay = glXGetCurrentDisplay();
-        GLXContext beforeContext = glXGetCurrentContext();
-        GLXDrawable beforeDrawable = glXGetCurrentDrawable();
-        g_logger.info(stdext::format("Before glXMakeCurrent - display=%p, context=%p, drawable=%p", 
-                                    beforeDisplay, beforeContext, beforeDrawable));
-#endif
-        
+            
         if (!glXMakeCurrent((Display*)s_x11Display, (GLXDrawable)s_glxDrawable, (GLXContext)s_glxMainContext)) {
             g_logger.error("UICEFWebView: Failed to make GLX context current");
             return;
         }
-        
-        // Log do contexto após fazer o switch
-#ifdef GLX_VERSION_1_3
-        Display* afterDisplay = glXGetCurrentDisplay();
-        GLXContext afterContext = glXGetCurrentContext();
-        GLXDrawable afterDrawable = glXGetCurrentDrawable();
-        g_logger.info(stdext::format("After glXMakeCurrent - display=%p, context=%p, drawable=%p", 
-                                    afterDisplay, afterContext, afterDrawable));
-        g_logger.info(stdext::format("Context switch successful: %s", 
-                                    (afterContext == s_glxMainContext) ? "YES" : "NO"));
-#endif
 
         auto eglCreateImageKHRFn = (PFNEGLCREATEIMAGEKHRPROC)eglGetProcAddress("eglCreateImageKHR");
         auto eglDestroyImageKHRFn = (PFNEGLDESTROYIMAGEKHRPROC)eglGetProcAddress("eglDestroyImageKHR");
@@ -1152,24 +1137,6 @@ void UICEFWebView::processAcceleratedPaintGPU(const CefAcceleratedPaintInfo& inf
             g_logger.error("UICEFWebView: Failed to get EGL functions");
             return;
         }
-
-        // Verificar se o FD ainda é válido antes de duplicar
-        g_logger.info(stdext::format("About to duplicate FD: %d", fd));
-        
-        // Verificar se o FD é válido usando fcntl
-        int flags = fcntl(fd, F_GETFL);
-        if (flags == -1) {
-            g_logger.error(stdext::format("UICEFWebView: FD %d is invalid (fcntl F_GETFL failed): %s", fd, strerror(errno)));
-            return;
-        }
-        g_logger.info(stdext::format("FD %d is valid, flags: 0x%x", fd, flags));
-
-        int dupFd = fcntl(fd, F_DUPFD_CLOEXEC, 0);
-        if (dupFd < 0) {
-            g_logger.error(stdext::format("UICEFWebView: Failed to duplicate FD %d: %s (errno=%d)", fd, strerror(errno), errno));
-            return;
-        }
-        g_logger.info(stdext::format("Successfully duplicated FD: %d -> %d", fd, dupFd));
 
         auto buildAttrs = [&](bool includeModifier) {
             std::vector<EGLint> attrs = {
@@ -1190,34 +1157,15 @@ void UICEFWebView::processAcceleratedPaintGPU(const CefAcceleratedPaintInfo& inf
             return attrs;
         };
 
-
-        g_logger.info(stdext::format("modifier=0x%016llx (hi=0x%08x lo=0x%08x)",
-            (unsigned long long)modifier,
-            (unsigned int)(modifier >> 32),
-            (unsigned int)(modifier & 0xffffffffu)
-        ));
         bool useModifier = modifier != DRM_FORMAT_MOD_INVALID &&
                            isDmaBufModifierSupported((EGLDisplay)s_eglDisplay, DRM_FORMAT_ARGB8888, modifier);
-        g_logger.info(stdext::format("modifiers: DRM_FORMAT_MOD_INVALID=0x%016llx useModifier=%d",
-                            (unsigned long long)DRM_FORMAT_MOD_INVALID, useModifier ? 1 : 0));
 
         auto imgAttrs = buildAttrs(useModifier);
-
-        auto dumpAttrs = [&](const std::vector<EGLint>& a){
-            std::string s;
-            for (size_t i=0;i<a.size();i+=2){
-                if (a[i]==EGL_NONE){ s += "EGL_NONE"; break; }
-                s += std::to_string(a[i]) + "=" + std::to_string(a[i+1]) + " ";
-            }
-            g_logger.info(stdext::format("eglCreateImage attrs: %s", s.c_str()));
-        };
-        dumpAttrs(imgAttrs);
 
         EGLImageKHR img = eglCreateImageKHRFn((EGLDisplay)s_eglDisplay, EGL_NO_CONTEXT, EGL_LINUX_DMA_BUF_EXT, nullptr, imgAttrs.data());
 
         if (img == EGL_NO_IMAGE_KHR && useModifier) {
             imgAttrs = buildAttrs(false);
-            dumpAttrs(imgAttrs);
             img = eglCreateImageKHRFn((EGLDisplay)s_eglDisplay, EGL_NO_CONTEXT, EGL_LINUX_DMA_BUF_EXT, nullptr, imgAttrs.data());
         }
 
@@ -1233,83 +1181,15 @@ void UICEFWebView::processAcceleratedPaintGPU(const CefAcceleratedPaintInfo& inf
             m_lastHeight = getHeight();
         }
 
-        g_logger.info(stdext::format("GL_EXTENSIONS=%s", (const char*)glGetString(GL_EXTENSIONS)));
-        g_logger.info("UICEFWebView: EGLImage valid: " + std::to_string(img != EGL_NO_IMAGE_KHR));
-        g_logger.info(stdext::format("CEF GPU Paint: coded_size=%dx%d, plane0: stride=%d offset=%d modifier=0x%llx",
-            width, height, stride, offset,
-            static_cast<unsigned long long>(modifier)));
-
-        g_logger.info(stdext::format("CEF Texture State: getWidth()=%d, getHeight()=%d, texCreated=%d",
-            getWidth(), getHeight(), m_textureCreated ? 1 : 0));
-                    
-        auto logCurrent = [&]{
-            EGLDisplay curDpy = eglGetCurrentDisplay();
-            EGLContext curCtx = eglGetCurrentContext();
-            EGLSurface curSurf = eglGetCurrentSurface(EGL_DRAW);
-            g_logger.info(stdext::format("EGL current: dpy=%p ctx=%p surf=%p", curDpy, curCtx, curSurf));
-
-            void* glxCtx = nullptr;
-            void* glxDpy = nullptr;
-            #ifdef GLX_VERSION_1_3
-            glxCtx = (void*)glXGetCurrentContext();
-            glxDpy = (void*)glXGetCurrentDisplay();
-            g_logger.info(stdext::format("GLX current: dpy=%p ctx=%p", glxDpy, glxCtx) );
-            #endif
-        };
-        logCurrent();
-
-        // Log da thread atual antes de chamar g_glEGLImageTargetTexture2DOES
-        g_logger.info(stdext::format("GPU acceleration g_glEGLImageTargetTexture2DOES running on thread ID: %s", 
-                                    std::to_string(std::hash<std::thread::id>{}(threadId)).c_str()));
-
-        // Log detalhado do contexto atual vs contextos esperados
-#ifdef GLX_VERSION_1_3
-        Display* currentGLXDisplay = glXGetCurrentDisplay();
-        GLXContext currentGLXContext = glXGetCurrentContext();
-        GLXDrawable currentGLXDrawable = glXGetCurrentDrawable();
-        g_logger.info(stdext::format("Current GLX Context: display=%p, context=%p, drawable=%p", 
-                                    currentGLXDisplay, currentGLXContext, currentGLXDrawable));
-        g_logger.info(stdext::format("Expected GLX Context: display=%p, context=%p, drawable=%p", 
-                                    s_x11Display, s_glxMainContext, s_glxDrawable));
-        
-        bool glxContextMatches = (currentGLXDisplay == s_x11Display && 
-                                 currentGLXContext == s_glxMainContext && 
-                                 currentGLXDrawable == (GLXDrawable)s_glxDrawable);
-        g_logger.info(stdext::format("GLX Context matches expected: %s", glxContextMatches ? "YES" : "NO"));
-#endif
-
-        EGLDisplay currentEGLDisplay = eglGetCurrentDisplay();
-        EGLContext currentEGLContext = eglGetCurrentContext();
-        EGLSurface currentEGLSurface = eglGetCurrentSurface(EGL_DRAW);
-        g_logger.info(stdext::format("Current EGL Context: display=%p, context=%p, surface=%p", 
-                                    currentEGLDisplay, currentEGLContext, currentEGLSurface));
-        g_logger.info(stdext::format("Expected EGL Display: %p", s_eglDisplay));
-        
-        bool eglDisplayMatches = (currentEGLDisplay == s_eglDisplay);
-        g_logger.info(stdext::format("EGL Display matches expected: %s", eglDisplayMatches ? "YES" : "NO"));
-
-        // Verificar se o contexto é válido
-        g_logger.info(stdext::format("OpenGL Vendor: %s", glGetString(GL_VENDOR)));
-        g_logger.info(stdext::format("OpenGL Renderer: %s", glGetString(GL_RENDERER)));
-        
-        // Verificar se a função g_glEGLImageTargetTexture2DOES está válida
-        g_logger.info(stdext::format("g_glEGLImageTargetTexture2DOES function pointer: %p", 
-                                    (void*)g_glEGLImageTargetTexture2DOES));
-
         glBindTexture(GL_TEXTURE_2D, m_cefTexture->getId());
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
-        
-        // Log imediatamente antes da chamada crítica
-        g_logger.info("About to call g_glEGLImageTargetTexture2DOES...");
-        
+                
         // Verificar se temos a extensão GL_EXT_memory_object_fd como alternativa
         const char* extensions = (const char*)glGetString(GL_EXTENSIONS);
         bool hasMemoryObjectFd = (extensions && strstr(extensions, "GL_EXT_memory_object_fd"));
         g_logger.info(stdext::format("GL_EXT_memory_object_fd support: %s", hasMemoryObjectFd ? "YES" : "NO"));
         
-        if (hasMemoryObjectFd) {
-            g_logger.info("Attempting GL_EXT_memory_object_fd approach...");
-            
+        if (hasMemoryObjectFd) {            
             // Tentar usar GL_EXT_memory_object_fd como alternativa
             PFNGLCREATEMEMORYOBJECTSEXTPROC glCreateMemoryObjectsEXT = 
                 (PFNGLCREATEMEMORYOBJECTSEXTPROC)glXGetProcAddressARB((const GLubyte*)"glCreateMemoryObjectsEXT");
@@ -1377,18 +1257,12 @@ void UICEFWebView::processAcceleratedPaintGPU(const CefAcceleratedPaintInfo& inf
             return;
         }
         
-        g_logger.info("Attempting g_glEGLImageTargetTexture2DOES with GLX context...");
-        
         // Verificar se a textura está bound corretamente
         GLint currentTexture;
         glGetIntegerv(GL_TEXTURE_BINDING_2D, &currentTexture);
-        g_logger.info(stdext::format("Current bound texture: %d, expected: %u", currentTexture, m_cefTexture->getId()));
         
         // Garantir que a textura está bound
         glBindTexture(GL_TEXTURE_2D, m_cefTexture->getId());
-        
-        // Verificar se a EGLImage é válida
-        g_logger.info(stdext::format("EGLImage pointer: %p", img));
         
         g_glEGLImageTargetTexture2DOES(GL_TEXTURE_2D, (GLeglImageOES)img);
         g_logger.info("g_glEGLImageTargetTexture2DOES call completed");
