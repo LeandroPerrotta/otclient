@@ -498,7 +498,7 @@ private:
 };
 
 UICEFWebView::UICEFWebView()
-    : UIWebView(), m_browser(nullptr), m_client(nullptr), m_cefTexture(nullptr), m_cefImage(nullptr), m_textureCreated(false), m_lastWidth(0), m_lastHeight(0), m_lastMousePos(0, 0)
+    : UIWebView(), m_browser(nullptr), m_client(nullptr), m_cefTexture(nullptr), m_cefImage(nullptr), m_textureCreated(false), m_lastWidth(0), m_lastHeight(0), m_lastMousePos(0, 0), m_isValid(true)
 #if defined(__linux__)
     , m_currentTextureIndex(0), m_acceleratedTexturesCreated(false), m_readFbo(0), m_lastReadyTexture(0), m_lastFence(nullptr), m_writeIndex(0)
 #endif
@@ -527,7 +527,7 @@ UICEFWebView::UICEFWebView()
 }
 
 UICEFWebView::UICEFWebView(UIWidgetPtr parent)
-    : UIWebView(parent), m_browser(nullptr), m_client(nullptr), m_cefTexture(nullptr), m_cefImage(nullptr), m_textureCreated(false), m_lastWidth(0), m_lastHeight(0), m_lastMousePos(0, 0)
+    : UIWebView(parent), m_browser(nullptr), m_client(nullptr), m_cefTexture(nullptr), m_cefImage(nullptr), m_textureCreated(false), m_lastWidth(0), m_lastHeight(0), m_lastMousePos(0, 0), m_isValid(true)
 #if defined(__linux__)
     , m_currentTextureIndex(0), m_acceleratedTexturesCreated(false), m_readFbo(0), m_lastReadyTexture(0), m_lastFence(nullptr), m_writeIndex(0)
 #endif
@@ -558,6 +558,9 @@ UICEFWebView::UICEFWebView(UIWidgetPtr parent)
 UICEFWebView::~UICEFWebView()
 {
     g_logger.info("UICEFWebView: Destructor called");
+    
+    // Mark as invalid FIRST to prevent scheduled events from using this object
+    m_isValid.store(false);
     
     // Thread-safe removal from active list
     {
@@ -1103,36 +1106,15 @@ void UICEFWebView::processAcceleratedPaintGPU(const CefAcceleratedPaintInfo& inf
         return;
     }    
 
-    // SAFETY FIX: Use static method to avoid capturing 'this' pointer
-    // Pass webview ID for later validation instead of raw pointer
-    void* webviewId = static_cast<void*>(this);
-    
-    g_dispatcher.scheduleEvent([dupFd, width, height, stride, offset, modifier, webviewId]() {
-        UICEFWebView::processGPUTextureCreation(dupFd, width, height, stride, offset, modifier, webviewId);
-    });
-}
-
-// Static method to process GPU texture creation safely
-void UICEFWebView::processGPUTextureCreation(int dupFd, int width, int height, int stride, int offset, uint64_t modifier, void* webviewId)
-{
-#if defined(__linux__)
-    // Thread-safe check if the webview pointer is still valid
-    UICEFWebView* webview = nullptr;
-    {
-        std::lock_guard<std::mutex> lock(UICEFWebView::s_activeWebViewsMutex);
-        for (auto* activeWebView : UICEFWebView::s_activeWebViews) {
-            if (static_cast<void*>(activeWebView) == webviewId) {
-                webview = activeWebView;
-                break;
-            }
+        // SAFETY FIX: Capture 'this' but validate with atomic flag
+    // The atomic flag prevents use-after-free even if object is being destroyed
+    g_dispatcher.scheduleEvent([this, dupFd, width, height, stride, offset, modifier]() {
+        // Check if the object is still valid (not being destroyed)
+        if (!m_isValid.load()) {
+            // Object is being destroyed, just clean up and exit
+            close(dupFd);
+            return;
         }
-    }
-        
-    if (!webview) {
-        // WebView was destroyed, just clean up and exit
-        close(dupFd);
-        return;
-    }
         // Ensure the main GLX context is current on this thread
         if (!s_glxMainContext || !s_glxDrawable || !s_x11Display) {
             g_logger.error("UICEFWebView: No GLX context or drawable available");
@@ -1214,12 +1196,12 @@ void UICEFWebView::processGPUTextureCreation(int dupFd, int width, int height, i
 
         // CRITICAL FIX: Always recreate texture for each frame
         // Reusing textures with glTexStorageMem2DEXT/glEGLImageTargetTexture2DOES causes GL_INVALID_OPERATION
-        webview->m_cefTexture = TexturePtr(new Texture(Size(webview->getWidth(), webview->getHeight())));
-        webview->m_textureCreated = true;
-        webview->m_lastWidth = webview->getWidth();
-        webview->m_lastHeight = webview->getHeight();
+        m_cefTexture = TexturePtr(new Texture(Size(getWidth(), getHeight())));
+        m_textureCreated = true;
+        m_lastWidth = getWidth();
+        m_lastHeight = getHeight();
 
-        glBindTexture(GL_TEXTURE_2D, webview->m_cefTexture->getId());
+        glBindTexture(GL_TEXTURE_2D, m_cefTexture->getId());
         
         // Set texture parameters that are safe for EGLImage
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
@@ -1292,7 +1274,7 @@ void UICEFWebView::processGPUTextureCreation(int dupFd, int width, int height, i
             }
             
             // Ensure texture is bound correctly
-            glBindTexture(GL_TEXTURE_2D, webview->m_cefTexture->getId());
+            glBindTexture(GL_TEXTURE_2D, m_cefTexture->getId());
             
             // POTENTIAL FIX: Ensure clean OpenGL state before EGLImage operation
             // Some drivers require specific state for glEGLImageTargetTexture2DOES
@@ -1301,7 +1283,7 @@ void UICEFWebView::processGPUTextureCreation(int dupFd, int width, int height, i
             
             // Ensure we're using texture unit 0
             glActiveTexture(GL_TEXTURE0);
-            glBindTexture(GL_TEXTURE_2D, webview->m_cefTexture->getId());
+            glBindTexture(GL_TEXTURE_2D, m_cefTexture->getId());
             
             // Clear any pending operations
             glFinish();
@@ -1315,7 +1297,7 @@ void UICEFWebView::processGPUTextureCreation(int dupFd, int width, int height, i
             }
             
             g_logger.info(stdext::format("About to call glEGLImageTargetTexture2DOES - bound texture: %d, target texture: %d", 
-                                       boundTexture, webview->m_cefTexture->getId()));
+                                       boundTexture, m_cefTexture->getId()));
             
             // Check if we have a valid OpenGL context
             GLXContext currentCtx = glXGetCurrentContext();
@@ -1336,7 +1318,7 @@ void UICEFWebView::processGPUTextureCreation(int dupFd, int width, int height, i
                 GLint activeTexture;
                 glGetIntegerv(GL_ACTIVE_TEXTURE, &activeTexture);
                 
-                GLboolean isTexture = glIsTexture(webview->m_cefTexture->getId());
+                GLboolean isTexture = glIsTexture(m_cefTexture->getId());
                 
                 g_logger.error(stdext::format("Failure diagnostics - Bound texture: %d, Active texture unit: 0x%x, Is valid texture: %s", 
                              textureBinding, activeTexture, isTexture ? "YES" : "NO"));
@@ -1345,12 +1327,12 @@ void UICEFWebView::processGPUTextureCreation(int dupFd, int width, int height, i
             }
         }
         
-    glBindTexture(GL_TEXTURE_2D, 0);
-    
-    // Close FD 
-    close(dupFd);
+        glBindTexture(GL_TEXTURE_2D, 0);
+        
+        // Close FD 
+        close(dupFd);
+    });
 #endif
-}
 }
 
 void UICEFWebView::createAcceleratedTextures(int width, int height)

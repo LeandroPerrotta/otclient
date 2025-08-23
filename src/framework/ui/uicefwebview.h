@@ -2,6 +2,7 @@
 
 #include "uiwebview.h"
 #include <mutex>
+#include <atomic>
 
 #ifdef USE_CEF
 #include "include/cef_browser.h"
@@ -111,11 +112,13 @@ private:
     static std::vector<UICEFWebView*> s_activeWebViews;
     static std::mutex s_activeWebViewsMutex;
     
+    // Instance validity flag (for scheduled events)
+    std::atomic<bool> m_isValid;
+    
     // GPU acceleration methods
     static void initializeGLXSharedContext();
     static void initializeEGLSidecar();
     static void cleanupGPUResources();
-    static void processGPUTextureCreation(int dupFd, int width, int height, int stride, int offset, uint64_t modifier, void* webviewId);
     void createAcceleratedTextures(int width, int height);
     void processAcceleratedPaintGPU(const CefAcceleratedPaintInfo& info);
 #endif
