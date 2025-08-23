@@ -1211,7 +1211,15 @@ void UICEFWebView::processAcceleratedPaintGPU(const CefAcceleratedPaintInfo& inf
         }
 
         glBindTexture(GL_TEXTURE_2D, m_cefTexture->getId());
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+        // POTENTIAL FIX: Don't pre-allocate texture storage for EGLImage
+        // glEGLImageTargetTexture2DOES expects uninitialized texture
+        // glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+        
+        // Instead, just set texture parameters that are safe for EGLImage
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
                 
         // Verificar se temos a extensão GL_EXT_memory_object_fd como alternativa
         const char* extensions = (const char*)glGetString(GL_EXTENSIONS);
@@ -1326,11 +1334,53 @@ void UICEFWebView::processAcceleratedPaintGPU(const CefAcceleratedPaintInfo& inf
             // Ensure texture is bound correctly
             glBindTexture(GL_TEXTURE_2D, m_cefTexture->getId());
             
+            // POTENTIAL FIX: Ensure clean OpenGL state before EGLImage operation
+            // Some drivers require specific state for glEGLImageTargetTexture2DOES
+            glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+            glPixelStorei(GL_PACK_ALIGNMENT, 1);
+            
+            // Ensure we're using texture unit 0
+            glActiveTexture(GL_TEXTURE0);
+            glBindTexture(GL_TEXTURE_2D, m_cefTexture->getId());
+            
+            // Clear any pending operations
+            glFinish();
+            
+            // Detailed diagnostics before glEGLImageTargetTexture2DOES
+            GLint boundTexture;
+            glGetIntegerv(GL_TEXTURE_BINDING_2D, &boundTexture);
+            GLenum preError = glGetError();
+            if (preError != GL_NO_ERROR) {
+                g_logger.error(stdext::format("OpenGL error before EGLImage operation: 0x%x", preError));
+            }
+            
+            g_logger.info(stdext::format("About to call glEGLImageTargetTexture2DOES - bound texture: %d, target texture: %d", 
+                                       boundTexture, m_cefTexture->getId()));
+            
+            // Check if we have a valid OpenGL context
+            GLXContext currentCtx = glXGetCurrentContext();
+            if (currentCtx == nullptr) {
+                g_logger.error("No current OpenGL context when calling glEGLImageTargetTexture2DOES!");
+            }
+            
             g_glEGLImageTargetTexture2DOES(GL_TEXTURE_2D, (GLeglImageOES)img);
             
             GLenum glError = glGetError();
             if (glError != GL_NO_ERROR) {
                 g_logger.error(stdext::format("ERROR: GPU acceleration failed with OpenGL error: 0x%x (GL_INVALID_OPERATION=0x502)", glError));
+                
+                // Additional diagnostics to understand WHY it failed
+                GLint textureBinding;
+                glGetIntegerv(GL_TEXTURE_BINDING_2D, &textureBinding);
+                
+                GLint activeTexture;
+                glGetIntegerv(GL_ACTIVE_TEXTURE, &activeTexture);
+                
+                GLboolean isTexture = glIsTexture(m_cefTexture->getId());
+                
+                g_logger.error(stdext::format("Failure diagnostics - Bound texture: %d, Active texture unit: 0x%x, Is valid texture: %s", 
+                             textureBinding, activeTexture, isTexture ? "YES" : "NO"));
+                
                 int& attempts = errorCounter[this];
                 attempts++;
                 if (attempts >= 3) {
