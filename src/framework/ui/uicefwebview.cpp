@@ -140,6 +140,7 @@ extern bool g_cefInitialized;
 
 // Static member initialization
 std::vector<UICEFWebView*> UICEFWebView::s_activeWebViews;
+std::mutex UICEFWebView::s_activeWebViewsMutex;
 
 #if defined(__linux__)
 bool UICEFWebView::s_glxContextInitialized = false;
@@ -504,7 +505,12 @@ UICEFWebView::UICEFWebView()
 {
     setSize(Size(800, 600)); // Set initial size
     setDraggable(true); // Enable dragging for scrollbar interaction
-    s_activeWebViews.push_back(this);
+    
+    // Thread-safe addition to active list
+    {
+        std::lock_guard<std::mutex> lock(s_activeWebViewsMutex);
+        s_activeWebViews.push_back(this);
+    }
     
 #if defined(__linux__)
     // Initialize GPU acceleration resources
@@ -528,7 +534,12 @@ UICEFWebView::UICEFWebView(UIWidgetPtr parent)
 {
     setSize(Size(800, 600)); // Set initial size
     setDraggable(true); // Enable dragging for scrollbar interaction
-    s_activeWebViews.push_back(this);
+    
+    // Thread-safe addition to active list
+    {
+        std::lock_guard<std::mutex> lock(s_activeWebViewsMutex);
+        s_activeWebViews.push_back(this);
+    }
     
 #if defined(__linux__)
     // Initialize GPU acceleration resources
@@ -548,11 +559,14 @@ UICEFWebView::~UICEFWebView()
 {
     g_logger.info("UICEFWebView: Destructor called");
     
-    // Remove from active list
-    auto it = std::find(s_activeWebViews.begin(), s_activeWebViews.end(), this);
-    if (it != s_activeWebViews.end()) {
-        s_activeWebViews.erase(it);
-        g_logger.info(stdext::format("UICEFWebView: Removed from active list. Remaining: %d", s_activeWebViews.size()));
+    // Thread-safe removal from active list
+    {
+        std::lock_guard<std::mutex> lock(s_activeWebViewsMutex);
+        auto it = std::find(s_activeWebViews.begin(), s_activeWebViews.end(), this);
+        if (it != s_activeWebViews.end()) {
+            s_activeWebViews.erase(it);
+            g_logger.info(stdext::format("UICEFWebView: Removed from active list. Remaining: %d", s_activeWebViews.size()));
+        }
     }
     
     if (m_browser) {
@@ -1094,12 +1108,15 @@ void UICEFWebView::processAcceleratedPaintGPU(const CefAcceleratedPaintInfo& inf
     UICEFWebView* safePtr = this;
     
     g_dispatcher.scheduleEvent([safePtr, dupFd, width, height, stride, offset, modifier]() {
-        // Check if the webview pointer is still valid by searching in active list
+        // Thread-safe check if the webview pointer is still valid
         bool stillValid = false;
-        for (const auto* activeWebView : UICEFWebView::s_activeWebViews) {
-            if (activeWebView == safePtr) {
-                stillValid = true;
-                break;
+        {
+            std::lock_guard<std::mutex> lock(UICEFWebView::s_activeWebViewsMutex);
+            for (const auto* activeWebView : UICEFWebView::s_activeWebViews) {
+                if (activeWebView == safePtr) {
+                    stillValid = true;
+                    break;
+                }
             }
         }
         
@@ -1684,10 +1701,14 @@ void UICEFWebView::onGeometryChange(const Rect& oldRect, const Rect& newRect)
 
 // Static methods for managing all WebViews
 void UICEFWebView::closeAllWebViews() {
-    g_logger.info(stdext::format("UICEFWebView: Closing all active WebViews. Count: %d", s_activeWebViews.size()));
+    std::vector<UICEFWebView*> webViewsToClose;
     
-    // Create a copy of the vector to avoid issues during iteration
-    std::vector<UICEFWebView*> webViewsToClose = s_activeWebViews;
+    // Thread-safe copy of the vector
+    {
+        std::lock_guard<std::mutex> lock(s_activeWebViewsMutex);
+        g_logger.info(stdext::format("UICEFWebView: Closing all active WebViews. Count: %d", s_activeWebViews.size()));
+        webViewsToClose = s_activeWebViews;
+    }
     
     for (auto* webview : webViewsToClose) {
         if (webview && webview->m_browser) {
@@ -1697,11 +1718,16 @@ void UICEFWebView::closeAllWebViews() {
         }
     }
     
-    s_activeWebViews.clear();
+    // Thread-safe clear
+    {
+        std::lock_guard<std::mutex> lock(s_activeWebViewsMutex);
+        s_activeWebViews.clear();
+    }
     g_logger.info("UICEFWebView: All WebViews closed");
 }
 
 size_t UICEFWebView::getActiveWebViewCount() {
+    std::lock_guard<std::mutex> lock(s_activeWebViewsMutex);
     return s_activeWebViews.size();
 }
 
@@ -1719,7 +1745,15 @@ void UICEFWebView::setWindowlessFrameRate(int fps)
 
 void UICEFWebView::setAllWindowlessFrameRate(int fps)
 {
-    for (auto* webview : s_activeWebViews) {
+    std::vector<UICEFWebView*> webViewsCopy;
+    
+    // Thread-safe copy for iteration
+    {
+        std::lock_guard<std::mutex> lock(s_activeWebViewsMutex);
+        webViewsCopy = s_activeWebViews;
+    }
+    
+    for (auto* webview : webViewsCopy) {
         if (webview)
             webview->setWindowlessFrameRate(fps);
     }

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "uiwebview.h"
+#include <mutex>
 
 #ifdef USE_CEF
 #include "include/cef_browser.h"
@@ -106,8 +107,9 @@ private:
     int m_writeIndex;
 #endif
     
-    // Static tracking of all active WebViews
+    // Static tracking of all active WebViews (thread-safe)
     static std::vector<UICEFWebView*> s_activeWebViews;
+    static std::mutex s_activeWebViewsMutex;
     
     // GPU acceleration methods
     static void initializeGLXSharedContext();
