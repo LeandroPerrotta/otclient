@@ -1374,20 +1374,95 @@ void UICEFWebView::processAcceleratedPaintGPU(const CefAcceleratedPaintInfo& inf
         
         // Tentar a chamada independentemente do contexto EGL
         g_logger.info("Calling g_glEGLImageTargetTexture2DOES...");
-        g_glEGLImageTargetTexture2DOES(GL_TEXTURE_2D, (GLeglImageOES)img);
-        g_logger.info("g_glEGLImageTargetTexture2DOES call completed");
         
-        GLenum glError = glGetError();
-        g_logger.info(stdext::format("OpenGL error after g_glEGLImageTargetTexture2DOES: 0x%x", glError));
-        glBindTexture(GL_TEXTURE_2D, 0);
-
-        eglDestroyImageKHRFn((EGLDisplay)s_eglDisplay, img);
-
-        if (glError != GL_NO_ERROR) {
-            g_logger.error("UICEFWebView: Failed to bind EGL image to texture");
-            return;
+        // Verificar se temos a extensão GL_EXT_memory_object_fd como alternativa
+        const char* extensions = (const char*)glGetString(GL_EXTENSIONS);
+        bool hasMemoryObjectFd = (extensions && strstr(extensions, "GL_EXT_memory_object_fd"));
+        g_logger.info(stdext::format("GL_EXT_memory_object_fd support: %s", hasMemoryObjectFd ? "YES" : "NO"));
+        
+        if (!eglContextActivated && hasMemoryObjectFd) {
+            g_logger.info("Attempting GL_EXT_memory_object_fd fallback...");
+            
+            // Tentar usar GL_EXT_memory_object_fd como alternativa
+            PFNGLCREATEMEMORYOBJECTSEXTPROC glCreateMemoryObjectsEXT = 
+                (PFNGLCREATEMEMORYOBJECTSEXTPROC)glXGetProcAddressARB((const GLubyte*)"glCreateMemoryObjectsEXT");
+            PFNGLIMPORTMEMORYFDEXTPROC glImportMemoryFdEXT = 
+                (PFNGLIMPORTMEMORYFDEXTPROC)glXGetProcAddressARB((const GLubyte*)"glImportMemoryFdEXT");
+            PFNGLTEXSTORAGEMEM2DEXTPROC glTexStorageMem2DEXT = 
+                (PFNGLTEXSTORAGEMEM2DEXTPROC)glXGetProcAddressARB((const GLubyte*)"glTexStorageMem2DEXT");
+            PFNGLDELETEMEMORYOBJECTSEXTPROC glDeleteMemoryObjectsEXT = 
+                (PFNGLDELETEMEMORYOBJECTSEXTPROC)glXGetProcAddressARB((const GLubyte*)"glDeleteMemoryObjectsEXT");
+            
+            if (glCreateMemoryObjectsEXT && glImportMemoryFdEXT && glTexStorageMem2DEXT && glDeleteMemoryObjectsEXT) {
+                g_logger.info("GL_EXT_memory_object_fd functions available, trying alternative approach...");
+                
+                GLuint memoryObject;
+                glCreateMemoryObjectsEXT(1, &memoryObject);
+                
+                // Calcular o tamanho do buffer
+                GLuint64 size = (GLuint64)height * stride;
+                
+                glImportMemoryFdEXT(memoryObject, size, GL_HANDLE_TYPE_OPAQUE_FD_EXT, dupFd);
+                
+                // Usar o memory object para criar a textura
+                glTexStorageMem2DEXT(GL_TEXTURE_2D, 1, GL_RGBA8, width, height, memoryObject, offset);
+                
+                GLenum glError = glGetError();
+                if (glError == GL_NO_ERROR) {
+                    g_logger.info("GL_EXT_memory_object_fd approach successful!");
+                    glDeleteMemoryObjectsEXT(1, &memoryObject);
+                    glBindTexture(GL_TEXTURE_2D, 0);
+                    close(dupFd);
+                    return; // Sucesso, sair da função
+                } else {
+                    g_logger.error(stdext::format("GL_EXT_memory_object_fd failed with error: 0x%x", glError));
+                    glDeleteMemoryObjectsEXT(1, &memoryObject);
+                }
+            } else {
+                g_logger.error("GL_EXT_memory_object_fd functions not available");
+            }
         }
-
+        
+        // Se chegou aqui, tentar a abordagem original (que pode crashar)
+        g_logger.info("Falling back to original EGLImage approach...");
+        
+        // Adicionar proteção contra crash
+        g_logger.info("WARNING: This may crash due to libgallium issue. Consider using CPU fallback.");
+        
+        // Tentar detectar se vamos crashar verificando se a função é válida
+        if (g_glEGLImageTargetTexture2DOES == nullptr) {
+            g_logger.error("g_glEGLImageTargetTexture2DOES is NULL - using CPU fallback");
+            goto cpu_fallback;
+        }
+        
+        try {
+            g_glEGLImageTargetTexture2DOES(GL_TEXTURE_2D, (GLeglImageOES)img);
+            g_logger.info("g_glEGLImageTargetTexture2DOES call completed");
+            
+            GLenum glError = glGetError();
+            g_logger.info(stdext::format("OpenGL error after g_glEGLImageTargetTexture2DOES: 0x%x", glError));
+            
+            if (glError != GL_NO_ERROR) {
+                g_logger.error("OpenGL error detected - falling back to CPU approach");
+                goto cpu_fallback;
+            }
+        } catch (...) {
+            g_logger.error("Exception caught during g_glEGLImageTargetTexture2DOES - using CPU fallback");
+            goto cpu_fallback;
+        }
+        
+        glBindTexture(GL_TEXTURE_2D, 0);
+        eglDestroyImageKHRFn((EGLDisplay)s_eglDisplay, img);
+        close(dupFd);
+        return; // Sucesso
+        
+    cpu_fallback:
+        g_logger.info("Using CPU fallback for texture creation");
+        glBindTexture(GL_TEXTURE_2D, 0);
+        eglDestroyImageKHRFn((EGLDisplay)s_eglDisplay, img);
+        
+        // Implementar CPU fallback usando mmap
+        implementCPUFallback(dupFd, offset, width, height, stride);
         close(dupFd);
     }, 0);
 #endif
