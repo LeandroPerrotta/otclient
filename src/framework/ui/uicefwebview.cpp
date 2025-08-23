@@ -750,8 +750,8 @@ void UICEFWebView::onCEFAcceleratedPaint(const CefAcceleratedPaintInfo& info)
 #if defined(_WIN32) && defined(OPENGL_ES) && OPENGL_ES == 2
     HANDLE sharedHandle = static_cast<HANDLE>(info.shared_texture_handle);
     if (!sharedHandle) {
-        g_logger.warning("UICEFWebView: No shared texture handle available");
-        return;
+        g_logger.fatal("UICEFWebView: No shared texture handle available - GPU acceleration required!");
+        std::abort();
     }
 
     // Abrir o handle como textura D3D11
@@ -761,16 +761,16 @@ void UICEFWebView::onCEFAcceleratedPaint(const CefAcceleratedPaintInfo& info)
     if (FAILED(D3D11CreateDevice(
             nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, 0,
             nullptr, 0, D3D11_SDK_VERSION, &d3dDevice, &fl, &d3dContext))) {
-        g_logger.error("UICEFWebView: Failed to create D3D11 device");
-        return;
+        g_logger.fatal("UICEFWebView: Failed to create D3D11 device - GPU acceleration required!");
+        std::abort();
     }
 
     ID3D11Texture2D* tex = nullptr;
     if (FAILED(d3dDevice->OpenSharedResource(sharedHandle, __uuidof(ID3D11Texture2D), (void**)&tex))) {
-        g_logger.error("UICEFWebView: OpenSharedResource failed");
+        g_logger.fatal("UICEFWebView: OpenSharedResource failed - GPU acceleration required!");
         d3dDevice->Release();
         d3dContext->Release();
-        return;
+        std::abort();
     }
 
     // Agora sim passar para ANGLE via eglCreatePbufferFromClientBuffer
@@ -800,8 +800,12 @@ void UICEFWebView::onCEFAcceleratedPaint(const CefAcceleratedPaintInfo& info)
         attrs);
 
     if (pbuffer == EGL_NO_SURFACE) {
-        g_logger.error("eglCreatePbufferFromClientBuffer failed, eglError=" +
-                       stdext::dec_to_hex(eglGetError()));
+        g_logger.fatal("eglCreatePbufferFromClientBuffer failed, eglError=" +
+                       stdext::dec_to_hex(eglGetError()) + " - GPU acceleration required!");
+        tex->Release();
+        d3dDevice->Release();
+        d3dContext->Release();
+        std::abort();
     } else {
         glBindTexture(GL_TEXTURE_2D, m_cefTexture->getId());
         eglBindTexImage(display, pbuffer, EGL_BACK_BUFFER);
@@ -816,62 +820,28 @@ void UICEFWebView::onCEFAcceleratedPaint(const CefAcceleratedPaintInfo& info)
 #elif defined(__linux__)
     // Validate basic requirements
     if (info.plane_count <= 0 || info.planes[0].fd == -1) {
-        return;
+        g_logger.fatal("UICEFWebView: Invalid DMA buffer info - GPU acceleration required!");
+        std::abort();
     }
 
-    // IMMEDIATE PROCESSING: Copy DMA buffer data to CPU memory NOW before CEF releases it
+    // Quick validation
     int width = info.extra.coded_size.width;
     int height = info.extra.coded_size.height;
     int stride = info.planes[0].stride;
     
-    // Quick validation
     if (width <= 0 || height <= 0 || width > 8192 || height > 8192 || stride <= 0) {
-        return;
+        g_logger.fatal(stdext::format("UICEFWebView: Invalid DMA buffer dimensions: %dx%d, stride: %d - GPU acceleration required!", width, height, stride));
+        std::abort();
     }
     
-    // Map DMA buffer immediately while FD is still valid
-    size_t mapSize = stride * height;
-    void* mapped = mmap(nullptr, mapSize, PROT_READ, MAP_SHARED, info.planes[0].fd, info.planes[0].offset);
-    if (mapped == MAP_FAILED) {
-        return;
+    // CRITICAL: Must process immediately! CEF releases the resource after this callback returns
+    if (this) {
+        this->processAcceleratedPaintGPU(info);
     }
-    
-    // Copy pixel data to our own buffer (removing stride padding)
-    std::vector<uint8_t> pixelData(width * height * 4);
-    uint8_t* src = static_cast<uint8_t*>(mapped);
-    uint8_t* dst = pixelData.data();
-    
-    if (stride == width * 4) {
-        // No padding, direct copy
-        memcpy(dst, src, width * height * 4);
-    } else {
-        // Copy row by row to remove padding
-        for (int y = 0; y < height; y++) {
-            memcpy(dst + y * width * 4, src + y * stride, width * 4);
-        }
-    }
-    
-    // Unmap immediately - we have our copy now
-    munmap(mapped, mapSize);
-    
-    // Schedule the OpenGL upload on the main thread with our copied data
-    g_dispatcher.scheduleEvent([this, pixelData = std::move(pixelData), width, height]() mutable {
-        if (!m_textureCreated || getWidth() != m_lastWidth || getHeight() != m_lastHeight || !m_cefTexture) {
-            m_cefTexture = TexturePtr(new Texture(Size(getWidth(), getHeight())));
-            m_textureCreated = true;
-            m_lastWidth = getWidth();
-            m_lastHeight = getHeight();
-        }
-        
-        // Upload to OpenGL texture on main thread with OpenGL context
-        glBindTexture(GL_TEXTURE_2D, m_cefTexture->getId());
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_BGRA, GL_UNSIGNED_BYTE, pixelData.data());
-    }, 0);
-
-        // The rest of the function is no longer needed - we process immediately above
-    return;
 #else
     (void)info;
+    g_logger.fatal("UICEFWebView: GPU acceleration not implemented for this platform!");
+    std::abort();
 #endif
 }
 
@@ -1091,7 +1061,8 @@ void UICEFWebView::processAcceleratedPaintGPU(const CefAcceleratedPaintInfo& inf
 {
 #if defined(__linux__)
     if (!s_eglSidecarInitialized) {
-        return;
+        g_logger.fatal("UICEFWebView: EGL sidecar not initialized - GPU acceleration required!");
+        std::abort();
     }
 
     const int fd = info.planes[0].fd;
@@ -1102,21 +1073,21 @@ void UICEFWebView::processAcceleratedPaintGPU(const CefAcceleratedPaintInfo& inf
     const uint64_t modifier = info.modifier;
 
     if (fd < 0) {
-        g_logger.error(stdext::format("UICEFWebView: Invalid FD received: %d", fd));
-        return;
+        g_logger.fatal(stdext::format("UICEFWebView: Invalid FD received: %d - GPU acceleration required!", fd));
+        std::abort();
     }
 
     // Verificar se o FD é válido usando fcntl
     int flags = fcntl(fd, F_GETFL);
     if (flags == -1) {
-        g_logger.error(stdext::format("UICEFWebView: FD %d is invalid (fcntl F_GETFL failed): %s", fd, strerror(errno)));
-        return;
+        g_logger.fatal(stdext::format("UICEFWebView: FD %d is invalid (fcntl F_GETFL failed): %s - GPU acceleration required!", fd, strerror(errno)));
+        std::abort();
     }
 
     int dupFd = fcntl(fd, F_DUPFD_CLOEXEC, 0);
     if (dupFd < 0) {
-        g_logger.error(stdext::format("UICEFWebView: Failed to duplicate FD %d: %s (errno=%d)", fd, strerror(errno), errno));
-        return;
+        g_logger.fatal(stdext::format("UICEFWebView: Failed to duplicate FD %d: %s (errno=%d) - GPU acceleration required!", fd, strerror(errno), errno));
+        std::abort();
     }    
 
     g_dispatcher.scheduleEvent([this, dupFd, width, height, stride, offset, modifier]() {
@@ -1126,27 +1097,26 @@ void UICEFWebView::processAcceleratedPaintGPU(const CefAcceleratedPaintInfo& inf
         const int MAX_ATTEMPTS = 3; // Limit to 3 attempts maximum
         
         if (attempts >= MAX_ATTEMPTS) {
-            g_logger.warning(stdext::format("UICEFWebView: GPU acceleration failed after %d attempts, falling back to CPU", MAX_ATTEMPTS));
-            implementCPUFallback(dupFd, offset, width, height, stride);
-            attempts = 0; // Reset counter after fallback
-            return;
+            g_logger.fatal(stdext::format("UICEFWebView: GPU acceleration failed after %d attempts - aborting application!", MAX_ATTEMPTS));
+            close(dupFd);
+            std::abort();
         }
         attempts++;
         
         // Ensure the main GLX context is current on this thread
         if (!s_glxMainContext || !s_glxDrawable || !s_x11Display) {
-            g_logger.error("UICEFWebView: No GLX context or drawable available");
+            g_logger.fatal("UICEFWebView: No GLX context or drawable available - GPU acceleration required!");
             close(dupFd);
-            return;
+            std::abort();
         }
         
         // Validate current OpenGL context before proceeding
         GLXContext currentContext = glXGetCurrentContext();
         if (currentContext != s_glxMainContext) {
             if (!glXMakeCurrent((Display*)s_x11Display, (GLXDrawable)s_glxDrawable, (GLXContext)s_glxMainContext)) {
-                g_logger.error("UICEFWebView: Failed to make GLX context current");
+                g_logger.fatal("UICEFWebView: Failed to make GLX context current - GPU acceleration required!");
                 close(dupFd);
-                return;
+                std::abort();
             }
         }
         
@@ -1159,9 +1129,9 @@ void UICEFWebView::processAcceleratedPaintGPU(const CefAcceleratedPaintInfo& inf
         auto eglCreateImageKHRFn = (PFNEGLCREATEIMAGEKHRPROC)eglGetProcAddress("eglCreateImageKHR");
         auto eglDestroyImageKHRFn = (PFNEGLDESTROYIMAGEKHRPROC)eglGetProcAddress("eglDestroyImageKHR");
         if (!eglCreateImageKHRFn || !eglDestroyImageKHRFn || !ensureGlEglImageProcResolved()) {
-            g_logger.error("UICEFWebView: Failed to get EGL functions");
+            g_logger.fatal("UICEFWebView: Failed to get EGL functions - GPU acceleration required!");
             close(dupFd);
-            return;
+            std::abort();
         }
 
         auto buildAttrs = [&](bool includeModifier) {
@@ -1197,9 +1167,9 @@ void UICEFWebView::processAcceleratedPaintGPU(const CefAcceleratedPaintInfo& inf
         }
 
         if (img == EGL_NO_IMAGE_KHR) {
-            g_logger.error("UICEFWebView: Failed to create EGL image - falling back to CPU method");
-            implementCPUFallback(dupFd, offset, width, height, stride);
-            return;
+            g_logger.fatal("UICEFWebView: Failed to create EGL image - GPU acceleration required!");
+            close(dupFd);
+            std::abort();
         }
 
         if (!m_textureCreated || getWidth() != m_lastWidth || getHeight() != m_lastHeight || !m_cefTexture) {
@@ -1252,17 +1222,40 @@ void UICEFWebView::processAcceleratedPaintGPU(const CefAcceleratedPaintInfo& inf
                             attempts = 0; // Reset counter on success
                         } else {
                             g_logger.error(stdext::format("ERROR: glTexStorageMem2DEXT failed with error: 0x%x", error3));
+                            if (attempts >= MAX_ATTEMPTS - 1) {
+                                g_logger.fatal(stdext::format("FATAL: glTexStorageMem2DEXT consistently failing - GPU acceleration required!"));
+                                glDeleteMemoryObjectsEXT(1, &memoryObject);
+                                eglDestroyImageKHRFn((EGLDisplay)s_eglDisplay, img);
+                                std::abort();
+                            }
                         }
                     } else {
                         g_logger.error(stdext::format("ERROR: glImportMemoryFdEXT failed with error: 0x%x", error2));
-                        // If import failed, FD is still valid and we need to close it
+                        if (attempts >= MAX_ATTEMPTS - 1) {
+                            g_logger.fatal(stdext::format("FATAL: glImportMemoryFdEXT consistently failing - GPU acceleration required!"));
+                            glDeleteMemoryObjectsEXT(1, &memoryObject);
+                            eglDestroyImageKHRFn((EGLDisplay)s_eglDisplay, img);
+                            close(dupFd);
+                            std::abort();
+                        }
                     }
                     
                     // Always clean up memory object
                     glDeleteMemoryObjectsEXT(1, &memoryObject);
                 } else {
                     g_logger.error(stdext::format("ERROR: glCreateMemoryObjectsEXT failed with error: 0x%x", error1));
+                    if (attempts >= MAX_ATTEMPTS - 1) {
+                        g_logger.fatal(stdext::format("FATAL: glCreateMemoryObjectsEXT consistently failing - GPU acceleration required!"));
+                        eglDestroyImageKHRFn((EGLDisplay)s_eglDisplay, img);
+                        close(dupFd);
+                        std::abort();
+                    }
                 }
+            } else {
+                g_logger.fatal("UICEFWebView: GL_EXT_memory_object_fd functions not available - GPU acceleration required!");
+                eglDestroyImageKHRFn((EGLDisplay)s_eglDisplay, img);
+                close(dupFd);
+                std::abort();
             }
         }
         
@@ -1271,10 +1264,10 @@ void UICEFWebView::processAcceleratedPaintGPU(const CefAcceleratedPaintInfo& inf
             g_logger.info("Trying EGLImage approach with existing GLX context...");
             
             if (g_glEGLImageTargetTexture2DOES == nullptr) {
-                g_logger.error("g_glEGLImageTargetTexture2DOES is NULL - GPU acceleration failed");
+                g_logger.fatal("g_glEGLImageTargetTexture2DOES is NULL - GPU acceleration required!");
                 eglDestroyImageKHRFn((EGLDisplay)s_eglDisplay, img);
-                if (!hasMemoryObjectFd) close(dupFd); // Only close if memory object didn't take ownership
-                return;
+                if (!hasMemoryObjectFd) close(dupFd);
+                std::abort();
             }
             
             // Ensure texture is bound correctly
@@ -1285,12 +1278,12 @@ void UICEFWebView::processAcceleratedPaintGPU(const CefAcceleratedPaintInfo& inf
             GLenum glError = glGetError();
             if (glError != GL_NO_ERROR) {
                 g_logger.error(stdext::format("ERROR: GPU acceleration failed with OpenGL error: 0x%x (GL_INVALID_OPERATION=0x502)", glError));
-                // After multiple failures, fall back to CPU
+                // After multiple failures, crash the application
                 if (attempts >= MAX_ATTEMPTS - 1) {
-                    g_logger.info("UICEFWebView: Too many GPU failures, switching to CPU fallback");
-                    implementCPUFallback(dupFd, offset, width, height, stride);
+                    g_logger.fatal("FATAL: GPU acceleration consistently failing - aborting application!");
                     eglDestroyImageKHRFn((EGLDisplay)s_eglDisplay, img);
-                    return;
+                    if (!hasMemoryObjectFd) close(dupFd);
+                    std::abort();
                 }
             } else {
                 g_logger.info("UICEFWebView: GPU acceleration successful via EGLImage!");
@@ -1353,63 +1346,7 @@ void UICEFWebView::createAcceleratedTextures(int width, int height)
 #endif
 }
 
-void UICEFWebView::implementCPUFallback(int fd, int offset, int width, int height, int stride)
-{
-#if defined(__linux__)
-    g_logger.info("UICEFWebView: Implementing CPU fallback for DMA buffer rendering");
-
-    // Map the DMA buffer to CPU memory
-    void* mapped = mmap(nullptr, stride * height, PROT_READ, MAP_SHARED, fd, offset);
-    if (mapped == MAP_FAILED) {
-        g_logger.error("UICEFWebView: Failed to mmap DMA buffer: " + std::string(strerror(errno)));
-        close(fd);
-        return;
-    }
-    
-    g_logger.info("UICEFWebView: Successfully mapped DMA buffer to CPU memory");
-    
-    // Create texture and upload pixel data directly
-    if (!m_textureCreated || getWidth() != m_lastWidth || getHeight() != m_lastHeight || !m_cefTexture) {
-        m_cefTexture = TexturePtr(new Texture(Size(getWidth(), getHeight())));
-        m_textureCreated = true;
-        m_lastWidth = getWidth();
-        m_lastHeight = getHeight();
-    }
-    
-    // Upload pixels to OpenGL texture using traditional method
-    glBindTexture(GL_TEXTURE_2D, m_cefTexture->getId());
-    
-    // Handle stride by copying row by row if needed
-    if (stride == width * 4) {
-        // No padding, direct upload
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_BGRA, GL_UNSIGNED_BYTE, mapped);
-    } else {
-        // Has padding, need to copy row by row
-        std::vector<uint8_t> pixelData(width * height * 4);
-        uint8_t* src = static_cast<uint8_t*>(mapped);
-        uint8_t* dst = pixelData.data();
-        
-        for (int y = 0; y < height; y++) {
-            memcpy(dst + y * width * 4, src + y * stride, width * 4);
-        }
-        
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_BGRA, GL_UNSIGNED_BYTE, pixelData.data());
-    }
-    
-    GLenum glError = glGetError();
-    if (glError == GL_NO_ERROR) {
-        g_logger.info("UICEFWebView: Successfully uploaded DMA buffer via CPU fallback!");
-    } else {
-        g_logger.error("UICEFWebView: CPU fallback upload failed: " + std::to_string(glError));
-    }
-
-    // Cleanup
-    munmap(mapped, stride * height);
-    close(fd);
-#else
-    (void)fd; (void)offset; (void)width; (void)height; (void)stride;
-#endif
-}
+// CPU fallback removed - GPU acceleration is required
 
 
 void UICEFWebView::onBrowserCreated(CefRefPtr<CefBrowser> browser)

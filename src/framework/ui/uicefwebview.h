@@ -22,7 +22,6 @@ public:
     // CEF-specific methods
     void onCEFPaint(const void* buffer, int width, int height, const CefRenderHandler::RectList& dirtyRects);
     void onCEFAcceleratedPaint(const CefAcceleratedPaintInfo& info);
-    void implementCPUFallback(int fd, int offset, int width, int height, int stride);
     void onBrowserCreated(CefRefPtr<CefBrowser> browser);
     
     // Static methods for managing all WebViews
