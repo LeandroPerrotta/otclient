@@ -1091,7 +1091,12 @@ void UICEFWebView::processAcceleratedPaintGPU(const CefAcceleratedPaintInfo& inf
     const int offset = info.planes[0].offset;
     const uint64_t modifier = info.modifier;
 
+    // Log detalhado dos parâmetros recebidos
+    g_logger.info(stdext::format("CEF AcceleratedPaint: fd=%d, size=%dx%d, stride=%d, offset=%d, modifier=0x%llx", 
+                                fd, width, height, stride, offset, modifier));
+
     if (fd < 0) {
+        g_logger.error(stdext::format("UICEFWebView: Invalid FD received: %d", fd));
         return;
     }
 
@@ -1138,11 +1143,23 @@ void UICEFWebView::processAcceleratedPaintGPU(const CefAcceleratedPaintInfo& inf
             return;
         }
 
-        int dupFd = fcntl(fd, F_DUPFD_CLOEXEC, 0);
-        if (dupFd < 0) {
-            g_logger.error("UICEFWebView: Failed to duplicate FD");
+        // Verificar se o FD ainda é válido antes de duplicar
+        g_logger.info(stdext::format("About to duplicate FD: %d", fd));
+        
+        // Verificar se o FD é válido usando fcntl
+        int flags = fcntl(fd, F_GETFL);
+        if (flags == -1) {
+            g_logger.error(stdext::format("UICEFWebView: FD %d is invalid (fcntl F_GETFL failed): %s", fd, strerror(errno)));
             return;
         }
+        g_logger.info(stdext::format("FD %d is valid, flags: 0x%x", fd, flags));
+
+        int dupFd = fcntl(fd, F_DUPFD_CLOEXEC, 0);
+        if (dupFd < 0) {
+            g_logger.error(stdext::format("UICEFWebView: Failed to duplicate FD %d: %s (errno=%d)", fd, strerror(errno), errno));
+            return;
+        }
+        g_logger.info(stdext::format("Successfully duplicated FD: %d -> %d", fd, dupFd));
 
         auto buildAttrs = [&](bool includeModifier) {
             std::vector<EGLint> attrs = {
@@ -1274,6 +1291,20 @@ void UICEFWebView::processAcceleratedPaintGPU(const CefAcceleratedPaintInfo& inf
         
         // Log imediatamente antes da chamada crítica
         g_logger.info("About to call g_glEGLImageTargetTexture2DOES...");
+        
+        // Tentar ativar contexto EGL se necessário
+        if (currentEGLDisplay == EGL_NO_DISPLAY && s_eglDisplay != nullptr) {
+            g_logger.info("No EGL context active, attempting to make EGL context current...");
+            
+            // Tentar fazer o contexto EGL atual
+            if (eglMakeCurrent((EGLDisplay)s_eglDisplay, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT)) {
+                g_logger.info("Successfully made EGL display current");
+            } else {
+                EGLint eglError = eglGetError();
+                g_logger.error(stdext::format("Failed to make EGL context current: 0x%x", eglError));
+            }
+        }
+        
         g_glEGLImageTargetTexture2DOES(GL_TEXTURE_2D, (GLeglImageOES)img);
         g_logger.info("g_glEGLImageTargetTexture2DOES call completed");
         
