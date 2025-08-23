@@ -1160,7 +1160,8 @@ void UICEFWebView::processAcceleratedPaintGPU(const CefAcceleratedPaintInfo& inf
             std::vector<EGLint> attrs = {
                 EGL_WIDTH, width,
                 EGL_HEIGHT, height,
-                EGL_LINUX_DRM_FOURCC_EXT, DRM_FORMAT_XRGB8888,
+                // CEF delivers frames in BGRA order
+                EGL_LINUX_DRM_FOURCC_EXT, DRM_FORMAT_ARGB8888,
                 EGL_DMA_BUF_PLANE0_FD_EXT, dupFd,
                 EGL_DMA_BUF_PLANE0_OFFSET_EXT, offset,
                 EGL_DMA_BUF_PLANE0_PITCH_EXT, stride
@@ -1208,6 +1209,10 @@ void UICEFWebView::processAcceleratedPaintGPU(const CefAcceleratedPaintInfo& inf
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+        // Swap red and blue channels to match BGRA frames
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_R, GL_BLUE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_B, GL_RED);
                 
         // Verificar se temos a extensão GL_EXT_memory_object_fd como alternativa
         const char* extensions = (const char*)glGetString(GL_EXTENSIONS);
@@ -1358,11 +1363,13 @@ void UICEFWebView::createAcceleratedTextures(int width, int height)
         glGenTextures(2, m_acceleratedTextures);
         for (int i = 0; i < 2; i++) {
             glBindTexture(GL_TEXTURE_2D, m_acceleratedTextures[i]);
-            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_BGRA, GL_UNSIGNED_BYTE, nullptr);
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_R, GL_BLUE);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_B, GL_RED);
         }
         
         // Create read FBO for copying
