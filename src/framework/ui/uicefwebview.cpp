@@ -1125,6 +1125,18 @@ void UICEFWebView::processAcceleratedPaintGPU(const CefAcceleratedPaintInfo& inf
         if (contextError != GL_NO_ERROR) {
             g_logger.warning(stdext::format("UICEFWebView: OpenGL context had pending error: 0x%x", contextError));
         }
+        
+        // Additional context validation
+        GLint maxTextureSize;
+        glGetIntegerv(GL_MAX_TEXTURE_SIZE, &maxTextureSize);
+        GLenum getError = glGetError();
+        if (getError != GL_NO_ERROR) {
+            g_logger.fatal(stdext::format("UICEFWebView: OpenGL context is invalid - glGetIntegerv failed with error: 0x%x", getError));
+            close(dupFd);
+            std::abort();
+        }
+        
+        g_logger.info(stdext::format("UICEFWebView: OpenGL context validated - max texture size: %d, current texture size: %dx%d", maxTextureSize, width, height));
 
         auto eglCreateImageKHRFn = (PFNEGLCREATEIMAGEKHRPROC)eglGetProcAddress("eglCreateImageKHR");
         auto eglDestroyImageKHRFn = (PFNEGLDESTROYIMAGEKHRPROC)eglGetProcAddress("eglDestroyImageKHR");
@@ -1608,6 +1620,32 @@ void UICEFWebView::onGeometryChange(const Rect& oldRect, const Rect& newRect)
                      std::to_string(oldRect.width()) + "x" + std::to_string(oldRect.height()) + 
                      " to " + std::to_string(newRect.width()) + "x" + std::to_string(newRect.height()));
         
+        // CRITICAL: Clean up OpenGL resources before changing size
+        if (m_textureCreated && m_cefTexture) {
+            g_logger.info("UICEFWebView: Cleaning up OpenGL texture before resize");
+            
+            // Ensure we're in the correct OpenGL context
+            if (s_glxMainContext && s_glxDrawable && s_x11Display) {
+                GLXContext currentContext = glXGetCurrentContext();
+                if (currentContext != s_glxMainContext) {
+                    if (!glXMakeCurrent((Display*)s_x11Display, (GLXDrawable)s_glxDrawable, (GLXContext)s_glxMainContext)) {
+                        g_logger.warning("UICEFWebView: Failed to make GLX context current during cleanup");
+                    }
+                }
+                
+                // Clear any pending OpenGL errors before cleanup
+                while (glGetError() != GL_NO_ERROR) { /* clear error queue */ }
+                
+                // Unbind any bound textures
+                glBindTexture(GL_TEXTURE_2D, 0);
+                
+                // Force texture destruction to free GPU memory
+                m_cefTexture.reset();
+                
+                g_logger.info("UICEFWebView: OpenGL resources cleaned up successfully");
+            }
+        }
+        
         // Notify CEF browser about the size change
         if (m_browser) {
             CefRefPtr<CefBrowserHost> host = m_browser->GetHost();
@@ -1617,10 +1655,13 @@ void UICEFWebView::onGeometryChange(const Rect& oldRect, const Rect& newRect)
             }
         }
         
-        // Reset texture state to force recreation
+        // Reset texture state to force recreation with clean slate
         m_textureCreated = false;
         m_lastWidth = 0;
         m_lastHeight = 0;
+        m_cefTexture.reset(); // Ensure texture pointer is also reset
+        
+        g_logger.info("UICEFWebView: Texture state reset for recreation");
     }
 }
 
