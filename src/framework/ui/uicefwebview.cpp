@@ -1089,7 +1089,25 @@ void UICEFWebView::processAcceleratedPaintGPU(const CefAcceleratedPaintInfo& inf
         return;
     }    
 
-    g_dispatcher.scheduleEvent([this, dupFd, width, height, stride, offset, modifier]() {
+    // SAFETY FIX: Don't capture 'this' directly to avoid crashes when object is destroyed
+    // Instead, capture a raw pointer and validate it's still in the active list
+    UICEFWebView* safePtr = this;
+    
+    g_dispatcher.scheduleEvent([safePtr, dupFd, width, height, stride, offset, modifier]() {
+        // Check if the webview pointer is still valid by searching in active list
+        bool stillValid = false;
+        for (const auto* activeWebView : UICEFWebView::s_activeWebViews) {
+            if (activeWebView == safePtr) {
+                stillValid = true;
+                break;
+            }
+        }
+        
+        if (!stillValid) {
+            // WebView was destroyed, just clean up and exit
+            close(dupFd);
+            return;
+        }
         // Ensure the main GLX context is current on this thread
         if (!s_glxMainContext || !s_glxDrawable || !s_x11Display) {
             g_logger.error("UICEFWebView: No GLX context or drawable available");
@@ -1171,12 +1189,12 @@ void UICEFWebView::processAcceleratedPaintGPU(const CefAcceleratedPaintInfo& inf
 
         // CRITICAL FIX: Always recreate texture for each frame
         // Reusing textures with glTexStorageMem2DEXT/glEGLImageTargetTexture2DOES causes GL_INVALID_OPERATION
-        m_cefTexture = TexturePtr(new Texture(Size(getWidth(), getHeight())));
-        m_textureCreated = true;
-        m_lastWidth = getWidth();
-        m_lastHeight = getHeight();
+        safePtr->m_cefTexture = TexturePtr(new Texture(Size(safePtr->getWidth(), safePtr->getHeight())));
+        safePtr->m_textureCreated = true;
+        safePtr->m_lastWidth = safePtr->getWidth();
+        safePtr->m_lastHeight = safePtr->getHeight();
 
-        glBindTexture(GL_TEXTURE_2D, m_cefTexture->getId());
+        glBindTexture(GL_TEXTURE_2D, safePtr->m_cefTexture->getId());
         
         // Set texture parameters that are safe for EGLImage
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
@@ -1215,7 +1233,8 @@ void UICEFWebView::processAcceleratedPaintGPU(const CefAcceleratedPaintInfo& inf
                     
                     if (error2 == GL_NO_ERROR) {
                         // Use the memory object to create the texture
-                        glTexStorageMem2DEXT(GL_TEXTURE_2D, 1, GL_RGBA8, width, height, memoryObject, offset);
+                        // FIX: Use BGRA format to match CEF's output format (fixes color inversion)
+                        glTexStorageMem2DEXT(GL_TEXTURE_2D, 1, GL_BGRA, width, height, memoryObject, offset);
                         GLenum error3 = glGetError();
                         
                         if (error3 == GL_NO_ERROR) {
@@ -1249,7 +1268,7 @@ void UICEFWebView::processAcceleratedPaintGPU(const CefAcceleratedPaintInfo& inf
             }
             
             // Ensure texture is bound correctly
-            glBindTexture(GL_TEXTURE_2D, m_cefTexture->getId());
+            glBindTexture(GL_TEXTURE_2D, safePtr->m_cefTexture->getId());
             
             // POTENTIAL FIX: Ensure clean OpenGL state before EGLImage operation
             // Some drivers require specific state for glEGLImageTargetTexture2DOES
@@ -1258,7 +1277,7 @@ void UICEFWebView::processAcceleratedPaintGPU(const CefAcceleratedPaintInfo& inf
             
             // Ensure we're using texture unit 0
             glActiveTexture(GL_TEXTURE0);
-            glBindTexture(GL_TEXTURE_2D, m_cefTexture->getId());
+            glBindTexture(GL_TEXTURE_2D, safePtr->m_cefTexture->getId());
             
             // Clear any pending operations
             glFinish();
@@ -1272,7 +1291,7 @@ void UICEFWebView::processAcceleratedPaintGPU(const CefAcceleratedPaintInfo& inf
             }
             
             g_logger.info(stdext::format("About to call glEGLImageTargetTexture2DOES - bound texture: %d, target texture: %d", 
-                                       boundTexture, m_cefTexture->getId()));
+                                       boundTexture, safePtr->m_cefTexture->getId()));
             
             // Check if we have a valid OpenGL context
             GLXContext currentCtx = glXGetCurrentContext();
@@ -1293,7 +1312,7 @@ void UICEFWebView::processAcceleratedPaintGPU(const CefAcceleratedPaintInfo& inf
                 GLint activeTexture;
                 glGetIntegerv(GL_ACTIVE_TEXTURE, &activeTexture);
                 
-                GLboolean isTexture = glIsTexture(m_cefTexture->getId());
+                GLboolean isTexture = glIsTexture(safePtr->m_cefTexture->getId());
                 
                 g_logger.error(stdext::format("Failure diagnostics - Bound texture: %d, Active texture unit: 0x%x, Is valid texture: %s", 
                              textureBinding, activeTexture, isTexture ? "YES" : "NO"));
