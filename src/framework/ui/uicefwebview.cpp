@@ -1232,7 +1232,6 @@ void UICEFWebView::processAcceleratedPaintGPU(const CefAcceleratedPaintInfo& inf
         logCurrent();
 
         // Log da thread atual antes de chamar g_glEGLImageTargetTexture2DOES
-        std::thread::id threadId = std::this_thread::get_id();
         g_logger.info(stdext::format("GPU acceleration g_glEGLImageTargetTexture2DOES running on thread ID: %s", 
                                     std::to_string(std::hash<std::thread::id>{}(threadId)).c_str()));
 
@@ -1248,7 +1247,7 @@ void UICEFWebView::processAcceleratedPaintGPU(const CefAcceleratedPaintInfo& inf
         
         bool glxContextMatches = (currentGLXDisplay == s_x11Display && 
                                  currentGLXContext == s_glxMainContext && 
-                                 currentGLXDrawable == s_glxDrawable);
+                                 currentGLXDrawable == (GLXDrawable)s_glxDrawable);
         g_logger.info(stdext::format("GLX Context matches expected: %s", glxContextMatches ? "YES" : "NO"));
 #endif
 
