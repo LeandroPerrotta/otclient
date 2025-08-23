@@ -469,11 +469,11 @@ private:
                 if (m_webview && !name.empty()) {
                     // With multi_threaded_message_loop = true, we're on CEF UI thread
                     // Need to schedule callback on main thread for thread safety
-                    g_dispatcher.scheduleEvent([webview = m_webview, name, data]() {
+                    g_dispatcher.addEventFromOtherThread([webview = m_webview, name, data]() {
                         if (webview) {
                             webview->onJavaScriptCallback(name, data);
                         }
-                    }, 0);
+                    });
                     callback->Success("");
                     return true;
                 }
@@ -1093,22 +1093,32 @@ void UICEFWebView::processAcceleratedPaintGPU(const CefAcceleratedPaintInfo& inf
         return;
     }
 
+    auto replaceBadFd = [fd]() {
+        int nullFd = open("/dev/null", O_RDONLY);
+        if (nullFd >= 0) {
+            dup2(nullFd, fd);
+            close(nullFd);
+        }
+    };
+
     // Verificar se o FD é válido usando fcntl
     int flags = fcntl(fd, F_GETFL);
     if (flags == -1) {
         g_logger.error(stdext::format("UICEFWebView: FD %d is invalid (fcntl F_GETFL failed): %s", fd, strerror(errno)));
+        replaceBadFd();
         return;
     }
 
     int dupFd = fcntl(fd, F_DUPFD_CLOEXEC, 0);
     if (dupFd < 0) {
         g_logger.error(stdext::format("UICEFWebView: Failed to duplicate FD %d: %s (errno=%d)", fd, strerror(errno), errno));
+        replaceBadFd();
         return;
     }    
 
         // SAFETY FIX: Capture 'this' but validate with atomic flag
     // The atomic flag prevents use-after-free even if object is being destroyed
-    g_dispatcher.scheduleEvent([this, dupFd, width, height, stride, offset, modifier]() {
+    g_dispatcher.addEventFromOtherThread([this, dupFd, width, height, stride, offset, modifier]() {
         // Check if the object is still valid (not being destroyed)
         if (!m_isValid.load()) {
             // Object is being destroyed, just clean up and exit
@@ -1336,7 +1346,7 @@ void UICEFWebView::processAcceleratedPaintGPU(const CefAcceleratedPaintInfo& inf
         
         // Close FD 
         close(dupFd);
-    }, 0);
+    });
 #endif
 }
 
