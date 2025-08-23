@@ -998,28 +998,35 @@ void UICEFWebView::initializeEGLSidecar()
     }
     
     // Create EGL context for texture operations
+    // Use OpenGL Desktop context to match the GLX context
+    eglBindAPI(EGL_OPENGL_API);  // Important: bind to OpenGL Desktop, not OpenGL ES
+    
     EGLint contextAttribs[] = {
-        EGL_CONTEXT_CLIENT_VERSION, 2,
+        EGL_CONTEXT_MAJOR_VERSION, 3,
+        EGL_CONTEXT_MINOR_VERSION, 3,
+        EGL_CONTEXT_OPENGL_PROFILE_MASK, EGL_CONTEXT_OPENGL_COMPATIBILITY_PROFILE_BIT,
         EGL_NONE
     };
     
-    // Choose EGL config
+    // Choose EGL config for OpenGL Desktop
     EGLint configAttribs[] = {
         EGL_SURFACE_TYPE, EGL_PBUFFER_BIT,
         EGL_BLUE_SIZE, 8,
         EGL_GREEN_SIZE, 8,
         EGL_RED_SIZE, 8,
         EGL_ALPHA_SIZE, 8,
-        EGL_RENDERABLE_TYPE, EGL_OPENGL_ES2_BIT,
+        EGL_RENDERABLE_TYPE, EGL_OPENGL_BIT,  // OpenGL Desktop, not ES
         EGL_NONE
     };
     
     EGLConfig eglConfig;
     EGLint numConfigs;
     if (!eglChooseConfig(eglDisplay, configAttribs, &eglConfig, 1, &numConfigs) || numConfigs == 0) {
-        g_logger.error("UICEFWebView: Failed to choose EGL config");
+        g_logger.error("UICEFWebView: Failed to choose EGL config for OpenGL Desktop");
         return;
     }
+    
+    g_logger.info(stdext::format("UICEFWebView: Chosen EGL config, numConfigs: %d", numConfigs));
     
     // Create EGL context
     EGLContext eglContext = eglCreateContext(eglDisplay, eglConfig, EGL_NO_CONTEXT, contextAttribs);
@@ -1332,14 +1339,23 @@ void UICEFWebView::processAcceleratedPaintGPU(const CefAcceleratedPaintInfo& inf
         // Log imediatamente antes da chamada crítica
         g_logger.info("About to call g_glEGLImageTargetTexture2DOES...");
         
-        // Tentar ativar contexto EGL se necessário
+        // Verificar contextos atuais
         EGLDisplay currentEGLDisplay = eglGetCurrentDisplay();
+        g_logger.info(stdext::format("Current EGL Display: %p (expected: %p)", currentEGLDisplay, s_eglDisplay));
+        
+        // Abordagem 1: Tentar ativar contexto EGL se necessário
+        bool eglContextActivated = false;
         if (currentEGLDisplay == EGL_NO_DISPLAY && s_eglDisplay != nullptr && s_eglContext != nullptr) {
-            g_logger.info("No EGL context active, attempting to make EGL context current...");
+            g_logger.info("Attempting to activate EGL context...");
+            
+            // Verificar se o contexto EGL ainda é válido
+            EGLBoolean isValid = eglMakeCurrent(EGL_NO_DISPLAY, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
+            g_logger.info(stdext::format("EGL reset result: %d", isValid));
             
             // Tentar fazer o contexto EGL atual
             if (eglMakeCurrent((EGLDisplay)s_eglDisplay, EGL_NO_SURFACE, EGL_NO_SURFACE, (EGLContext)s_eglContext)) {
-                g_logger.info("Successfully made EGL context current");
+                g_logger.info("Successfully activated EGL context");
+                eglContextActivated = true;
                 
                 // Verificar se agora temos contexto EGL ativo
                 EGLDisplay newEGLDisplay = eglGetCurrentDisplay();
@@ -1347,10 +1363,17 @@ void UICEFWebView::processAcceleratedPaintGPU(const CefAcceleratedPaintInfo& inf
                 g_logger.info(stdext::format("New EGL Context: display=%p, context=%p", newEGLDisplay, newEGLContext));
             } else {
                 EGLint eglError = eglGetError();
-                g_logger.error(stdext::format("Failed to make EGL context current: 0x%x", eglError));
+                g_logger.error(stdext::format("Failed to activate EGL context: 0x%x", eglError));
             }
         }
         
+        if (!eglContextActivated) {
+            g_logger.info("No EGL context active - trying direct approach with GLX context");
+            g_logger.info("Some drivers support glEGLImageTargetTexture2DOES in GLX context");
+        }
+        
+        // Tentar a chamada independentemente do contexto EGL
+        g_logger.info("Calling g_glEGLImageTargetTexture2DOES...");
         g_glEGLImageTargetTexture2DOES(GL_TEXTURE_2D, (GLeglImageOES)img);
         g_logger.info("g_glEGLImageTargetTexture2DOES call completed");
         
