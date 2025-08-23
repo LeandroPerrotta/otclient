@@ -959,6 +959,11 @@ void UICEFWebView::initializeGLXSharedContext()
 void UICEFWebView::initializeEGLSidecar()
 {
 #if defined(__linux__)
+    // Log da thread atual na inicialização do EGL sidecar
+    std::thread::id threadId = std::this_thread::get_id();
+    g_logger.info(stdext::format("EGL Sidecar initialization running on thread ID: %s", 
+                                std::to_string(std::hash<std::thread::id>{}(threadId)).c_str()));
+    
     if (s_eglSidecarInitialized) {
         return;
     }
@@ -1193,6 +1198,10 @@ void UICEFWebView::processAcceleratedPaintGPU(const CefAcceleratedPaintInfo& inf
         };
         logCurrent();
 
+        // Log da thread atual antes de chamar g_glEGLImageTargetTexture2DOES
+        std::thread::id threadId = std::this_thread::get_id();
+        g_logger.info(stdext::format("GPU acceleration g_glEGLImageTargetTexture2DOES running on thread ID: %s", 
+                                    std::to_string(std::hash<std::thread::id>{}(threadId)).c_str()));
 
         glBindTexture(GL_TEXTURE_2D, m_cefTexture->getId());
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
