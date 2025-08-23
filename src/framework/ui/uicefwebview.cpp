@@ -1331,7 +1331,7 @@ void UICEFWebView::processAcceleratedPaintGPU(const CefAcceleratedPaintInfo& inf
         
         // Close FD 
         close(dupFd);
-    });
+    }, 0);
 #endif
 }
 
