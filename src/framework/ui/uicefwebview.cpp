@@ -949,6 +949,13 @@ void UICEFWebView::initializeGLXSharedContext()
         return;
     }
     
+    // Log detalhado da criação do contexto compartilhado
+    std::thread::id threadId = std::this_thread::get_id();
+    g_logger.info(stdext::format("GLX Shared Context created on thread ID: %s", 
+                                std::to_string(std::hash<std::thread::id>{}(threadId)).c_str()));
+    g_logger.info(stdext::format("GLX Shared Context: main=%p, shared=%p, display=%p", 
+                                mainContext, sharedContext, x11Display));
+    
     s_glxContext = sharedContext;
     s_glxContextInitialized = true;
     
@@ -1094,10 +1101,36 @@ void UICEFWebView::processAcceleratedPaintGPU(const CefAcceleratedPaintInfo& inf
             g_logger.error("UICEFWebView: No GLX context or drawable available");
             return;
         }
+        
+        // Log do contexto antes de fazer o switch
+        std::thread::id threadId = std::this_thread::get_id();
+        g_logger.info(stdext::format("processAcceleratedPaintGPU on thread ID: %s", 
+                                    std::to_string(std::hash<std::thread::id>{}(threadId)).c_str()));
+        
+#ifdef GLX_VERSION_1_3
+        Display* beforeDisplay = glXGetCurrentDisplay();
+        GLXContext beforeContext = glXGetCurrentContext();
+        GLXDrawable beforeDrawable = glXGetCurrentDrawable();
+        g_logger.info(stdext::format("Before glXMakeCurrent - display=%p, context=%p, drawable=%p", 
+                                    beforeDisplay, beforeContext, beforeDrawable));
+#endif
+        
         if (!glXMakeCurrent((Display*)s_x11Display, (GLXDrawable)s_glxDrawable, (GLXContext)s_glxMainContext)) {
             g_logger.error("UICEFWebView: Failed to make GLX context current");
             return;
         }
+        
+        // Log do contexto após fazer o switch
+#ifdef GLX_VERSION_1_3
+        Display* afterDisplay = glXGetCurrentDisplay();
+        GLXContext afterContext = glXGetCurrentContext();
+        GLXDrawable afterDrawable = glXGetCurrentDrawable();
+        g_logger.info(stdext::format("After glXMakeCurrent - display=%p, context=%p, drawable=%p", 
+                                    afterDisplay, afterContext, afterDrawable));
+        g_logger.info(stdext::format("Context switch successful: %s", 
+                                    (afterContext == s_glxMainContext) ? "YES" : "NO"));
+#endif
+
         auto eglCreateImageKHRFn = (PFNEGLCREATEIMAGEKHRPROC)eglGetProcAddress("eglCreateImageKHR");
         auto eglDestroyImageKHRFn = (PFNEGLDESTROYIMAGEKHRPROC)eglGetProcAddress("eglDestroyImageKHR");
         if (!eglCreateImageKHRFn || !eglDestroyImageKHRFn || !ensureGlEglImageProcResolved()) {
@@ -1203,10 +1236,50 @@ void UICEFWebView::processAcceleratedPaintGPU(const CefAcceleratedPaintInfo& inf
         g_logger.info(stdext::format("GPU acceleration g_glEGLImageTargetTexture2DOES running on thread ID: %s", 
                                     std::to_string(std::hash<std::thread::id>{}(threadId)).c_str()));
 
+        // Log detalhado do contexto atual vs contextos esperados
+#ifdef GLX_VERSION_1_3
+        Display* currentGLXDisplay = glXGetCurrentDisplay();
+        GLXContext currentGLXContext = glXGetCurrentContext();
+        GLXDrawable currentGLXDrawable = glXGetCurrentDrawable();
+        g_logger.info(stdext::format("Current GLX Context: display=%p, context=%p, drawable=%p", 
+                                    currentGLXDisplay, currentGLXContext, currentGLXDrawable));
+        g_logger.info(stdext::format("Expected GLX Context: display=%p, context=%p, drawable=%p", 
+                                    s_x11Display, s_glxMainContext, s_glxDrawable));
+        
+        bool glxContextMatches = (currentGLXDisplay == s_x11Display && 
+                                 currentGLXContext == s_glxMainContext && 
+                                 currentGLXDrawable == s_glxDrawable);
+        g_logger.info(stdext::format("GLX Context matches expected: %s", glxContextMatches ? "YES" : "NO"));
+#endif
+
+        EGLDisplay currentEGLDisplay = eglGetCurrentDisplay();
+        EGLContext currentEGLContext = eglGetCurrentContext();
+        EGLSurface currentEGLSurface = eglGetCurrentSurface(EGL_DRAW);
+        g_logger.info(stdext::format("Current EGL Context: display=%p, context=%p, surface=%p", 
+                                    currentEGLDisplay, currentEGLContext, currentEGLSurface));
+        g_logger.info(stdext::format("Expected EGL Display: %p", s_eglDisplay));
+        
+        bool eglDisplayMatches = (currentEGLDisplay == s_eglDisplay);
+        g_logger.info(stdext::format("EGL Display matches expected: %s", eglDisplayMatches ? "YES" : "NO"));
+
+        // Verificar se o contexto é válido
+        g_logger.info(stdext::format("OpenGL Vendor: %s", glGetString(GL_VENDOR)));
+        g_logger.info(stdext::format("OpenGL Renderer: %s", glGetString(GL_RENDERER)));
+        
+        // Verificar se a função g_glEGLImageTargetTexture2DOES está válida
+        g_logger.info(stdext::format("g_glEGLImageTargetTexture2DOES function pointer: %p", 
+                                    (void*)g_glEGLImageTargetTexture2DOES));
+
         glBindTexture(GL_TEXTURE_2D, m_cefTexture->getId());
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+        
+        // Log imediatamente antes da chamada crítica
+        g_logger.info("About to call g_glEGLImageTargetTexture2DOES...");
         g_glEGLImageTargetTexture2DOES(GL_TEXTURE_2D, (GLeglImageOES)img);
+        g_logger.info("g_glEGLImageTargetTexture2DOES call completed");
+        
         GLenum glError = glGetError();
+        g_logger.info(stdext::format("OpenGL error after g_glEGLImageTargetTexture2DOES: 0x%x", glError));
         glBindTexture(GL_TEXTURE_2D, 0);
 
         eglDestroyImageKHRFn((EGLDisplay)s_eglDisplay, img);
