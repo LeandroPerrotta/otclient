@@ -39,6 +39,7 @@
 #include <algorithm>
 #include <cstring>
 #include <memory>
+#include <chrono>
 
 #ifdef USE_CEF
 #include <include/cef_app.h>
@@ -1131,6 +1132,53 @@ void UICEFWebView::processAcceleratedPaintGPU(const CefAcceleratedPaintInfo& inf
         g_logger.error(stdext::format("UICEFWebView: Invalid FD received: %d", fd));
         return;
     }
+    
+    // Comprehensive parameter validation
+    if (width <= 0 || height <= 0 || width > 8192 || height > 8192) {
+        g_logger.error(stdext::format("UICEFWebView: Invalid dimensions: %dx%d", width, height));
+        return;
+    }
+    
+    if (stride <= 0 || stride > 32768) {
+        g_logger.error(stdext::format("UICEFWebView: Invalid stride: %d", stride));
+        return;
+    }
+    
+    // Validate stride is reasonable for the width (ARGB8888 = 4 bytes per pixel)
+    int minStride = width * 4;
+    if (stride < minStride) {
+        g_logger.error(stdext::format("UICEFWebView: Stride too small: %d < %d (width=%d)", stride, minStride, width));
+        return;
+    }
+    
+    // Check for suspicious modifier values
+    if (modifier == 0xffffffffffffff || modifier == 0xffffffffffffffff) {
+        g_logger.warning(stdext::format("UICEFWebView: Suspicious modifier value: 0x%llx (DRM_FORMAT_MOD_INVALID)", modifier));
+    }
+    
+    // Get actual buffer size using lseek
+    off_t bufferSize = lseek(fd, 0, SEEK_END);
+    if (bufferSize > 0) {
+        lseek(fd, 0, SEEK_SET); // Reset position
+        
+        // Calculate minimum required buffer size
+        size_t requiredSize = (size_t)(height - 1) * stride + width * 4 + offset;
+        
+        if ((size_t)bufferSize < requiredSize) {
+            g_logger.error(stdext::format("UICEFWebView: Buffer too small: %ld < %zu (width=%d, height=%d, stride=%d, offset=%d)", 
+                                        bufferSize, requiredSize, width, height, stride, offset));
+            return;
+        }
+        
+        g_logger.debug(stdext::format("UICEFWebView: Buffer validation passed - size: %ld, required: %zu", bufferSize, requiredSize));
+    } else {
+        g_logger.warning(stdext::format("UICEFWebView: Could not determine buffer size for FD %d: %s", fd, strerror(errno)));
+    }
+    
+    // Check for FD leaks (high FD numbers might indicate resource issues)
+    if (fd > 200) {
+        g_logger.warning(stdext::format("UICEFWebView: High FD number detected: %d (possible FD leak?)", fd));
+    }
 
     auto replaceBadFd = [fd]() {
         int nullFd = open("/dev/null", O_RDONLY);
@@ -1242,11 +1290,42 @@ void UICEFWebView::processAcceleratedPaintGPU(const CefAcceleratedPaintInfo& inf
 
         if (img == EGL_NO_IMAGE_KHR) {
             EGLint eglError = eglGetError();
-            g_logger.error(stdext::format("UICEFWebView: Failed to create EGL image - EGL error: 0x%x (%s)", 
-                                        eglError, getEGLErrorString(eglError)));
-            g_logger.error(stdext::format("UICEFWebView: EGL image parameters - width: %d, height: %d, stride: %d, offset: %d, fd: %d, modifier: 0x%llx, useModifier: %s", 
-                                        width, height, stride, offset, dupFd, modifier, useModifier ? "true" : "false"));
+            
+            // Rate limit error logging to prevent spam
+            static std::chrono::steady_clock::time_point lastErrorTime;
+            static int consecutiveErrors = 0;
+            auto now = std::chrono::steady_clock::now();
+            
+            if (std::chrono::duration_cast<std::chrono::seconds>(now - lastErrorTime).count() > 5) {
+                consecutiveErrors = 0; // Reset counter after 5 seconds
+            }
+            
+            consecutiveErrors++;
+            
+            if (consecutiveErrors <= 3 || consecutiveErrors % 10 == 0) {
+                g_logger.error(stdext::format("UICEFWebView: Failed to create EGL image - EGL error: 0x%x (%s) [error #%d]", 
+                                            eglError, getEGLErrorString(eglError), consecutiveErrors));
+                g_logger.error(stdext::format("UICEFWebView: EGL image parameters - width: %d, height: %d, stride: %d, offset: %d, fd: %d, modifier: 0x%llx, useModifier: %s", 
+                                            width, height, stride, offset, dupFd, modifier, useModifier ? "true" : "false"));
+                
+                // Add specific diagnostic information based on error type
+                if (eglError == EGL_BAD_ALLOC) {
+                    g_logger.error("UICEFWebView: EGL_BAD_ALLOC suggests GPU memory exhaustion or driver limits exceeded");
+                    g_logger.error("UICEFWebView: Consider reducing texture size or checking GPU memory usage");
+                } else if (eglError == EGL_BAD_PARAMETER) {
+                    g_logger.error("UICEFWebView: EGL_BAD_PARAMETER suggests invalid DMA-BUF parameters or unsupported format");
+                } else if (eglError == EGL_BAD_MATCH) {
+                    g_logger.error("UICEFWebView: EGL_BAD_MATCH suggests incompatible EGL context or surface configuration");
+                }
+            } else if (consecutiveErrors == 4) {
+                g_logger.warning("UICEFWebView: Suppressing further EGL error messages (will log every 10th error)");
+            }
+            
+            lastErrorTime = now;
             close(dupFd);
+            
+            // TODO: Consider implementing fallback to software rendering here
+            // For now, we just return and let CEF handle it
             return;
         }
 
