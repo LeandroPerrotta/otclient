@@ -276,7 +276,7 @@ endif()
 # Dedicated CEF subprocess executable
 if(USE_CEF)
     # Add manifest to subprocess for GPU detection consistency
-    add_executable(otclient_cef_subproc src/cef/subprocess/main.cpp src/cef/core/cef_helper.cpp src/app.manifest)
+    add_executable(otclient_cef_subproc src/cef/subprocess/main.cpp src/cef/core/cef_helper.cpp src/cef/core/cef_config.cpp src/app.manifest)
     target_compile_definitions(otclient_cef_subproc PRIVATE USE_CEF)
     set_target_properties(otclient_cef_subproc PROPERTIES CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON)
     otclient_link_cef(otclient_cef_subproc)

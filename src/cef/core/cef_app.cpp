@@ -3,6 +3,7 @@
 #ifdef USE_CEF
 
 #include "cef_helper.h"
+#include "cef_config.h"
 #include <framework/stdext/format.h>
 #include "include/wrapper/cef_helpers.h"
 
@@ -30,31 +31,15 @@ void OTClientBrowserApp::OnRegisterCustomSchemes(CefRawPtr<CefSchemeRegistrar> r
 
 void OTClientBrowserApp::OnBeforeCommandLineProcessing(const CefString& process_type,
                                                        CefRefPtr<CefCommandLine> command_line) {
-#if defined(_WIN32) && defined(OPENGL_ES) && OPENGL_ES == 2
-    command_line->AppendSwitch("angle");
-    command_line->AppendSwitchWithValue("use-angle", "d3d11");
-    command_line->AppendSwitch("shared-texture-enabled");
-
-    // Essential flags for GPU acceleration
-    command_line->AppendSwitch("disable-gpu-watchdog"); // Prevent GPU process timeout     
-#else
-    command_line->AppendSwitchWithValue("ozone-platform", "x11");
-
-    // Enable GPU acceleration across processes
-    command_line->AppendSwitch("enable-gpu");
-    command_line->AppendSwitch("enable-gpu-compositing");
-    command_line->AppendSwitch("enable-gpu-rasterization");
-    command_line->AppendSwitch("disable-software-rasterizer");
-    command_line->AppendSwitch("disable-gpu-sandbox"); // Sometimes needed for shared textures
-
-    command_line->AppendSwitch("enable-begin-frame-scheduling");
-    command_line->AppendSwitch("disable-background-timer-throttling");
-    command_line->AppendSwitch("disable-renderer-backgrounding");
-
-    // Log the command line AFTER all switches have been added
-    cef::logMessage(stdext::format("cmline: %s", process_type.ToString()).c_str());
-    cef::logMessage(stdext::format("Command line flags set to: %s", command_line->GetCommandLineString()).c_str());
-#endif
+    // Use the configuration system to apply platform-specific command line flags
+    auto config = cef::CefConfigFactory::createConfig();
+    if (config) {
+        config->applyCommandLineFlags(command_line);
+        cef::logMessage(config->getPlatformName().c_str(), 
+                       stdext::format("Process type: %s", process_type.ToString()).c_str());
+    } else {
+        cef::logMessage("ERROR", "Failed to create CEF configuration for command line processing");
+    }
 }
 
 #endif // USE_CEF

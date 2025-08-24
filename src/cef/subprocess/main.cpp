@@ -3,6 +3,7 @@
 #include "include/cef_command_line.h"
 #include "include/wrapper/cef_message_router.h"
 #include "../core/cef_helper.h"
+#include "../core/cef_config.h"
 #include "../../framework/stdext/format.h"
 
 #ifdef _WIN32
@@ -29,22 +30,17 @@ public:
 
     void OnBeforeCommandLineProcessing(const CefString& process_type,
                                        CefRefPtr<CefCommandLine> command_line) override {
-#if defined(_WIN32) && defined(OPENGL_ES) && OPENGL_ES == 2
-        // Minimal ANGLE configuration that works (same as main process)
-        command_line->AppendSwitch("angle");
-        command_line->AppendSwitchWithValue("use-angle", "d3d11");
-        // TODO: Implement GetGpuLuid() if needed for multi-GPU systems
-        // command_line->AppendSwitchWithValue("use-adapter-luid", this->GetGpuLuid());
-#endif
-        
-        // Performance flags for all processes (not GPU-specific)
-        command_line->AppendSwitch("enable-begin-frame-scheduling");
-        command_line->AppendSwitch("disable-background-timer-throttling");
-        command_line->AppendSwitch("disable-renderer-backgrounding");
-
-        // Log the command line AFTER all switches have been added
-        cef::logMessage("CEF-subprocess", stdext::format("cmline: %s", process_type.ToString()).c_str());
-        cef::logMessage("CEF-subprocess", stdext::format("Command line flags set to: %s", command_line->GetCommandLineString()).c_str());
+        // Use the configuration system to apply platform-specific command line flags
+        auto config = cef::CefConfigFactory::createConfig();
+        if (config) {
+            config->applyCommandLineFlags(command_line);
+            cef::logMessage("CEF-subprocess", 
+                           stdext::format("Process type: %s on %s", 
+                                        process_type.ToString(), 
+                                        config->getPlatformName()).c_str());
+        } else {
+            cef::logMessage("CEF-subprocess", "ERROR: Failed to create CEF configuration");
+        }
     }
 
     void OnContextCreated(CefRefPtr<CefBrowser> browser,
