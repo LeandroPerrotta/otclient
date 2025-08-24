@@ -36,6 +36,9 @@ bool InitializeCEF(int argc, const char* argv[]) {
 
     cef::logMessage(config->getPlatformName().c_str(), "Starting CEF initialization");
 
+    // Create CEF app first (needed for subprocess execution)
+    CefRefPtr<CefApp> app = new OTClientBrowserApp();
+
 #ifdef _WIN32
     // Early-subprocess exit (the main executable should never be used as subprocess
     // when browser_subprocess_path is defined, but call CefExecuteProcess for
@@ -54,22 +57,17 @@ bool InitializeCEF(int argc, const char* argv[]) {
     config->applyCommandLineFlags(command_line);
 #else
     CefMainArgs main_args(argc, const_cast<char**>(argv));
-#endif
-
-    // Configure CEF settings using configuration system
-    CefSettings settings;
-    config->applySettings(settings);
-
-    // Create CEF app and initialize
-    CefRefPtr<CefApp> app = new OTClientBrowserApp();
     
-#ifndef _WIN32
-    // For Linux, check for subprocess execution
+    // For Linux, check for subprocess execution BEFORE configuring settings
     int exit_code = CefExecuteProcess(main_args, app, nullptr);
     if (exit_code >= 0) {
         std::exit(exit_code);
     }
 #endif
+
+    // Configure CEF settings using configuration system
+    CefSettings settings;
+    config->applySettings(settings);
 
     bool result = CefInitialize(main_args, settings, app, nullptr);
 
