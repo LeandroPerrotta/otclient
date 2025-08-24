@@ -4,7 +4,6 @@
 #ifndef _WIN32
 
 #include "cef_helper.h"
-#include <framework/core/resourcemanager.h>
 #include <framework/stdext/format.h>
 
 #include <unistd.h>
@@ -18,21 +17,12 @@ namespace cef {
 std::string CefConfigLinux::findCefDirectory() const {
     std::string work_dir;
     
-    // Try to get work directory, but use current directory as fallback
-    try {
-        work_dir = g_resources.getWorkDir();
-    } catch (...) {
+    // Get current working directory (works in both main process and subprocess)
+    char cwd[PATH_MAX];
+    if (getcwd(cwd, sizeof(cwd)) != nullptr) {
+        work_dir = cwd;
+    } else {
         work_dir = ".";
-    }
-    
-    // If work_dir is empty or invalid, use current directory
-    if (work_dir.empty() || work_dir == ".") {
-        char cwd[PATH_MAX];
-        if (getcwd(cwd, sizeof(cwd)) != nullptr) {
-            work_dir = cwd;
-        } else {
-            work_dir = ".";
-        }
     }
     
     logMessage("Linux", stdext::format("Work directory: %s", work_dir).c_str());
