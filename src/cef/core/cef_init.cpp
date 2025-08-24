@@ -1,5 +1,6 @@
 #include <cef/core/cef_init.h>
 #include <cef/core/cef_app.h>
+#include <cef/core/cef_helper.h>
 #include <cef/resources/cefphysfsresourcehandler.h>
 #include <cef/ui/uicefwebview.h>
 #include <framework/core/logger.h>
@@ -34,27 +35,7 @@
 // Global CEF state
 bool g_cefInitialized = false;
 
-// Raw logger for early CEF initialization (no dependencies)
-void rawLogger(const char* message) {
-    FILE* log_file = fopen("cef.log", "a");
-    if (log_file) {
-        // Get current time
-        time_t now = time(0);
-        char* timestr = ctime(&now);
-        // Remove newline from timestr
-        if (timestr && strlen(timestr) > 0) {
-            timestr[strlen(timestr) - 1] = '\0';
-        }
-        
-        fprintf(log_file, "[%s] %s\n", timestr ? timestr : "unknown", message);
-        fflush(log_file);
-        fclose(log_file);
-    }
-    
-    // Also print to console
-    printf("[CEF] %s\n", message);
-    fflush(stdout);
-}
+
 
 
 
@@ -89,7 +70,7 @@ bool InitializeCEF(int argc, const char* argv[]) {
     CefMainArgs main_args(GetModuleHandle(nullptr));
     {
         const int code = CefExecuteProcess(main_args, nullptr, nullptr);
-        rawLogger(("CefExecuteProcess returned code: " + std::to_string(code)).c_str());
+        cef::logMessage(("CefExecuteProcess returned code: " + std::to_string(code)).c_str());
         if (code >= 0)
             std::exit(code);
     }         
@@ -135,7 +116,7 @@ bool InitializeCEF(int argc, const char* argv[]) {
     // 5) Inicializa with command line
     CefRefPtr<CefApp> app = new OTClientBrowserApp();
     if (!CefInitialize(main_args, settings, app, nullptr)) {
-        rawLogger("FAILED to initialize CEF!");
+        cef::logMessage("FAILED to initialize CEF!");
         return false;
     }
 
@@ -144,7 +125,7 @@ bool InitializeCEF(int argc, const char* argv[]) {
     CefRegisterSchemeHandlerFactory("http",  "otclient", new CefPhysFsSchemeHandlerFactory);
     CefRegisterSchemeHandlerFactory("https", "otclient", new CefPhysFsSchemeHandlerFactory);
     g_cefInitialized = true;
-    rawLogger("CEF initialized and scheme handlers registered");
+    cef::logMessage("CEF initialized and scheme handlers registered");
 
     return true;
 #else
@@ -322,18 +303,18 @@ bool InitializeCEF(int argc, const char* argv[]) {
 
 void ShutdownCEF() {
     if (g_cefInitialized) {
-        rawLogger("Starting CEF shutdown...");
+        cef::logMessage("Starting CEF shutdown...");
 
         // Close all active WebViews first
         UICEFWebView::closeAllWebViews();
 
         // With multi_threaded_message_loop = true, CEF manages its own shutdown
 
-        rawLogger("All webviews closed... Shutting down CEF");
+        cef::logMessage("All webviews closed... Shutting down CEF");
 
         // Shutdown CEF
         CefShutdown();
         g_cefInitialized = false;
-        rawLogger("CEF shutdown completed");
+        cef::logMessage("CEF shutdown completed");
     }
 }

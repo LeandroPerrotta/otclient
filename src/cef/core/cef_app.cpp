@@ -2,12 +2,9 @@
 
 #ifdef USE_CEF
 
+#include "cef_helper.h"
 #include <framework/stdext/format.h>
 #include "include/wrapper/cef_helpers.h"
-
-// Forward declaration of rawLogger from cef_init.cpp
-// TODO: This will be moved to cef_logger.h in a future refactoring step
-void rawLogger(const char* message);
 
 // Browser process handler implementation
 void OTClientBrowserProcessHandler::OnScheduleMessagePumpWork(int64_t delay_ms) {
@@ -55,8 +52,8 @@ void OTClientBrowserApp::OnBeforeCommandLineProcessing(const CefString& process_
     command_line->AppendSwitch("disable-renderer-backgrounding");
 
     // Log the command line AFTER all switches have been added
-    rawLogger(stdext::format("cmline: %s", process_type.ToString()).c_str());
-    rawLogger(stdext::format("Command line flags set to: %s", command_line->GetCommandLineString()).c_str());
+    cef::logMessage(stdext::format("cmline: %s", process_type.ToString()).c_str());
+    cef::logMessage(stdext::format("Command line flags set to: %s", command_line->GetCommandLineString()).c_str());
 #endif
 }
 

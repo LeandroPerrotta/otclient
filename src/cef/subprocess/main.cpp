@@ -2,32 +2,14 @@
 #include "include/cef_render_process_handler.h"
 #include "include/cef_command_line.h"
 #include "include/wrapper/cef_message_router.h"
+#include "../core/cef_helper.h"
 #include "../../framework/stdext/format.h"
 
 #ifdef _WIN32
 #  include <windows.h>
 #endif
 
-void rawLogger(const char* message) {
-    FILE* log_file = fopen("cef.log", "a");
-    if (log_file) {
-        // Get current time
-        time_t now = time(0);
-        char* timestr = ctime(&now);
-        // Remove newline from timestr
-        if (timestr && strlen(timestr) > 0) {
-            timestr[strlen(timestr) - 1] = '\0';
-        }
-        
-        fprintf(log_file, "[%s] %s\n", timestr ? timestr : "unknown", message);
-        fflush(log_file);
-        fclose(log_file);
-    }
-    
-    // Also print to console
-    printf("[CEF-subprocess] %s\n", message);
-    fflush(stdout);
-}
+
 
 // Render process application used in the dedicated subprocess. It mirrors the
 // behaviour that previously lived in the main executable when running in
@@ -61,8 +43,8 @@ public:
         command_line->AppendSwitch("disable-renderer-backgrounding");
 
         // Log the command line AFTER all switches have been added
-        rawLogger(stdext::format("cmline: %s", process_type.ToString()).c_str());
-        rawLogger(stdext::format("Command line flags set to: %s", command_line->GetCommandLineString()).c_str());
+        cef::logMessage("CEF-subprocess", stdext::format("cmline: %s", process_type.ToString()).c_str());
+        cef::logMessage("CEF-subprocess", stdext::format("Command line flags set to: %s", command_line->GetCommandLineString()).c_str());
     }
 
     void OnContextCreated(CefRefPtr<CefBrowser> browser,
