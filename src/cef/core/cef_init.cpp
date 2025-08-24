@@ -1,4 +1,5 @@
 #include <cef/core/cef_init.h>
+#include <cef/core/cef_app.h>
 #include <cef/resources/cefphysfsresourcehandler.h>
 #include <cef/ui/uicefwebview.h>
 #include <framework/core/logger.h>
@@ -55,70 +56,7 @@ void rawLogger(const char* message) {
     fflush(stdout);
 }
 
-// Browser process handler for proper message pump work scheduling
-class OTClientBrowserProcessHandler : public CefBrowserProcessHandler {
-public:
-    void OnScheduleMessagePumpWork(int64_t delay_ms) override {
-        // This method is called when work is scheduled for the browser process main thread
-        // With multi_threaded_message_loop = true, CEF manages its own threading
-    }
 
-    IMPLEMENT_REFCOUNTING(OTClientBrowserProcessHandler);
-};
-
-// Minimal CEF app used by the browser process to register custom schemes
-class OTClientBrowserApp : public CefApp {
-private:
-    CefRefPtr<OTClientBrowserProcessHandler> m_browserProcessHandler;
-
-public:
-    OTClientBrowserApp() {
-        m_browserProcessHandler = new OTClientBrowserProcessHandler();
-    }
-
-    CefRefPtr<CefBrowserProcessHandler> GetBrowserProcessHandler() override {
-        return m_browserProcessHandler;
-    }
-
-    void OnRegisterCustomSchemes(CefRawPtr<CefSchemeRegistrar> registrar) override {
-        registrar->AddCustomScheme("otclient",
-                                   CEF_SCHEME_OPTION_STANDARD |
-                                   CEF_SCHEME_OPTION_LOCAL |
-                                   CEF_SCHEME_OPTION_DISPLAY_ISOLATED);
-    }
-
-    // Simple ANGLE configuration based on working open-source project
-    void OnBeforeCommandLineProcessing(const CefString& process_type,
-                                       CefRefPtr<CefCommandLine> command_line) override {
-#if defined(_WIN32) && defined(OPENGL_ES) && OPENGL_ES == 2
-        command_line->AppendSwitch("angle");
-        command_line->AppendSwitchWithValue("use-angle", "d3d11");
-        command_line->AppendSwitch("shared-texture-enabled");
-
-        // Essential flags for GPU acceleration
-        command_line->AppendSwitch("disable-gpu-watchdog"); // Prevent GPU process timeout     
-#else
-        command_line->AppendSwitchWithValue("ozone-platform", "x11");
-
-        // Enable GPU acceleration across processes
-        command_line->AppendSwitch("enable-gpu");
-        command_line->AppendSwitch("enable-gpu-compositing");
-        command_line->AppendSwitch("enable-gpu-rasterization");
-        command_line->AppendSwitch("disable-software-rasterizer");
-        command_line->AppendSwitch("disable-gpu-sandbox"); // Sometimes needed for shared textures
-
-        command_line->AppendSwitch("enable-begin-frame-scheduling");
-        command_line->AppendSwitch("disable-background-timer-throttling");
-        command_line->AppendSwitch("disable-renderer-backgrounding");
-
-        // Log the command line AFTER all switches have been added
-        rawLogger(stdext::format("cmline: %s", process_type.ToString()).c_str());
-        rawLogger(stdext::format("Command line flags set to: %s", command_line->GetCommandLineString()).c_str());
-#endif
-    }
-
-    IMPLEMENT_REFCOUNTING(OTClientBrowserApp);
-};
 
 // Global CEF initialization function (simplified)
 bool InitializeCEF(int argc, const char* argv[]) {
