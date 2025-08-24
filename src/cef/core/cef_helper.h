@@ -13,12 +13,4 @@ namespace cef {
     void logMessage(const char* prefix, const char* message);
 }
 
-#else
-
-// No-op implementations when CEF is disabled
-namespace cef {
-    inline void logMessage(const char*) {}
-    inline void logMessage(const char*, const char*) {}
-}
-
 #endif // USE_CEF
