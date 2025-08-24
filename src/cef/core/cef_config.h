@@ -71,9 +71,9 @@ protected:
 };
 
 // Platform-specific configurations are defined in separate files:
-// - cef_confwin.h/cpp for Windows
-// - cef_conflinux.h/cpp for Linux
-// - Future: cef_confmac.h/cpp for Mac, etc.
+// - cef_confwin.h/cpp for CefConfigWindows
+// - cef_conflinux.h/cpp for CefConfigLinux  
+// - Future: cef_confmac.h/cpp for CefConfigMac, etc.
 
 // Factory for creating platform-specific configurations
 class CefConfigFactory {

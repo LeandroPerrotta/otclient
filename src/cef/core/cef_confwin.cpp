@@ -14,7 +14,7 @@
 
 namespace cef {
 
-std::wstring WindowsCefConfig::getExecutableDirectory() const {
+std::wstring CefConfigWindows::getExecutableDirectory() const {
     wchar_t buf[MAX_PATH];
     DWORD n = GetModuleFileNameW(nullptr, buf, MAX_PATH);
     if (!n || n >= MAX_PATH) return L".";
@@ -23,7 +23,7 @@ std::wstring WindowsCefConfig::getExecutableDirectory() const {
     return (pos == std::wstring::npos) ? L"." : p.substr(0, pos);
 }
 
-void WindowsCefConfig::configurePaths(CefSettings& settings) {
+void CefConfigWindows::configurePaths(CefSettings& settings) {
     const std::wstring exeDir = getExecutableDirectory();
     const std::wstring cefDir = exeDir + L"\\cef";
     const std::wstring localesDir = cefDir + L"\\locales";
@@ -43,7 +43,7 @@ void WindowsCefConfig::configurePaths(CefSettings& settings) {
     logMessage("Windows", stdext::format("CEF directory: %s", std::string(cefDir.begin(), cefDir.end())).c_str());
 }
 
-void WindowsCefConfig::configureAngle(CefRefPtr<CefCommandLine> command_line) {
+void CefConfigWindows::configureAngle(CefRefPtr<CefCommandLine> command_line) {
 #if defined(OPENGL_ES) && OPENGL_ES == 2
     command_line->AppendSwitch("angle");
     command_line->AppendSwitchWithValue("use-angle", "d3d11");
@@ -54,12 +54,12 @@ void WindowsCefConfig::configureAngle(CefRefPtr<CefCommandLine> command_line) {
 #endif
 }
 
-void WindowsCefConfig::applySettings(CefSettings& settings) {
+void CefConfigWindows::applySettings(CefSettings& settings) {
     applyGenericSettings(settings);
     configurePaths(settings);
 }
 
-void WindowsCefConfig::applyCommandLineFlags(CefRefPtr<CefCommandLine> command_line) {
+void CefConfigWindows::applyCommandLineFlags(CefRefPtr<CefCommandLine> command_line) {
     configureAngle(command_line);
     applyGenericCommandLineFlags(command_line);
     

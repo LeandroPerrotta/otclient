@@ -9,7 +9,7 @@
 namespace cef {
 
 // Linux-specific CEF configuration
-class LinuxCefConfig : public CefConfig {
+class CefConfigLinux : public CefConfig {
 public:
     void applySettings(CefSettings& settings) override;
     void applyCommandLineFlags(CefRefPtr<CefCommandLine> command_line) override;

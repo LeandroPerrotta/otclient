@@ -78,14 +78,14 @@ std::unique_ptr<CefConfig> CefConfigFactory::createConfig() {
 std::unique_ptr<CefConfig> CefConfigFactory::createConfig(const std::string& platform) {
     if (platform == "Windows") {
 #ifdef _WIN32
-        return std::make_unique<WindowsCefConfig>();
+        return std::make_unique<CefConfigWindows>();
 #else
         logMessage("ConfigFactory", "Windows config requested but not compiled for Windows");
         return nullptr;
 #endif
     } else if (platform == "Linux") {
 #ifndef _WIN32
-        return std::make_unique<LinuxCefConfig>();
+        return std::make_unique<CefConfigLinux>();
 #else
         logMessage("ConfigFactory", "Linux config requested but not compiled for Linux");
         return nullptr;

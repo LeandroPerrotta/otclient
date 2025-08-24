@@ -15,7 +15,7 @@
 
 namespace cef {
 
-std::string LinuxCefConfig::findCefDirectory() const {
+std::string CefConfigLinux::findCefDirectory() const {
     std::string work_dir;
     
     // Try to get work directory, but use current directory as fallback
@@ -98,7 +98,7 @@ std::string LinuxCefConfig::findCefDirectory() const {
     return ""; // Not found
 }
 
-void LinuxCefConfig::configurePaths(CefSettings& settings) {
+void CefConfigLinux::configurePaths(CefSettings& settings) {
     std::string cef_root = findCefDirectory();
     
     if (cef_root.empty()) {
@@ -151,17 +151,17 @@ void LinuxCefConfig::configurePaths(CefSettings& settings) {
     CefString(&settings.browser_subprocess_path) = subprocess_path;
 }
 
-void LinuxCefConfig::configureX11(CefRefPtr<CefCommandLine> command_line) {
+void CefConfigLinux::configureX11(CefRefPtr<CefCommandLine> command_line) {
     command_line->AppendSwitchWithValue("ozone-platform", "x11");
     logMessage("Linux", "X11 platform configuration applied");
 }
 
-void LinuxCefConfig::applySettings(CefSettings& settings) {
+void CefConfigLinux::applySettings(CefSettings& settings) {
     applyGenericSettings(settings);
     configurePaths(settings);
 }
 
-void LinuxCefConfig::applyCommandLineFlags(CefRefPtr<CefCommandLine> command_line) {
+void CefConfigLinux::applyCommandLineFlags(CefRefPtr<CefCommandLine> command_line) {
     configureX11(command_line);
     applyGenericCommandLineFlags(command_line);
     
