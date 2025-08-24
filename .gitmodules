@@ -1,0 +1,4 @@
+[submodule "pre-build"]
+	path = pre-build
+	url = https://github.com/LeandroPerrotta/otclient-cached-binaries.git
+	branch = master
