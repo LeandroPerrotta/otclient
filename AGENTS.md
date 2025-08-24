@@ -5,10 +5,7 @@ This project now uses an intelligent build system with automatic caching for fas
 ### Quick Build (Recommended for AIs)
 
 ```bash
-# 1. Setup CEF (downloads and configures CEF automatically)
-./setup_cef.sh --user
-
-# 2. Build project with intelligent caching
+# Build project with cached compilled files (should be always used for speed up builds, unless full build is necessary for some reason)
 ./pre-build.sh
 ```
 ### Advanced Options
