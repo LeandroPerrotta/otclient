@@ -163,6 +163,7 @@ if(USE_CEF)
 endif()
 
 include(src/framework/CMakeLists.txt)
+include(src/cef/CMakeLists.txt)
 include(src/client/CMakeLists.txt)
 
 if(USE_CEF)
@@ -209,9 +210,9 @@ add_definitions(-D"VERSION=\\"${VERSION}\\"")
 # add client executable
 if(WIN32)
     # Add app.manifest for better GPU detection in VMs - based on OpenKneeboard working manifest
-    add_executable(${PROJECT_NAME} ${framework_SOURCES} ${client_SOURCES} ${executable_SOURCES} src/app.manifest)
+    add_executable(${PROJECT_NAME} ${framework_SOURCES} ${client_SOURCES} ${cef_SOURCES} ${executable_SOURCES} src/app.manifest)
 else()
-    add_executable(${PROJECT_NAME} ${framework_SOURCES} ${client_SOURCES} ${executable_SOURCES})
+    add_executable(${PROJECT_NAME} ${framework_SOURCES} ${client_SOURCES} ${cef_SOURCES} ${executable_SOURCES})
 endif()
 
 if(MSVC AND NOT WINDOWS_CONSOLE)
@@ -275,7 +276,7 @@ endif()
 # Dedicated CEF subprocess executable
 if(USE_CEF)
     # Add manifest to subprocess for GPU detection consistency
-    add_executable(otclient_cef_subproc src/cef_subprocess/main.cpp src/app.manifest)
+    add_executable(otclient_cef_subproc src/cef/subprocess/main.cpp src/app.manifest)
     target_compile_definitions(otclient_cef_subproc PRIVATE USE_CEF)
     set_target_properties(otclient_cef_subproc PROPERTIES CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON)
     otclient_link_cef(otclient_cef_subproc)
