@@ -54,25 +54,24 @@ bool InitializeCEF(int argc, const char* argv[]) {
     config->applyCommandLineFlags(command_line);
 #else
     CefMainArgs main_args(argc, const_cast<char**>(argv));
-    CefRefPtr<CefApp> app = new OTClientBrowserApp();
-
-    int exit_code = CefExecuteProcess(main_args, app, nullptr);
-    if (exit_code >= 0) {
-        std::exit(exit_code);
-    }
 #endif
 
     // Configure CEF settings using configuration system
     CefSettings settings;
     config->applySettings(settings);
 
-    // Initialize CEF
+    // Create CEF app and initialize
     CefRefPtr<CefApp> app = new OTClientBrowserApp();
-#ifdef _WIN32
-    bool result = CefInitialize(main_args, settings, app, nullptr);
-#else
-    bool result = CefInitialize(main_args, settings, app, nullptr);
+    
+#ifndef _WIN32
+    // For Linux, check for subprocess execution
+    int exit_code = CefExecuteProcess(main_args, app, nullptr);
+    if (exit_code >= 0) {
+        std::exit(exit_code);
+    }
 #endif
+
+    bool result = CefInitialize(main_args, settings, app, nullptr);
 
     if (!result) {
         cef::logMessage("FAILED to initialize CEF!");
