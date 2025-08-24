@@ -28,6 +28,7 @@
 
 #ifdef USE_CEF
 #include <cef/core/cef_init.h>
+#include <cef/core/cef_helper.h>
 #endif
 
 int main(int argc, const char* argv[])
@@ -35,11 +36,11 @@ int main(int argc, const char* argv[])
 #ifdef USE_CEF
     // Initialize CEF FIRST, before anything else
     if (!InitializeCEF(argc, argv)) {
-        rawLogger("InitializeCEF returned FALSE - exiting");
+        cef::logMessage("InitializeCEF returned FALSE - exiting");
         return 1;
     }
 
-    rawLogger("InitializeCEF returned TRUE - continuing with application startup");
+    cef::logMessage("InitializeCEF returned TRUE - continuing with application startup");
 #endif
 
     std::vector<std::string> args(argv, argv + argc);
