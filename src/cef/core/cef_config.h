@@ -70,31 +70,10 @@ protected:
     void applyGenericCommandLineFlags(CefRefPtr<CefCommandLine> command_line);
 };
 
-// Windows-specific CEF configuration
-class WindowsCefConfig : public CefConfig {
-public:
-    void applySettings(CefSettings& settings) override;
-    void applyCommandLineFlags(CefRefPtr<CefCommandLine> command_line) override;
-    void configurePaths(CefSettings& settings) override;
-    std::string getPlatformName() const override { return "Windows"; }
-
-private:
-    std::wstring getExecutableDirectory() const;
-    void configureAngle(CefRefPtr<CefCommandLine> command_line);
-};
-
-// Linux-specific CEF configuration
-class LinuxCefConfig : public CefConfig {
-public:
-    void applySettings(CefSettings& settings) override;
-    void applyCommandLineFlags(CefRefPtr<CefCommandLine> command_line) override;
-    void configurePaths(CefSettings& settings) override;
-    std::string getPlatformName() const override { return "Linux"; }
-
-private:
-    std::string findCefDirectory() const;
-    void configureX11(CefRefPtr<CefCommandLine> command_line);
-};
+// Platform-specific configurations are defined in separate files:
+// - cef_confwin.h/cpp for Windows
+// - cef_conflinux.h/cpp for Linux
+// - Future: cef_confmac.h/cpp for Mac, etc.
 
 // Factory for creating platform-specific configurations
 class CefConfigFactory {
