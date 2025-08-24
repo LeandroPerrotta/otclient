@@ -1,6 +1,6 @@
 #pragma once
 
-#include "uiwebview.h"
+#include <framework/ui/uiwebview.h>
 #include <mutex>
 #include <atomic>
 
@@ -122,4 +122,4 @@ private:
     void createAcceleratedTextures(int width, int height);
     void processAcceleratedPaintGPU(const CefAcceleratedPaintInfo& info);
 #endif
-}; 
+};
