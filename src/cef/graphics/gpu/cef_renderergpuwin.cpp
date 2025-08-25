@@ -5,7 +5,6 @@
 #if defined(USE_CEF) && defined(_WIN32)
 #include <EGL/egl.h>
 #include <EGL/eglext.h>
-#include <GLES2/gl2ext.h>
 #include <d3d11.h>
 #include <dxgi.h>
 #endif
@@ -93,7 +92,7 @@ void CefRendererGPUWin::onAcceleratedPaint(const CefAcceleratedPaintInfo& info)
 
 bool CefRendererGPUWin::isSupported() const
 {
-#if defined(USE_CEF) && defined(_WIN32)
+#if defined(USE_CEF) && defined(_WIN32) && defined(OPENGL_ES) && OPENGL_ES == 2
     return true;
 #else
     return false;
