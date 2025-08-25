@@ -9,6 +9,9 @@ set -e
 BUILD_PARAMS="-DUSE_CEF=ON"
 REBUILD=false
 
+# Default branch configuration
+DEFAULT_BRANCH="cef-linux/gpuaccelerated"
+
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -65,9 +68,16 @@ fi
 echo ""
 
 # Get current git branch
-CURRENT_BRANCH=$(git branch --show-current 2>/dev/null || echo "master")
+CURRENT_BRANCH=$(git branch --show-current 2>/dev/null || echo "$DEFAULT_BRANCH")
 if [ -z "$CURRENT_BRANCH" ]; then
-    CURRENT_BRANCH="master"
+    CURRENT_BRANCH="$DEFAULT_BRANCH"
+fi
+
+# Fallback to default branch for work-in-progress branches
+if [ "$CURRENT_BRANCH" = "wip" ] || [ "$CURRENT_BRANCH" = "work" ]; then
+    echo "[INFO] Work-in-progress branch detected: $CURRENT_BRANCH"
+    echo "   Falling back to default branch: $DEFAULT_BRANCH"
+    CURRENT_BRANCH="$DEFAULT_BRANCH"
 fi
 
 # Set build destination (Linux only)
