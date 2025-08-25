@@ -7,6 +7,69 @@
 #include <vector>
 #include <cstring>
 
+class LuaCallbackHandler : public CefMessageRouterBrowserSide::Handler {
+public:
+    explicit LuaCallbackHandler(UICEFWebView* webview) : m_webview(webview) {}
+
+    bool OnQuery(CefRefPtr<CefBrowser> browser,
+                 CefRefPtr<CefFrame> frame,
+                 int64 query_id,
+                 const CefString& request,
+                 bool persistent,
+                 CefRefPtr<Callback> callback) override
+    {
+        CefRefPtr<CefValue> value = CefParseJSON(request, JSON_PARSER_RFC);
+        if(value && value->GetType() == VTYPE_DICTIONARY) {
+            CefRefPtr<CefDictionaryValue> dict = value->GetDictionary();
+            std::string name = dict->GetString("name");
+            std::string data;
+            if(dict->HasKey("data")) {
+                CefRefPtr<CefValue> dataValue = dict->GetValue("data");
+                switch(dataValue->GetType()) {
+                    case VTYPE_STRING:
+                        data = dataValue->GetString();
+                        break;
+                    case VTYPE_INT:
+                        data = std::to_string(dataValue->GetInt());
+                        break;
+                    case VTYPE_DOUBLE:
+                        data = std::to_string(dataValue->GetDouble());
+                        break;
+                    case VTYPE_BOOL:
+                        data = dataValue->GetBool() ? "true" : "false";
+                        break;
+                    default:
+                        data = CefWriteJSON(dataValue, JSON_WRITER_DEFAULT).ToString();
+                        break;
+                }
+            }
+            if(m_webview && !name.empty()) {
+                g_dispatcher.addEventFromOtherThread([webview = m_webview, name, data]() {
+                    if(webview) {
+                        webview->onJavaScriptCallback(name, data);
+                    }
+                });
+                callback->Success("");
+                return true;
+            }
+        }
+        callback->Failure(0, "Invalid request");
+        return true;
+    }
+
+    void OnQueryCanceled(CefRefPtr<CefBrowser> browser,
+                         CefRefPtr<CefFrame> frame,
+                         int64 query_id) override
+    {
+        (void)browser;
+        (void)frame;
+        (void)query_id;
+    }
+
+private:
+    UICEFWebView* m_webview;
+};
+
 SimpleCEFClient::SimpleCEFClient(UICEFWebView* webview) : m_webview(webview)
 {
     CefMessageRouterConfig config;
@@ -16,6 +79,8 @@ SimpleCEFClient::SimpleCEFClient(UICEFWebView* webview) : m_webview(webview)
     m_routerHandler = std::make_unique<LuaCallbackHandler>(m_webview);
     m_messageRouter->AddHandler(m_routerHandler.get(), false);
 }
+
+SimpleCEFClient::~SimpleCEFClient() = default;
 
 CefRefPtr<CefRenderHandler> SimpleCEFClient::GetRenderHandler()
 {
@@ -116,7 +181,7 @@ void SimpleCEFClient::OnPaint(CefRefPtr<CefBrowser> browser,
 
             g_dispatcher.scheduleEvent([webview = m_webview, bufferCopy = std::move(bufferCopy), width, height, dirtyRects]() mutable {
                 if(webview) {
-                    webview->onCEFPaint(bufferCopy.data(), width, height, dirtyRects);
+                    webview->onPaint(bufferCopy.data(), width, height, dirtyRects);
                 }
             }, 0);
         }
@@ -142,61 +207,9 @@ void SimpleCEFClient::OnAcceleratedPaint(CefRefPtr<CefBrowser> browser,
             m_webview->onBrowserCreated(browser);
         }
         if(type == PET_VIEW) {
-            m_webview->onCEFAcceleratedPaint(info);
+            m_webview->onAcceleratedPaint(info);
         }
     }
 }
 
-SimpleCEFClient::LuaCallbackHandler::LuaCallbackHandler(UICEFWebView* webview) : m_webview(webview) {}
 
-bool SimpleCEFClient::LuaCallbackHandler::OnQuery(CefRefPtr<CefBrowser> browser,
-                                                  CefRefPtr<CefFrame> frame,
-                                                  int64 query_id,
-                                                  const CefString& request,
-                                                  bool persistent,
-                                                  CefRefPtr<Callback> callback)
-{
-    CefRefPtr<CefValue> value = CefParseJSON(request, JSON_PARSER_RFC);
-    if(value && value->GetType() == VTYPE_DICTIONARY) {
-        CefRefPtr<CefDictionaryValue> dict = value->GetDictionary();
-        std::string name = dict->GetString("name");
-        std::string data;
-        if(dict->HasKey("data")) {
-            CefRefPtr<CefValue> dataValue = dict->GetValue("data");
-            switch(dataValue->GetType()) {
-                case VTYPE_STRING:
-                    data = dataValue->GetString();
-                    break;
-                case VTYPE_INT:
-                    data = std::to_string(dataValue->GetInt());
-                    break;
-                case VTYPE_DOUBLE:
-                    data = std::to_string(dataValue->GetDouble());
-                    break;
-                case VTYPE_BOOL:
-                    data = dataValue->GetBool() ? "true" : "false";
-                    break;
-                default:
-                    data = CefWriteJSON(dataValue, JSON_WRITER_DEFAULT).ToString();
-                    break;
-            }
-        }
-        if(m_webview && !name.empty()) {
-            g_dispatcher.addEventFromOtherThread([webview = m_webview, name, data]() {
-                if(webview) {
-                    webview->onJavaScriptCallback(name, data);
-                }
-            });
-            callback->Success("");
-            return true;
-        }
-    }
-    callback->Failure(0, "Invalid request");
-    return true;
-}
-
-void SimpleCEFClient::LuaCallbackHandler::OnQueryCanceled(CefRefPtr<CefBrowser> browser,
-                                                          CefRefPtr<CefFrame> frame,
-                                                          int64 query_id) {}
-
-IMPLEMENT_REFCOUNTING(SimpleCEFClient);

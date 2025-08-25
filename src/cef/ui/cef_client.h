@@ -5,9 +5,11 @@
 #include "include/cef_request_handler.h"
 #include "include/cef_life_span_handler.h"
 #include "include/wrapper/cef_message_router.h"
+#include "include/cef_base.h"
 #include <memory>
 
 class UICEFWebView;
+class LuaCallbackHandler;
 
 // Simple CEF Client implementation
 class SimpleCEFClient : public CefClient,
@@ -16,6 +18,7 @@ class SimpleCEFClient : public CefClient,
                         public CefLifeSpanHandler {
 public:
     explicit SimpleCEFClient(UICEFWebView* webview);
+    ~SimpleCEFClient() override;
 
     CefRefPtr<CefRenderHandler> GetRenderHandler() override;
     CefRefPtr<CefRequestHandler> GetRequestHandler() override;
@@ -56,27 +59,10 @@ public:
                             const CefAcceleratedPaintInfo& info) override;
 
 private:
-    class LuaCallbackHandler : public CefMessageRouterBrowserSide::Handler {
-    public:
-        explicit LuaCallbackHandler(UICEFWebView* webview);
-
-        bool OnQuery(CefRefPtr<CefBrowser> browser,
-                     CefRefPtr<CefFrame> frame,
-                     int64 query_id,
-                     const CefString& request,
-                     bool persistent,
-                     CefRefPtr<Callback> callback) override;
-
-        void OnQueryCanceled(CefRefPtr<CefBrowser> browser,
-                             CefRefPtr<CefFrame> frame,
-                             int64 query_id) override;
-
-    private:
-        UICEFWebView* m_webview;
-    };
-
     UICEFWebView* m_webview;
     CefRefPtr<CefMessageRouterBrowserSide> m_messageRouter;
     std::unique_ptr<LuaCallbackHandler> m_routerHandler;
+
+    IMPLEMENT_REFCOUNTING(SimpleCEFClient);
 };
 

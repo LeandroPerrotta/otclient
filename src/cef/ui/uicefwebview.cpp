@@ -251,14 +251,14 @@ void UICEFWebView::executeJavaScriptInternal(const std::string& script)
         frame->ExecuteJavaScript(script, frame->GetURL(), 0);
 }
 
-void UICEFWebView::onCEFPaint(const void* buffer, int width, int height,
-                              const CefRenderHandler::RectList& dirtyRects)
+void UICEFWebView::onPaint(const void* buffer, int width, int height,
+                           const CefRenderHandler::RectList& dirtyRects)
 {
     if (m_renderer)
         m_renderer->onPaint(buffer, width, height, dirtyRects);
 }
 
-void UICEFWebView::onCEFAcceleratedPaint(const CefAcceleratedPaintInfo& info)
+void UICEFWebView::onAcceleratedPaint(const CefAcceleratedPaintInfo& info)
 {
     if (m_renderer)
         m_renderer->onAcceleratedPaint(info);
