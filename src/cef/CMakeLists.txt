@@ -16,6 +16,22 @@ set(cef_SOURCES
     $<$<BOOL:${USE_CEF}>:${CMAKE_CURRENT_LIST_DIR}/ui/cef_inputhandler.cpp>
     $<$<BOOL:${USE_CEF}>:${CMAKE_CURRENT_LIST_DIR}/ui/cef_inputhandler.h>
     $<$<BOOL:${USE_CEF}>:${CMAKE_CURRENT_LIST_DIR}/ui/cef_client.h>
+    $<$<BOOL:${USE_CEF}>:${CMAKE_CURRENT_LIST_DIR}/graphics/cef_renderer.cpp>
+    $<$<BOOL:${USE_CEF}>:${CMAKE_CURRENT_LIST_DIR}/graphics/cef_renderer.h>
+    $<$<BOOL:${USE_CEF}>:${CMAKE_CURRENT_LIST_DIR}/graphics/cef_renderer_cpu.cpp>
+    $<$<BOOL:${USE_CEF}>:${CMAKE_CURRENT_LIST_DIR}/graphics/cef_renderer_cpu.h>
+    $<$<BOOL:${USE_CEF}>:${CMAKE_CURRENT_LIST_DIR}/graphics/cef_renderer_factory.cpp>
+    $<$<BOOL:${USE_CEF}>:${CMAKE_CURRENT_LIST_DIR}/graphics/cef_renderer_factory.h>
+    $<$<BOOL:${USE_CEF}>:${CMAKE_CURRENT_LIST_DIR}/graphics/gpu/gpu_helper.cpp>
+    $<$<BOOL:${USE_CEF}>:${CMAKE_CURRENT_LIST_DIR}/graphics/gpu/gpu_helper.h>
+    $<$<AND:$<BOOL:${USE_CEF}>,$<PLATFORM_ID:Linux>>:${CMAKE_CURRENT_LIST_DIR}/graphics/gpu/cef_renderer_gpu_linux.cpp>
+    $<$<AND:$<BOOL:${USE_CEF}>,$<PLATFORM_ID:Linux>>:${CMAKE_CURRENT_LIST_DIR}/graphics/gpu/cef_renderer_gpu_linux.h>
+    $<$<AND:$<BOOL:${USE_CEF}>,$<PLATFORM_ID:Linux>>:${CMAKE_CURRENT_LIST_DIR}/graphics/gpu/linux_gpu_context.cpp>
+    $<$<AND:$<BOOL:${USE_CEF}>,$<PLATFORM_ID:Linux>>:${CMAKE_CURRENT_LIST_DIR}/graphics/gpu/linux_gpu_context.h>
+    $<$<AND:$<BOOL:${USE_CEF}>,$<PLATFORM_ID:Windows>>:${CMAKE_CURRENT_LIST_DIR}/graphics/gpu/cef_renderer_gpu_win.cpp>
+    $<$<AND:$<BOOL:${USE_CEF}>,$<PLATFORM_ID:Windows>>:${CMAKE_CURRENT_LIST_DIR}/graphics/gpu/cef_renderer_gpu_win.h>
+    $<$<AND:$<BOOL:${USE_CEF}>,$<PLATFORM_ID:Windows>>:${CMAKE_CURRENT_LIST_DIR}/graphics/gpu/windows_gpu_context.cpp>
+    $<$<AND:$<BOOL:${USE_CEF}>,$<PLATFORM_ID:Windows>>:${CMAKE_CURRENT_LIST_DIR}/graphics/gpu/windows_gpu_context.h>
     $<$<BOOL:${USE_CEF}>:${CMAKE_CURRENT_LIST_DIR}/resources/cefphysfsresourcehandler.cpp>
     $<$<BOOL:${USE_CEF}>:${CMAKE_CURRENT_LIST_DIR}/resources/cefphysfsresourcehandler.h>
 )

@@ -8,8 +8,7 @@
 #include "include/cef_browser.h"
 #include "include/cef_client.h"
 #include "include/cef_render_handler.h"
-#include <framework/graphics/texture.h>
-#include <framework/graphics/image.h>
+#include "../graphics/cef_renderer.h"
 
 // Forward declaration
 class SimpleCEFClient;
@@ -72,42 +71,10 @@ private:
     std::string m_pendingHtml; // Store HTML to load after browser creation
     std::string m_pendingUrl;  // Store URL to load after browser creation
     
-    // OTClient Texture for CEF rendering
-    TexturePtr m_cefTexture;
-    ImagePtr m_cefImage;
-    bool m_textureCreated;
-    int m_lastWidth;
-    int m_lastHeight;
+    // Renderer abstraction
+    std::unique_ptr<CefRenderer> m_renderer;
     Point m_lastMousePos;
-    
-    // GPU acceleration with GLX shared context + EGL sidecar
-#if defined(__linux__)
-    // GLX shared context for CEF thread
-    static bool s_glxContextInitialized;
-    static void* s_x11Display;
-    static void* s_glxContext;
-    static void* s_glxPbuffer;
-    static void* s_glxMainContext;
-    static void* s_glxDrawable;
 
-    // EGL sidecar for DMA buffer import
-    static bool s_eglSidecarInitialized;
-    static void* s_eglDisplay;
-    static void* s_eglContext;
-    
-    // Double-buffering for GPU acceleration
-    GLuint m_acceleratedTextures[2];
-    GLuint m_currentTextureIndex;
-    GLsync m_textureFences[2];
-    bool m_acceleratedTexturesCreated;
-    GLuint m_readFbo;
-    
-    // Frame management
-    GLuint m_lastReadyTexture;
-    GLsync m_lastFence;
-    int m_writeIndex;
-#endif
-    
     // Static tracking of all active WebViews (thread-safe)
     static std::vector<UICEFWebView*> s_activeWebViews;
     static std::mutex s_activeWebViewsMutex;
@@ -115,11 +82,5 @@ private:
     // Instance validity flag (for scheduled events)
     std::atomic<bool> m_isValid;
     
-    // GPU acceleration methods
-    static void initializeGLXSharedContext();
-    static void initializeEGLSidecar();
-    static void cleanupGPUResources();
-    void createAcceleratedTextures(int width, int height);
-    void processAcceleratedPaintGPU(const CefAcceleratedPaintInfo& info);
 #endif
 };
