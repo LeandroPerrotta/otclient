@@ -11,6 +11,7 @@ namespace cef {
 // Windows-specific CEF configuration
 class CefConfigWindows : public CefConfig {
 public:
+    CefConfigWindows();
     void applySettings(CefSettings& settings) override;
     void applyCommandLineFlags(CefRefPtr<CefCommandLine> command_line) override;
     void configurePaths(CefSettings& settings) override;

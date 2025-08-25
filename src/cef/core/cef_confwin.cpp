@@ -20,6 +20,16 @@
 
 namespace cef {
 
+CefConfigWindows::CefConfigWindows() {
+#if !defined(OPENGL_ES) || OPENGL_ES != 2
+    m_genericFlags.enable_gpu = false;
+    m_genericFlags.enable_gpu_compositing = false;
+    m_genericFlags.enable_gpu_rasterization = false;
+    m_genericFlags.disable_software_rasterizer = false;
+    m_genericFlags.disable_gpu_sandbox = false;
+#endif
+}
+
 std::wstring CefConfigWindows::getExecutableDirectory() const {
     wchar_t buf[MAX_PATH];
     DWORD n = GetModuleFileNameW(nullptr, buf, MAX_PATH);
@@ -69,10 +79,16 @@ void CefConfigWindows::applySettings(CefSettings& settings) {
 }
 
 void CefConfigWindows::applyCommandLineFlags(CefRefPtr<CefCommandLine> command_line) {
+#if defined(OPENGL_ES) && OPENGL_ES == 2
     configureAngle(command_line);
+#else
+    command_line->AppendSwitch("disable-gpu");
+    command_line->AppendSwitch("disable-gpu-compositing");
+    command_line->AppendSwitch("disable-gpu-rasterization");
+#endif
     applyGenericCommandLineFlags(command_line);
-    
-    logMessage("Windows", stdext::format("Command line flags: %s", 
+
+    logMessage("Windows", stdext::format("Command line flags: %s",
         command_line->GetCommandLineString().ToString()).c_str());
 }
 
