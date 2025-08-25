@@ -295,10 +295,24 @@ static std::u16string cp1252ToUtf16(const std::string& text)
 
 
 UICEFWebView::UICEFWebView()
-    : UIWebView(), m_browser(nullptr), m_client(nullptr), m_cefTexture(nullptr), m_cefImage(nullptr), m_textureCreated(false), m_lastWidth(0), m_lastHeight(0), m_lastMousePos(0, 0), m_isValid(true)
+    : UIWebView()
+    , m_browser(nullptr)
+    , m_client(nullptr)
+    , m_cefTexture(nullptr)
+    , m_cefImage(nullptr)
+    , m_textureCreated(false)
+    , m_lastWidth(0)
+    , m_lastHeight(0)
+    , m_lastMousePos(0, 0)
 #if defined(__linux__)
-    , m_currentTextureIndex(0), m_acceleratedTexturesCreated(false), m_readFbo(0), m_lastReadyTexture(0), m_lastFence(nullptr), m_writeIndex(0)
+    , m_currentTextureIndex(0)
+    , m_acceleratedTexturesCreated(false)
+    , m_readFbo(0)
+    , m_lastReadyTexture(0)
+    , m_lastFence(nullptr)
+    , m_writeIndex(0)
 #endif
+    , m_isValid(true)
 {
     setSize(Size(800, 600)); // Set initial size
     setDraggable(true); // Enable dragging for scrollbar interaction
@@ -324,10 +338,24 @@ UICEFWebView::UICEFWebView()
 }
 
 UICEFWebView::UICEFWebView(UIWidgetPtr parent)
-    : UIWebView(parent), m_browser(nullptr), m_client(nullptr), m_cefTexture(nullptr), m_cefImage(nullptr), m_textureCreated(false), m_lastWidth(0), m_lastHeight(0), m_lastMousePos(0, 0), m_isValid(true)
+    : UIWebView(parent)
+    , m_browser(nullptr)
+    , m_client(nullptr)
+    , m_cefTexture(nullptr)
+    , m_cefImage(nullptr)
+    , m_textureCreated(false)
+    , m_lastWidth(0)
+    , m_lastHeight(0)
+    , m_lastMousePos(0, 0)
 #if defined(__linux__)
-    , m_currentTextureIndex(0), m_acceleratedTexturesCreated(false), m_readFbo(0), m_lastReadyTexture(0), m_lastFence(nullptr), m_writeIndex(0)
+    , m_currentTextureIndex(0)
+    , m_acceleratedTexturesCreated(false)
+    , m_readFbo(0)
+    , m_lastReadyTexture(0)
+    , m_lastFence(nullptr)
+    , m_writeIndex(0)
 #endif
+    , m_isValid(true)
 {
     setSize(Size(800, 600)); // Set initial size
     setDraggable(true); // Enable dragging for scrollbar interaction
@@ -650,9 +678,7 @@ void UICEFWebView::onCEFAcceleratedPaint(const CefAcceleratedPaintInfo& info)
     }
     
     // CRITICAL: Must process immediately! CEF releases the resource after this callback returns
-    if (this) {
-        this->processAcceleratedPaintGPU(info);
-    }
+    this->processAcceleratedPaintGPU(info);
 #else
     (void)info;
     g_logger.error("UICEFWebView: GPU acceleration not implemented for this platform!");
