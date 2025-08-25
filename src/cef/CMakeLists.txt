@@ -3,6 +3,8 @@ set(cef_SOURCES
     $<$<BOOL:${USE_CEF}>:${CMAKE_CURRENT_LIST_DIR}/core/cef_init.h>
     $<$<BOOL:${USE_CEF}>:${CMAKE_CURRENT_LIST_DIR}/ui/uicefwebview.cpp>
     $<$<BOOL:${USE_CEF}>:${CMAKE_CURRENT_LIST_DIR}/ui/uicefwebview.h>
+    $<$<BOOL:${USE_CEF}>:${CMAKE_CURRENT_LIST_DIR}/ui/cef_inputhandler.cpp>
+    $<$<BOOL:${USE_CEF}>:${CMAKE_CURRENT_LIST_DIR}/ui/cef_inputhandler.h>
     $<$<BOOL:${USE_CEF}>:${CMAKE_CURRENT_LIST_DIR}/ui/cef_client.h>
     $<$<BOOL:${USE_CEF}>:${CMAKE_CURRENT_LIST_DIR}/resources/cefphysfsresourcehandler.cpp>
     $<$<BOOL:${USE_CEF}>:${CMAKE_CURRENT_LIST_DIR}/resources/cefphysfsresourcehandler.h>
