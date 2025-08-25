@@ -130,8 +130,19 @@ void CefRendererGPULinux::onAcceleratedPaint(const CefAcceleratedPaintInfo& info
 
         const char* vendorStr = (const char*)glGetString(GL_VENDOR);
         const char* rendererStr = (const char*)glGetString(GL_RENDERER);
+        const char* versionStr = (const char*)glGetString(GL_VERSION);
         const bool mesaDriver = (vendorStr && strstr(vendorStr, "Mesa")) ||
-                                (rendererStr && strstr(rendererStr, "Gallium"));
+                                (rendererStr && (strstr(rendererStr, "Gallium") || strstr(rendererStr, "Mesa"))) ||
+                                (versionStr && strstr(versionStr, "Mesa"));
+
+        static bool debugDriverLogged = false;
+        if(!debugDriverLogged) {
+            g_logger.info(stdext::format("CefRendererGPULinux: vendor: %s, renderer: %s, version: %s",
+                                        vendorStr ? vendorStr : "?",
+                                        rendererStr ? rendererStr : "?",
+                                        versionStr ? versionStr : "?"));
+            debugDriverLogged = true;
+        }
 
         const bool modifierInvalid = (modifier == 0 || modifier == DRM_FORMAT_MOD_INVALID);
         const bool tightlyPacked = (stride == width * 4);
@@ -283,8 +294,10 @@ bool CefRendererGPULinux::isSupported() const
 
     const char* vendorStr = (const char*)glGetString(GL_VENDOR);
     const char* rendererStr = (const char*)glGetString(GL_RENDERER);
+    const char* versionStr = (const char*)glGetString(GL_VERSION);
     const bool mesaDriver = (vendorStr && strstr(vendorStr, "Mesa")) ||
-                            (rendererStr && strstr(rendererStr, "Gallium"));
+                            (rendererStr && (strstr(rendererStr, "Gallium") || strstr(rendererStr, "Mesa"))) ||
+                            (versionStr && strstr(versionStr, "Mesa"));
     if(mesaDriver) {
         const char* exts = (const char*)glGetString(GL_EXTENSIONS);
         return exts && strstr(exts, "GL_EXT_memory_object_fd");
