@@ -11,7 +11,7 @@ param(
 # Stop on first error
 $ErrorActionPreference = "Stop"
 
-$CEF_VERSION = "103.0.12+g8eb56c7+chromium-103.0.5060.134"
+$CEF_VERSION = "139.0.26+g9d80e0d+chromium-139.0.7258.139"
 $CEF_URL = "https://cef-builds.spotifycdn.com/cef_binary_${CEF_VERSION}_windows64_minimal.tar.bz2"
 $CEF_ARCHIVE = "$env:TEMP\cef_binary_${CEF_VERSION}_windows64_minimal.tar.bz2"
 
