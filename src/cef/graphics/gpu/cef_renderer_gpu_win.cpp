@@ -1,5 +1,5 @@
 #include "cef_renderer_gpu_win.h"
-#include "../ui/uicefwebview.h"
+#include "../../ui/uicefwebview.h"
 #include <framework/core/logger.h>
 #include <framework/graphics/graphics.h>
 #if defined(USE_CEF) && defined(_WIN32)
@@ -99,8 +99,6 @@ void CefRendererGPUWin::draw(Fw::DrawPane drawPane)
         Rect rect = m_view.getRect();
         g_painter->setOpacity(1.0);
         g_painter->drawTexturedRect(rect, m_cefTexture);
-    } else {
-        m_view.UIWidget::drawSelf(drawPane);
     }
 }
 

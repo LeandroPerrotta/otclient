@@ -3,6 +3,9 @@
 #include <cstring>
 #include "gpu_helper.h"
 #include <thread>
+#if defined(__linux__)
+#include <X11/X.h>
+#endif
 
 #if defined(USE_CEF) && defined(__linux__)
 namespace {
@@ -46,7 +49,7 @@ void LinuxGPUContext::initialize()
         GLX_GREEN_SIZE, 8,
         GLX_BLUE_SIZE, 8,
         GLX_ALPHA_SIZE, 8,
-        X11_None
+        None
     };
 
     int numConfigs;
@@ -61,7 +64,7 @@ void LinuxGPUContext::initialize()
     int pbufferAttribs[] = {
         GLX_PBUFFER_WIDTH, 1,
         GLX_PBUFFER_HEIGHT, 1,
-        X11_None
+        None
     };
     g_pbuffer = glXCreatePbuffer(x11Display, fbConfig, pbufferAttribs);
     if(!g_pbuffer) {

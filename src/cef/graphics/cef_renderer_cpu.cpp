@@ -95,7 +95,5 @@ void CefRendererCPU::draw(Fw::DrawPane drawPane)
         Rect rect = m_view.getRect();
         g_painter->setOpacity(1.0);
         g_painter->drawTexturedRect(rect, m_cefTexture);
-    } else {
-        m_view.UIWidget::drawSelf(drawPane);
     }
 }

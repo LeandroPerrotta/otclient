@@ -1,7 +1,7 @@
 #include "cef_renderer_gpu_linux.h"
 #include "linux_gpu_context.h"
 #include "gpu_helper.h"
-#include "../ui/uicefwebview.h"
+#include "../../ui/uicefwebview.h"
 #include <framework/core/logger.h>
 #include <framework/core/eventdispatcher.h>
 #include <framework/graphics/graphics.h>
@@ -251,8 +251,6 @@ void CefRendererGPULinux::draw(Fw::DrawPane drawPane)
         Rect rect = m_view.getRect();
         g_painter->setOpacity(1.0);
         g_painter->drawTexturedRect(rect, m_cefTexture);
-    } else {
-        m_view.UIWidget::drawSelf(drawPane);
     }
 }
 

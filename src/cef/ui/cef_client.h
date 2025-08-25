@@ -143,7 +143,7 @@ public:
             if (type == PET_VIEW) {
                 // CRITICAL: Must process immediately! CEF releases the resource after this callback returns
                 if (m_webview) {
-                    m_webview->processAcceleratedPaintGPU(info);
+                    m_webview->onCEFAcceleratedPaint(info);
                 }
             }
         }
