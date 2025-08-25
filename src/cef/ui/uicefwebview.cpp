@@ -22,53 +22,21 @@
 
 #include "uicefwebview.h"
 #include <framework/core/logger.h>
-#include <framework/core/clock.h>
-#include <framework/core/graphicalapplication.h>
-#include <framework/core/eventdispatcher.h>
+#include <framework/core/application.h>
 #include <framework/core/resourcemanager.h>
 #include <framework/luaengine/luainterface.h>
-#include <framework/graphics/graphics.h>
 #include "../graphics/cef_rendererfactory.h"
 #include "cef_client.h"
 #include "cef_inputhandler.h"
-#ifdef _WIN32
-#include <io.h>
-#else
-#include <unistd.h>
-#endif
 #include <string>
 #include <vector>
 #include <algorithm>
-#include <cstring>
 #include <memory>
 
 #ifdef USE_CEF
-#include <include/cef_app.h>
-#include <include/cef_render_handler.h>
-#include <include/cef_browser.h>
-#include <include/cef_request_handler.h>
-#include <include/cef_resource_request_handler.h>
-#include <include/cef_life_span_handler.h>
-#include <include/wrapper/cef_message_router.h>
-#include <include/wrapper/cef_helpers.h>
+#include "../graphics/cef_renderer.h"
 #include <include/cef_frame.h>
 #include "include/cef_parser.h"
-#ifdef _WIN32
-#include <d3d11.h>
-#include <dxgi.h>
-#endif
-#include <cef/resources/cefphysfsresourcehandler.h>
-#include <thread>
-#include <unistd.h>
-#include <errno.h>
-#include <cstring>
-#include <sys/mman.h>
-#include <fcntl.h>
-
-// typedef (geralmente já vem de gl2ext.h, mas garantimos)
-#ifndef PFNGLEGLIMAGETARGETTEXTURE2DOESPROC_DEFINED
-typedef void (*PFNGLEGLIMAGETARGETTEXTURE2DOESPROC)(GLenum, GLeglImageOES);
-#define PFNGLEGLIMAGETARGETTEXTURE2DOESPROC_DEFINED
 #endif
 
 std::string GetDataURI(const std::string& data, const std::string& mime_type) {
@@ -648,4 +616,3 @@ void UICEFWebView::setAllWindowlessFrameRate(int fps)
 
 
 
-#endif // USE_CEF 

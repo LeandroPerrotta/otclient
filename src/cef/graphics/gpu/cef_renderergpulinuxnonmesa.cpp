@@ -1,7 +1,8 @@
 #include "cef_renderergpulinuxnonmesa.h"
 #include "linuxgpucontext.h"
 #include "../../ui/uicefwebview.h"
-#include <framework/global.h>
+#include <framework/core/logger.h>
+#include <framework/stdext/format.h>
 #include <framework/core/eventdispatcher.h>
 #include <framework/graphics/graphics.h>
 #include <GL/glx.h>
@@ -9,7 +10,6 @@
 #include <GL/gl.h>
 #include <unistd.h>
 #include <fcntl.h>
-#include <thread>
 #include <vector>
 #include <algorithm>
 #include <cstring>

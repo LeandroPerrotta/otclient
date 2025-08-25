@@ -2,7 +2,6 @@
 #include <framework/core/logger.h>
 #include <cstring>
 #include "gpuhelper.h"
-#include <thread>
 #if defined(__linux__)
 #include <X11/X.h>
 #endif

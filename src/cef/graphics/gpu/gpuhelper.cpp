@@ -1,5 +1,6 @@
 #include "gpuhelper.h"
-#include <framework/global.h>
+#include <framework/core/logger.h>
+#include <framework/stdext/format.h>
 #include <GL/gl.h>
 #include <cstring>
 

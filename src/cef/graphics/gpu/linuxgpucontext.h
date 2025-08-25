@@ -1,7 +1,5 @@
 #pragma once
 
-#include <mutex>
-
 #if defined(USE_CEF) && defined(__linux__)
 #define EGL_EGLEXT_PROTOTYPES
 #include <EGL/egl.h>

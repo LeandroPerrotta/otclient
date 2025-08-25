@@ -1,6 +1,5 @@
 #pragma once
 
-#include <memory>
 #include <framework/graphics/graphics.h>
 
 #ifdef USE_CEF

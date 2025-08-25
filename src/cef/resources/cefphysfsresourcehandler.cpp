@@ -3,7 +3,6 @@
 #ifdef USE_CEF
 
 #include <framework/core/resourcemanager.h>
-#include <include/cef_scheme.h>
 #include <unordered_map>
 #include <algorithm>
 #include <cstring>

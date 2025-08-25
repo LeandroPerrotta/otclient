@@ -8,7 +8,6 @@
 #include <GL/gl.h>
 #include <unistd.h>
 #include <fcntl.h>
-#include <thread>
 #include <cstring>
 
 static void* resolveGLProc(const char* name)

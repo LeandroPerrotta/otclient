@@ -9,11 +9,11 @@
 
 #ifdef USE_CEF
 #include "include/cef_browser.h"
-#include "include/cef_client.h"
 #include "include/cef_render_handler.h"
-#include "../graphics/cef_renderer.h"
 
-// Forward declaration
+// Forward declarations
+class CefClient;
+class CefRenderer;
 class SimpleCEFClient;
 #endif
 
