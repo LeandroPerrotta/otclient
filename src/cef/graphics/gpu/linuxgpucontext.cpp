@@ -1,7 +1,7 @@
-#include "linux_gpu_context.h"
+#include "linuxgpucontext.h"
 #include <framework/core/logger.h>
 #include <cstring>
-#include "gpu_helper.h"
+#include "gpuhelper.h"
 #include <thread>
 #if defined(__linux__)
 #include <X11/X.h>

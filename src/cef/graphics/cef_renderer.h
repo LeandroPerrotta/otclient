@@ -20,9 +20,11 @@ public:
                          const CefRenderHandler::RectList& dirtyRects) = 0;
     virtual void onAcceleratedPaint(const CefAcceleratedPaintInfo& info) = 0;
 #endif
-    virtual void draw(Fw::DrawPane drawPane) = 0;
+    virtual void draw(Fw::DrawPane drawPane);
     virtual bool isSupported() const { return true; }
 
 protected:
     UICEFWebView& m_view;
+    TexturePtr m_cefTexture;
+    bool m_textureCreated = false;
 };

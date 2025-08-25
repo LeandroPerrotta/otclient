@@ -1,4 +1,4 @@
-#include "cef_renderer_gpu_win.h"
+#include "cef_renderergpuwin.h"
 #include "../../ui/uicefwebview.h"
 #include <framework/core/logger.h>
 #include <framework/graphics/graphics.h>
@@ -12,8 +12,6 @@
 
 CefRendererGPUWin::CefRendererGPUWin(UICEFWebView& view)
     : CefRenderer(view)
-    , m_cefTexture(nullptr)
-    , m_textureCreated(false)
     , m_lastWidth(0)
     , m_lastHeight(0)
 {
@@ -91,15 +89,6 @@ void CefRendererGPUWin::onAcceleratedPaint(const CefAcceleratedPaintInfo& info)
 #else
     (void)info;
 #endif
-}
-
-void CefRendererGPUWin::draw(Fw::DrawPane drawPane)
-{
-    if(m_textureCreated && m_cefTexture) {
-        Rect rect = m_view.getRect();
-        g_painter->setOpacity(1.0);
-        g_painter->drawTexturedRect(rect, m_cefTexture);
-    }
 }
 
 bool CefRendererGPUWin::isSupported() const

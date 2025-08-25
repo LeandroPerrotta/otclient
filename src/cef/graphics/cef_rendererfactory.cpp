@@ -1,8 +1,8 @@
-#include "cef_renderer_factory.h"
-#include "cef_renderer_cpu.h"
-#include "gpu/cef_renderer_gpu_linux_mesa.h"
-#include "gpu/cef_renderer_gpu_linux_nonmesa.h"
-#include "gpu/cef_renderer_gpu_win.h"
+#include "cef_rendererfactory.h"
+#include "cef_renderercpu.h"
+#include "gpu/cef_renderergpulinuxmesa.h"
+#include "gpu/cef_renderergpulinuxnonmesa.h"
+#include "gpu/cef_renderergpuwin.h"
 
 std::unique_ptr<CefRenderer> CefRendererFactory::createRenderer(UICEFWebView& view)
 {

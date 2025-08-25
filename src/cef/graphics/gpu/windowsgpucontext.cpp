@@ -1,4 +1,4 @@
-#include "windows_gpu_context.h"
+#include "windowsgpucontext.h"
 
 void WindowsGPUContext::initialize()
 {

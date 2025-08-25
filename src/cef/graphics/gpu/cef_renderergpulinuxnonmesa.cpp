@@ -1,5 +1,5 @@
-#include "cef_renderer_gpu_linux_nonmesa.h"
-#include "linux_gpu_context.h"
+#include "cef_renderergpulinuxnonmesa.h"
+#include "linuxgpucontext.h"
 #include "../../ui/uicefwebview.h"
 #include <framework/global.h>
 #include <framework/core/eventdispatcher.h>
@@ -69,8 +69,6 @@ static bool isDmaBufModifierSupported(EGLDisplay display, EGLint format, uint64_
 
 CefRendererGPULinuxNonMesa::CefRendererGPULinuxNonMesa(UICEFWebView& view)
     : CefRenderer(view)
-    , m_cefTexture(nullptr)
-    , m_textureCreated(false)
     , m_lastWidth(0)
     , m_lastHeight(0)
 {
@@ -191,15 +189,6 @@ void CefRendererGPULinuxNonMesa::onAcceleratedPaint(const CefAcceleratedPaintInf
 #else
     (void)info;
 #endif
-}
-
-void CefRendererGPULinuxNonMesa::draw(Fw::DrawPane drawPane)
-{
-    if(m_textureCreated && m_cefTexture) {
-        Rect rect = m_view.getRect();
-        g_painter->setOpacity(1.0);
-        g_painter->drawTexturedRect(rect, m_cefTexture);
-    }
 }
 
 bool CefRendererGPULinuxNonMesa::isSupported() const

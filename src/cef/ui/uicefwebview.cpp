@@ -26,7 +26,7 @@
 #include <framework/core/graphicalapplication.h>
 #include <framework/core/eventdispatcher.h>
 #include <framework/graphics/graphics.h>
-#include "../graphics/cef_renderer_factory.h"
+#include "../graphics/cef_rendererfactory.h"
 #include "cef_client.h"
 #include "cef_inputhandler.h"
 #ifdef _WIN32

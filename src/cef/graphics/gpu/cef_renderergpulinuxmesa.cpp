@@ -1,5 +1,5 @@
-#include "cef_renderer_gpu_linux_mesa.h"
-#include "linux_gpu_context.h"
+#include "cef_renderergpulinuxmesa.h"
+#include "linuxgpucontext.h"
 #include "../../ui/uicefwebview.h"
 #include <framework/core/logger.h>
 #include <framework/core/eventdispatcher.h>
@@ -18,8 +18,6 @@ static void* resolveGLProc(const char* name)
 
 CefRendererGPULinuxMesa::CefRendererGPULinuxMesa(UICEFWebView& view)
     : CefRenderer(view)
-    , m_cefTexture(nullptr)
-    , m_textureCreated(false)
     , m_lastWidth(0)
     , m_lastHeight(0)
     , m_checkedSupport(false)
@@ -107,24 +105,12 @@ void CefRendererGPULinuxMesa::onAcceleratedPaint(const CefAcceleratedPaintInfo& 
 #endif
 }
 
-void CefRendererGPULinuxMesa::draw(Fw::DrawPane drawPane)
-{
-    if(m_textureCreated && m_cefTexture) {
-        Rect rect = m_view.getRect();
-        g_painter->setOpacity(1.0);
-        g_painter->drawTexturedRect(rect, m_cefTexture);
-    }
-}
-
 bool CefRendererGPULinuxMesa::isSupported() const
 {
 #if defined(USE_CEF) && defined(__linux__)
     if(m_checkedSupport)
         return m_supported;
     m_checkedSupport = true;
-
-    if(!LinuxGPUContext::eglSidecarReady())
-        return m_supported = false;
 
     Display* x11Display = LinuxGPUContext::x11Display();
     if(!x11Display)

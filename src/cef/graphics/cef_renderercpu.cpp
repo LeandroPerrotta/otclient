@@ -1,4 +1,4 @@
-#include "cef_renderer_cpu.h"
+#include "cef_renderercpu.h"
 #include "../ui/uicefwebview.h"
 #include <framework/graphics/graphics.h>
 #include <framework/core/logger.h>
@@ -7,9 +7,7 @@
 
 CefRendererCPU::CefRendererCPU(UICEFWebView& view)
     : CefRenderer(view)
-    , m_cefTexture(nullptr)
     , m_cefImage(nullptr)
-    , m_textureCreated(false)
     , m_lastWidth(0)
     , m_lastHeight(0)
 {
@@ -87,13 +85,4 @@ void CefRendererCPU::onPaint(const void* buffer, int width, int height,
 void CefRendererCPU::onAcceleratedPaint(const CefAcceleratedPaintInfo& info)
 {
     (void)info;
-}
-
-void CefRendererCPU::draw(Fw::DrawPane drawPane)
-{
-    if(m_textureCreated && m_cefTexture) {
-        Rect rect = m_view.getRect();
-        g_painter->setOpacity(1.0);
-        g_painter->drawTexturedRect(rect, m_cefTexture);
-    }
 }

@@ -1,4 +1,4 @@
-#include "gpu_helper.h"
+#include "gpuhelper.h"
 #include <framework/global.h>
 #include <GL/gl.h>
 #include <cstring>
