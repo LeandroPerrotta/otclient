@@ -34,8 +34,8 @@ private:
     int m_lastHeight;
     mutable bool m_checkedSupport;
     mutable bool m_supported;
-    PFNGLCREATEMEMORYOBJECTSEXTPROC m_glCreateMemoryObjectsEXT;
-    PFNGLIMPORTMEMORYFDEXTPROC m_glImportMemoryFdEXT;
-    PFNGLTEXSTORAGEMEM2DEXTPROC m_glTexStorageMem2DEXT;
-    PFNGLDELETEMEMORYOBJECTSEXTPROC m_glDeleteMemoryObjectsEXT;
+    mutable PFNGLCREATEMEMORYOBJECTSEXTPROC m_glCreateMemoryObjectsEXT;
+    mutable PFNGLIMPORTMEMORYFDEXTPROC m_glImportMemoryFdEXT;
+    mutable PFNGLTEXSTORAGEMEM2DEXTPROC m_glTexStorageMem2DEXT;
+    mutable PFNGLDELETEMEMORYOBJECTSEXTPROC m_glDeleteMemoryObjectsEXT;
 };
