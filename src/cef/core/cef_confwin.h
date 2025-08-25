@@ -14,6 +14,9 @@ public:
     void applySettings(CefSettings& settings) override;
     void applyCommandLineFlags(CefRefPtr<CefCommandLine> command_line) override;
     void configurePaths(CefSettings& settings) override;
+    CefMainArgs createMainArgs(int argc, const char* argv[]) override;
+    bool handleSubprocessExecution(const CefMainArgs& args, CefRefPtr<CefApp> app) override;
+    void registerSchemeHandlers() override;
     std::string getPlatformName() const override { return "Windows"; }
 
 private:

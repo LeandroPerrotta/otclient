@@ -5,12 +5,14 @@
 
 #include "cef_helper.h"
 #include <framework/stdext/format.h>
+#include <cef/resources/cefphysfsresourcehandler.h>
 
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
 #include <windows.h>
 #include <libloaderapi.h>
+#include "include/cef_scheme.h"
 
 namespace cef {
 
@@ -65,6 +67,29 @@ void CefConfigWindows::applyCommandLineFlags(CefRefPtr<CefCommandLine> command_l
     
     logMessage("Windows", stdext::format("Command line flags: %s", 
         command_line->GetCommandLineString().ToString()).c_str());
+}
+
+CefMainArgs CefConfigWindows::createMainArgs(int argc, const char* argv[]) {
+    return CefMainArgs(GetModuleHandle(nullptr));
+}
+
+bool CefConfigWindows::handleSubprocessExecution(const CefMainArgs& args, CefRefPtr<CefApp> app) {
+    // Early-subprocess exit (the main executable should never be used as subprocess
+    // when browser_subprocess_path is defined, but call CefExecuteProcess for completeness)
+    const int code = CefExecuteProcess(args, nullptr, nullptr);
+    logMessage("Windows", stdext::format("CefExecuteProcess returned code: %d", code).c_str());
+    if (code >= 0) {
+        std::exit(code);
+        return true; // Never reached
+    }
+    return false;
+}
+
+void CefConfigWindows::registerSchemeHandlers() {
+    CefRegisterSchemeHandlerFactory("otclient", "", new CefPhysFsSchemeHandlerFactory);
+    CefRegisterSchemeHandlerFactory("http", "otclient", new CefPhysFsSchemeHandlerFactory);
+    CefRegisterSchemeHandlerFactory("https", "otclient", new CefPhysFsSchemeHandlerFactory);
+    logMessage("Windows", "Scheme handlers registered");
 }
 
 } // namespace cef

@@ -2,104 +2,105 @@
 #include <cef/core/cef_app.h>
 #include <cef/core/cef_helper.h>
 #include <cef/core/cef_config.h>
-#include <cef/resources/cefphysfsresourcehandler.h>
 #include <cef/ui/uicefwebview.h>
-#include <framework/core/logger.h>
-#include <framework/core/resourcemanager.h>
 #include <framework/stdext/format.h>
 #include "include/cef_app.h"
-#include "include/cef_client.h"
-#include "include/cef_browser.h"
-#include "include/cef_command_line.h"
-#include "include/cef_scheme.h"
-#include "include/wrapper/cef_helpers.h"
-#ifdef _WIN32
-#include <windows.h>
-#endif
+#include <exception>
 
 // Global CEF state
 bool g_cefInitialized = false;
 
-
-
-
-
-// Global CEF initialization function (simplified)
+/**
+ * Initialize CEF with platform-specific configuration
+ * 
+ * This function handles the complete CEF initialization process:
+ * 1. Creates platform-specific configuration
+ * 2. Handles subprocess execution (if needed)
+ * 3. Configures CEF settings and initializes CEF
+ * 4. Registers custom scheme handlers
+ * 
+ * @param argc Command line argument count
+ * @param argv Command line arguments
+ * @return true if initialization succeeded, false otherwise
+ */
 bool InitializeCEF(int argc, const char* argv[]) {
-
     // Create platform-specific configuration
     auto config = cef::CefConfigFactory::createConfig();
     if (!config) {
-        cef::logMessage("FAILED to create CEF configuration!");
+        cef::logMessage("ERROR", "Failed to create CEF configuration!");
         return false;
     }
 
     cef::logMessage(config->getPlatformName().c_str(), "Starting CEF initialization");
 
-    // Create CEF app first (needed for subprocess execution)
-    CefRefPtr<CefApp> app = new OTClientBrowserApp();
+    try {
+        // Create CEF app and main args using platform-specific config
+        CefRefPtr<CefApp> app = new OTClientBrowserApp();
+        CefMainArgs main_args = config->createMainArgs(argc, argv);
+        
+        // Handle subprocess execution (platform-specific, may exit)
+        config->handleSubprocessExecution(main_args, app);
+        
+        // Configure CEF settings and initialize
+        CefSettings settings;
+        config->applySettings(settings);
+        
+        cef::logMessage(config->getPlatformName().c_str(), "Initializing CEF with configured settings");
+        bool result = CefInitialize(main_args, settings, app, nullptr);
+        
+        if (!result) {
+            cef::logMessage("ERROR", "CefInitialize failed!");
+            return false;
+        }
 
-#ifdef _WIN32
-    // Early-subprocess exit (the main executable should never be used as subprocess
-    // when browser_subprocess_path is defined, but call CefExecuteProcess for
-    // completeness)
-    CefMainArgs main_args(GetModuleHandle(nullptr));
-    {
-        const int code = CefExecuteProcess(main_args, nullptr, nullptr);
-        cef::logMessage(("CefExecuteProcess returned code: " + std::to_string(code)).c_str());
-        if (code >= 0)
-            std::exit(code);
-    }
-
-    // Configure command line flags using configuration system
-    CefRefPtr<CefCommandLine> command_line = CefCommandLine::CreateCommandLine();
-    command_line->InitFromArgv(argc, argv);
-    config->applyCommandLineFlags(command_line);
-#else
-    CefMainArgs main_args(argc, const_cast<char**>(argv));
-    
-    // For Linux, check for subprocess execution BEFORE configuring settings
-    int exit_code = CefExecuteProcess(main_args, app, nullptr);
-    if (exit_code >= 0) {
-        std::exit(exit_code);
-    }
-#endif
-
-    // Configure CEF settings using configuration system
-    CefSettings settings;
-    config->applySettings(settings);
-
-    bool result = CefInitialize(main_args, settings, app, nullptr);
-
-    if (!result) {
-        cef::logMessage("FAILED to initialize CEF!");
+        // Register custom scheme handlers
+        config->registerSchemeHandlers();
+        
+        g_cefInitialized = true;
+        cef::logMessage(config->getPlatformName().c_str(), "CEF initialization completed successfully");
+        
+        return true;
+        
+    } catch (const std::exception& e) {
+        cef::logMessage("ERROR", stdext::format("CEF initialization failed with exception: %s", e.what()).c_str());
+        return false;
+    } catch (...) {
+        cef::logMessage("ERROR", "CEF initialization failed with unknown exception");
         return false;
     }
-
-    // Register scheme handlers
-    CefRegisterSchemeHandlerFactory("otclient", "", new CefPhysFsSchemeHandlerFactory);
-    CefRegisterSchemeHandlerFactory("http", "otclient", new CefPhysFsSchemeHandlerFactory);
-    CefRegisterSchemeHandlerFactory("https", "otclient", new CefPhysFsSchemeHandlerFactory);
-    g_cefInitialized = true;
-    cef::logMessage("CEF initialized and scheme handlers registered");
-
-    return true;
 }
 
+/**
+ * Shutdown CEF and cleanup resources
+ * 
+ * This function handles the complete CEF shutdown process:
+ * 1. Closes all active WebViews
+ * 2. Shuts down CEF
+ * 3. Resets global state
+ */
 void ShutdownCEF() {
-    if (g_cefInitialized) {
-        cef::logMessage("Starting CEF shutdown...");
+    if (!g_cefInitialized) {
+        return;
+    }
+    
+    cef::logMessage("CEF", "Starting CEF shutdown...");
 
+    try {
         // Close all active WebViews first
         UICEFWebView::closeAllWebViews();
+        cef::logMessage("CEF", "All WebViews closed");
 
         // With multi_threaded_message_loop = true, CEF manages its own shutdown
-
-        cef::logMessage("All webviews closed... Shutting down CEF");
-
-        // Shutdown CEF
         CefShutdown();
+        
         g_cefInitialized = false;
-        cef::logMessage("CEF shutdown completed");
+        cef::logMessage("CEF", "CEF shutdown completed successfully");
+        
+    } catch (const std::exception& e) {
+        cef::logMessage("ERROR", stdext::format("CEF shutdown failed with exception: %s", e.what()).c_str());
+        g_cefInitialized = false; // Reset state even on error
+    } catch (...) {
+        cef::logMessage("ERROR", "CEF shutdown failed with unknown exception");
+        g_cefInitialized = false; // Reset state even on error
     }
 }

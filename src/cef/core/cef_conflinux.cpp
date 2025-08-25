@@ -5,12 +5,14 @@
 
 #include "cef_helper.h"
 #include <framework/stdext/format.h>
+#include <cef/resources/cefphysfsresourcehandler.h>
 
 #include <unistd.h>
 #include <dirent.h>
 #include <climits>
 #include <cstdlib>
 #include <vector>
+#include "include/cef_scheme.h"
 
 namespace cef {
 
@@ -157,6 +159,27 @@ void CefConfigLinux::applyCommandLineFlags(CefRefPtr<CefCommandLine> command_lin
     
     logMessage("Linux", stdext::format("Command line flags: %s", 
         command_line->GetCommandLineString().ToString()).c_str());
+}
+
+CefMainArgs CefConfigLinux::createMainArgs(int argc, const char* argv[]) {
+    return CefMainArgs(argc, const_cast<char**>(argv));
+}
+
+bool CefConfigLinux::handleSubprocessExecution(const CefMainArgs& args, CefRefPtr<CefApp> app) {
+    // For Linux, check for subprocess execution BEFORE configuring settings
+    int exit_code = CefExecuteProcess(args, app, nullptr);
+    if (exit_code >= 0) {
+        std::exit(exit_code);
+        return true; // Never reached
+    }
+    return false;
+}
+
+void CefConfigLinux::registerSchemeHandlers() {
+    CefRegisterSchemeHandlerFactory("otclient", "", new CefPhysFsSchemeHandlerFactory);
+    CefRegisterSchemeHandlerFactory("http", "otclient", new CefPhysFsSchemeHandlerFactory);
+    CefRegisterSchemeHandlerFactory("https", "otclient", new CefPhysFsSchemeHandlerFactory);
+    logMessage("Linux", "Scheme handlers registered");
 }
 
 } // namespace cef

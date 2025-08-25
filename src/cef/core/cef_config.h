@@ -4,6 +4,7 @@
 
 #include "include/cef_app.h"
 #include "include/cef_command_line.h"
+#include "include/cef_base.h"
 #include <memory>
 #include <string>
 
@@ -53,6 +54,11 @@ public:
     
     // Configure platform-specific paths
     virtual void configurePaths(CefSettings& settings) = 0;
+    
+    // Platform-specific initialization helpers
+    virtual CefMainArgs createMainArgs(int argc, const char* argv[]) = 0;
+    virtual bool handleSubprocessExecution(const CefMainArgs& args, CefRefPtr<CefApp> app) = 0;
+    virtual void registerSchemeHandlers() = 0;
     
     // Get platform name for debugging/logging
     virtual std::string getPlatformName() const = 0;
