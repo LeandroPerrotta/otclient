@@ -128,9 +128,14 @@ void CefRendererGPULinux::onAcceleratedPaint(const CefAcceleratedPaintInfo& info
                 close_fd(memFd); close_fd(eglFd); return; }
         }
 
+        const char* vendorStr = (const char*)glGetString(GL_VENDOR);
+        const char* rendererStr = (const char*)glGetString(GL_RENDERER);
+        const bool mesaDriver = (vendorStr && strstr(vendorStr, "Mesa")) ||
+                                (rendererStr && strstr(rendererStr, "Gallium"));
+
         const bool modifierInvalid = (modifier == 0 || modifier == DRM_FORMAT_MOD_INVALID);
         const bool tightlyPacked = (stride == width * 4);
-        const bool preferMemObj = modifierInvalid && tightlyPacked;
+        const bool preferMemObj = mesaDriver || (modifierInvalid && tightlyPacked);
 
         bool hasMemoryObjectFd = false;
         const char* exts = (const char*)glGetString(GL_EXTENSIONS);
@@ -182,7 +187,7 @@ void CefRendererGPULinux::onAcceleratedPaint(const CefAcceleratedPaintInfo& info
             }
         }
 
-        if(!done && eglFd >= 0) {
+        if(!done && eglFd >= 0 && !mesaDriver) {
             auto buildAttrs = [&](bool includeModifier) {
                 std::vector<EGLint> a = {
                     EGL_WIDTH, width,
@@ -267,7 +272,24 @@ void CefRendererGPULinux::draw(Fw::DrawPane drawPane)
 bool CefRendererGPULinux::isSupported() const
 {
 #if defined(USE_CEF) && defined(__linux__)
-    return LinuxGPUContext::eglSidecarReady();
+    if(!LinuxGPUContext::eglSidecarReady())
+        return false;
+
+    Display* x11Display = LinuxGPUContext::x11Display();
+    if(!x11Display)
+        return false;
+    if(glXGetCurrentContext() != LinuxGPUContext::mainContext())
+        glXMakeCurrent(x11Display, LinuxGPUContext::drawable(), LinuxGPUContext::mainContext());
+
+    const char* vendorStr = (const char*)glGetString(GL_VENDOR);
+    const char* rendererStr = (const char*)glGetString(GL_RENDERER);
+    const bool mesaDriver = (vendorStr && strstr(vendorStr, "Mesa")) ||
+                            (rendererStr && strstr(rendererStr, "Gallium"));
+    if(mesaDriver) {
+        const char* exts = (const char*)glGetString(GL_EXTENSIONS);
+        return exts && strstr(exts, "GL_EXT_memory_object_fd");
+    }
+    return true;
 #else
     return false;
 #endif
