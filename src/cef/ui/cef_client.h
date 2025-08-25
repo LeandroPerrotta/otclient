@@ -9,7 +9,7 @@
 #include <memory>
 
 class UICEFWebView;
-class LuaCallbackHandler;
+class CefLuaHandler;
 
 // Simple CEF Client implementation
 class SimpleCEFClient : public CefClient,
@@ -61,7 +61,7 @@ public:
 private:
     UICEFWebView* m_webview;
     CefRefPtr<CefMessageRouterBrowserSide> m_messageRouter;
-    std::unique_ptr<LuaCallbackHandler> m_routerHandler;
+    std::unique_ptr<CefLuaHandler> m_luaHandler;
 
     IMPLEMENT_REFCOUNTING(SimpleCEFClient);
 };

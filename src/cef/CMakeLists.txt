@@ -17,6 +17,8 @@ set(cef_SOURCES
     $<$<BOOL:${USE_CEF}>:${CMAKE_CURRENT_LIST_DIR}/ui/cef_inputhandler.h>
     $<$<BOOL:${USE_CEF}>:${CMAKE_CURRENT_LIST_DIR}/ui/cef_client.cpp>
     $<$<BOOL:${USE_CEF}>:${CMAKE_CURRENT_LIST_DIR}/ui/cef_client.h>
+    $<$<BOOL:${USE_CEF}>:${CMAKE_CURRENT_LIST_DIR}/ui/cef_luahandler.cpp>
+    $<$<BOOL:${USE_CEF}>:${CMAKE_CURRENT_LIST_DIR}/ui/cef_luahandler.h>
     $<$<BOOL:${USE_CEF}>:${CMAKE_CURRENT_LIST_DIR}/graphics/cef_renderer.cpp>
     $<$<BOOL:${USE_CEF}>:${CMAKE_CURRENT_LIST_DIR}/graphics/cef_renderer.h>
     $<$<BOOL:${USE_CEF}>:${CMAKE_CURRENT_LIST_DIR}/graphics/cef_renderercpu.cpp>
