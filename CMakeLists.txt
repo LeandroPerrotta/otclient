@@ -292,7 +292,7 @@ if(USE_CEF)
     endif()
     
     add_executable(otclient_cef_subproc ${SUBPROCESS_SOURCES})
-    target_compile_definitions(otclient_cef_subproc PRIVATE USE_CEF)
+    target_compile_definitions(otclient_cef_subproc PRIVATE USE_CEF CEF_SUBPROCESS_BUILD)
     set_target_properties(otclient_cef_subproc PROPERTIES CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON)
     otclient_link_cef(otclient_cef_subproc)
     

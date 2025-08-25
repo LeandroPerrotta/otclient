@@ -5,14 +5,18 @@
 
 #include "cef_helper.h"
 #include <framework/stdext/format.h>
-#include <cef/resources/cefphysfsresourcehandler.h>
 
 #include <unistd.h>
 #include <dirent.h>
 #include <climits>
 #include <cstdlib>
 #include <vector>
+
+// Only include scheme handler in main process, not subprocess
+#ifndef CEF_SUBPROCESS_BUILD
+#include <cef/resources/cefphysfsresourcehandler.h>
 #include "include/cef_scheme.h"
+#endif
 
 namespace cef {
 
@@ -176,10 +180,15 @@ bool CefConfigLinux::handleSubprocessExecution(const CefMainArgs& args, CefRefPt
 }
 
 void CefConfigLinux::registerSchemeHandlers() {
+#ifndef CEF_SUBPROCESS_BUILD
+    // Scheme handlers are only needed in the main process, not in subprocess
     CefRegisterSchemeHandlerFactory("otclient", "", new CefPhysFsSchemeHandlerFactory);
     CefRegisterSchemeHandlerFactory("http", "otclient", new CefPhysFsSchemeHandlerFactory);
     CefRegisterSchemeHandlerFactory("https", "otclient", new CefPhysFsSchemeHandlerFactory);
     logMessage("Linux", "Scheme handlers registered");
+#else
+    logMessage("Linux", "Skipping scheme handler registration in subprocess");
+#endif
 }
 
 } // namespace cef

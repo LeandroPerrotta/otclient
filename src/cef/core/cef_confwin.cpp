@@ -5,14 +5,18 @@
 
 #include "cef_helper.h"
 #include <framework/stdext/format.h>
-#include <cef/resources/cefphysfsresourcehandler.h>
 
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
 #include <windows.h>
 #include <libloaderapi.h>
+
+// Only include scheme handler in main process, not subprocess
+#ifndef CEF_SUBPROCESS_BUILD
+#include <cef/resources/cefphysfsresourcehandler.h>
 #include "include/cef_scheme.h"
+#endif
 
 namespace cef {
 
@@ -86,10 +90,15 @@ bool CefConfigWindows::handleSubprocessExecution(const CefMainArgs& args, CefRef
 }
 
 void CefConfigWindows::registerSchemeHandlers() {
+#ifndef CEF_SUBPROCESS_BUILD
+    // Scheme handlers are only needed in the main process, not in subprocess
     CefRegisterSchemeHandlerFactory("otclient", "", new CefPhysFsSchemeHandlerFactory);
     CefRegisterSchemeHandlerFactory("http", "otclient", new CefPhysFsSchemeHandlerFactory);
     CefRegisterSchemeHandlerFactory("https", "otclient", new CefPhysFsSchemeHandlerFactory);
     logMessage("Windows", "Scheme handlers registered");
+#else
+    logMessage("Windows", "Skipping scheme handler registration in subprocess");
+#endif
 }
 
 } // namespace cef
