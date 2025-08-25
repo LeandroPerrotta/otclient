@@ -137,9 +137,9 @@ fi
 # Build the project
 if [ "$BUILD_READY" = true ]; then
     echo "[INFO] Building project..."
-    echo "   Command: cmake --build $BUILD_DEST"
+    echo "   Command: cmake --build $BUILD_DEST --parallel"
     
-    if cmake --build "$BUILD_DEST"; then
+    if cmake --build "$BUILD_DEST" --parallel; then
         echo "[OK] Build successful!"
         
         # Copy executables to project root
