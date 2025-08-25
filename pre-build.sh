@@ -12,6 +12,13 @@ REBUILD=false
 # Default branch configuration
 DEFAULT_BRANCH="cef-linux/gpuaccelerated"
 
+# Build performance settings
+# Use 75% of available cores to leave resources for the system
+BUILD_JOBS=$(($(nproc) * 3 / 4))
+if [ "$BUILD_JOBS" -lt 1 ]; then
+    BUILD_JOBS=1
+fi
+
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -137,9 +144,10 @@ fi
 # Build the project
 if [ "$BUILD_READY" = true ]; then
     echo "[INFO] Building project..."
-    echo "   Command: cmake --build $BUILD_DEST"
+    echo "   Command: cmake --build $BUILD_DEST --parallel $BUILD_JOBS"
+    echo "   Using $BUILD_JOBS parallel jobs (75% of available cores)"
     
-    if cmake --build "$BUILD_DEST"; then
+    if cmake --build "$BUILD_DEST" --parallel "$BUILD_JOBS"; then
         echo "[OK] Build successful!"
         
         # Copy executables to project root
