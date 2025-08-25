@@ -6,9 +6,11 @@
 #include <framework/stdext/format.h>
 #include "include/cef_app.h"
 #include <exception>
+#include <memory>
 
 // Global CEF state
 bool g_cefInitialized = false;
+std::unique_ptr<cef::CefConfig> g_cefConfig;
 
 /**
  * Initialize CEF with platform-specific configuration
@@ -25,27 +27,27 @@ bool g_cefInitialized = false;
  */
 bool InitializeCEF(int argc, const char* argv[]) {
     // Create platform-specific configuration
-    auto config = cef::CefConfigFactory::createConfig();
-    if (!config) {
+    g_cefConfig = cef::CefConfigFactory::createConfig();
+    if (!g_cefConfig) {
         cef::logMessage("ERROR", "Failed to create CEF configuration!");
         return false;
     }
 
-    cef::logMessage(config->getPlatformName().c_str(), "Starting CEF initialization");
+    cef::logMessage(g_cefConfig->getPlatformName().c_str(), "Starting CEF initialization");
 
     try {
         // Create CEF app and main args using platform-specific config
         CefRefPtr<CefApp> app = new OTClientBrowserApp();
-        CefMainArgs main_args = config->createMainArgs(argc, argv);
-        
+        CefMainArgs main_args = g_cefConfig->createMainArgs(argc, argv);
+
         // Handle subprocess execution (platform-specific, may exit)
-        config->handleSubprocessExecution(main_args, app);
-        
+        g_cefConfig->handleSubprocessExecution(main_args, app);
+
         // Configure CEF settings and initialize
         CefSettings settings;
-        config->applySettings(settings);
-        
-        cef::logMessage(config->getPlatformName().c_str(), "Initializing CEF with configured settings");
+        g_cefConfig->applySettings(settings);
+
+        cef::logMessage(g_cefConfig->getPlatformName().c_str(), "Initializing CEF with configured settings");
         bool result = CefInitialize(main_args, settings, app, nullptr);
         
         if (!result) {
@@ -54,10 +56,10 @@ bool InitializeCEF(int argc, const char* argv[]) {
         }
 
         // Register custom scheme handlers
-        config->registerSchemeHandlers();
-        
+        g_cefConfig->registerSchemeHandlers();
+
         g_cefInitialized = true;
-        cef::logMessage(config->getPlatformName().c_str(), "CEF initialization completed successfully");
+        cef::logMessage(g_cefConfig->getPlatformName().c_str(), "CEF initialization completed successfully");
         
         return true;
         
@@ -94,13 +96,16 @@ void ShutdownCEF() {
         CefShutdown();
         
         g_cefInitialized = false;
+        g_cefConfig.reset();
         cef::logMessage("CEF", "CEF shutdown completed successfully");
         
     } catch (const std::exception& e) {
         cef::logMessage("ERROR", stdext::format("CEF shutdown failed with exception: %s", e.what()).c_str());
         g_cefInitialized = false; // Reset state even on error
+        g_cefConfig.reset();
     } catch (...) {
         cef::logMessage("ERROR", "CEF shutdown failed with unknown exception");
         g_cefInitialized = false; // Reset state even on error
+        g_cefConfig.reset();
     }
 }

@@ -5,6 +5,7 @@
 #include "include/cef_app.h"
 #include "include/cef_command_line.h"
 #include "include/cef_base.h"
+#include "include/cef_browser.h"
 #include <memory>
 #include <string>
 
@@ -67,13 +68,17 @@ public:
     virtual void setUserPreference(const std::string& key, const std::string& value) {}
     virtual std::string getUserPreference(const std::string& key) const { return ""; }
 
+    // Create browser settings with platform-specific defaults
+    CefBrowserSettings createBrowserSettings();
+
 protected:
     GenericSettings m_genericSettings;
     GenericCommandLineFlags m_genericFlags;
-    
+
     // Helper to apply generic settings
     void applyGenericSettings(CefSettings& settings);
     void applyGenericCommandLineFlags(CefRefPtr<CefCommandLine> command_line);
+    virtual void applyBrowserSettings(CefBrowserSettings& settings);
 };
 
 // Platform-specific configurations are defined in separate files:

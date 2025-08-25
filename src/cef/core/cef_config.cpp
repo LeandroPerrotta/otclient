@@ -65,6 +65,16 @@ void CefConfig::applyGenericCommandLineFlags(CefRefPtr<CefCommandLine> command_l
     command_line->AppendSwitch("disable-features=PushMessaging,BackgroundSync,GCM");
 }
 
+CefBrowserSettings CefConfig::createBrowserSettings() {
+    CefBrowserSettings settings;
+    applyBrowserSettings(settings);
+    return settings;
+}
+
+void CefConfig::applyBrowserSettings(CefBrowserSettings& settings) {
+    (void)settings;
+}
+
 
 
 // ============================================================================
