@@ -29,23 +29,26 @@ std::wstring CefConfigWindows::getExecutableDirectory() const {
     return (pos == std::wstring::npos) ? L"." : p.substr(0, pos);
 }
 
+void CefConfigWindows::setupDllDirectories() const {
+    const std::wstring cefDir = getExecutableDirectory() + L"\\cef";
+    SetDefaultDllDirectories(LOAD_LIBRARY_SEARCH_DEFAULT_DIRS | LOAD_LIBRARY_SEARCH_USER_DIRS);
+    AddDllDirectory(cefDir.c_str());
+}
+
 void CefConfigWindows::configurePaths(CefSettings& settings) {
+    setupDllDirectories();
     const std::wstring exeDir = getExecutableDirectory();
     const std::wstring cefDir = exeDir + L"\\cef";
     const std::wstring localesDir = cefDir + L"\\locales";
     const std::wstring cacheDir = cefDir + L"\\cache";
     const std::wstring subprocessPath = cefDir + L"\\otclient_cef_subproc.exe";
 
-    // Setup libcef.dll delay-loaded
-    SetDefaultDllDirectories(LOAD_LIBRARY_SEARCH_DEFAULT_DIRS | LOAD_LIBRARY_SEARCH_USER_DIRS);
-    AddDllDirectory(cefDir.c_str());
-
     CefString(&settings.resources_dir_path) = cefDir;
     CefString(&settings.locales_dir_path) = localesDir;
     CefString(&settings.cache_path) = cacheDir;
     CefString(&settings.root_cache_path) = cacheDir;
     CefString(&settings.browser_subprocess_path) = subprocessPath;
-    
+
     logMessage("Windows", stdext::format("CEF directory: %s", std::string(cefDir.begin(), cefDir.end())).c_str());
 }
 
@@ -78,6 +81,7 @@ CefMainArgs CefConfigWindows::createMainArgs(int argc, const char* argv[]) {
 }
 
 bool CefConfigWindows::handleSubprocessExecution(const CefMainArgs& args, CefRefPtr<CefApp> app) {
+    setupDllDirectories();
     // Early-subprocess exit (the main executable should never be used as subprocess
     // when browser_subprocess_path is defined, but call CefExecuteProcess for completeness)
     const int code = CefExecuteProcess(args, nullptr, nullptr);
