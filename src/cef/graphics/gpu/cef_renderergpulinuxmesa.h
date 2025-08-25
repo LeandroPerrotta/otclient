@@ -34,4 +34,12 @@ private:
     mutable PFNGLIMPORTMEMORYFDEXTPROC m_glImportMemoryFdEXT;
     mutable PFNGLTEXSTORAGEMEM2DEXTPROC m_glTexStorageMem2DEXT;
     mutable PFNGLDELETEMEMORYOBJECTSEXTPROC m_glDeleteMemoryObjectsEXT;
+    
+    // Context caching to optimize context switching
+    mutable GLXContext m_lastKnownContext;
+    mutable bool m_contextCacheValid;
+    
+    // Helper methods for optimized context switching
+    bool ensureMainContextCurrent() const;
+    void invalidateContextCache() const;
 };

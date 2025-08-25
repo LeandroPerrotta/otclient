@@ -25,8 +25,52 @@ CefRendererGPULinuxMesa::CefRendererGPULinuxMesa(UICEFWebView& view)
     , m_glImportMemoryFdEXT(nullptr)
     , m_glTexStorageMem2DEXT(nullptr)
     , m_glDeleteMemoryObjectsEXT(nullptr)
+    , m_lastKnownContext(nullptr)
+    , m_contextCacheValid(false)
 {
     LinuxGPUContext::initialize();
+}
+
+bool CefRendererGPULinuxMesa::ensureMainContextCurrent() const
+{
+    Display* x11Display = LinuxGPUContext::x11Display();
+    if (!x11Display) {
+        return false;
+    }
+    
+    GLXContext targetContext = LinuxGPUContext::mainContext();
+    if (!targetContext) {
+        return false;
+    }
+    
+    // Check if we can use cached context information
+    if (m_contextCacheValid && m_lastKnownContext == targetContext) {
+        // We already know we're in the right context, no need to switch
+        return true;
+    }
+    
+    // Get current context and update cache
+    GLXContext currentContext = glXGetCurrentContext();
+    m_lastKnownContext = currentContext;
+    m_contextCacheValid = true;
+    
+    if (currentContext != targetContext) {
+        // Need to switch context
+        if (!glXMakeCurrent(x11Display, LinuxGPUContext::drawable(), targetContext)) {
+            m_contextCacheValid = false; // Invalidate cache on failure
+            return false;
+        }
+        // Update cache with new context
+        m_lastKnownContext = targetContext;
+    }
+    
+    return true;
+}
+
+void CefRendererGPULinuxMesa::invalidateContextCache() const
+{
+    m_contextCacheValid = false;
+    m_lastKnownContext = nullptr;
 }
 
 void CefRendererGPULinuxMesa::onPaint(const void* buffer, int width, int height,
@@ -52,10 +96,11 @@ void CefRendererGPULinuxMesa::onAcceleratedPaint(const CefAcceleratedPaintInfo& 
 
     g_dispatcher.addEventFromOtherThread([this, memFd, width, height, stride, offset]() mutable {
         auto close_fd = [](int& x){ if(x>=0){ ::close(x); x=-1; } };
-        Display* x11Display = LinuxGPUContext::x11Display();
-        if(glXGetCurrentContext() != LinuxGPUContext::mainContext()) {
-            if(!glXMakeCurrent(x11Display, LinuxGPUContext::drawable(), LinuxGPUContext::mainContext())) {
-                close_fd(memFd); return; }
+        
+        // Use optimized context switching
+        if (!ensureMainContextCurrent()) {
+            close_fd(memFd); 
+            return;
         }
 
         m_cefTexture = TexturePtr(new Texture(Size(width, height)));
@@ -97,6 +142,8 @@ void CefRendererGPULinuxMesa::onAcceleratedPaint(const CefAcceleratedPaintInfo& 
         close_fd(memFd);
         if(!done) {
             g_logger.error("CefRendererGPULinuxMesa: GPU import failed");
+            // Invalidate context cache on GPU operation failure
+            invalidateContextCache();
         }
     });
 #else
@@ -111,12 +158,9 @@ bool CefRendererGPULinuxMesa::isSupported() const
         return m_supported;
     m_checkedSupport = true;
 
-    Display* x11Display = LinuxGPUContext::x11Display();
-    if(!x11Display)
+    // Use optimized context switching
+    if (!ensureMainContextCurrent())
         return m_supported = false;
-
-    if(glXGetCurrentContext() != LinuxGPUContext::mainContext())
-        glXMakeCurrent(x11Display, LinuxGPUContext::drawable(), LinuxGPUContext::mainContext());
 
     if(!isMesaDriver())
         return m_supported = false;
