@@ -2,6 +2,7 @@
 
 #include <framework/ui/uiwidget.h>
 #include <framework/ui/declarations.h>
+#include <framework/core/timer.h>
 #include <mutex>
 #include <atomic>
 #include <map>
@@ -112,6 +113,12 @@ private:
     // Renderer abstraction
     std::unique_ptr<CefRenderer> m_renderer;
     Point m_lastMousePos;
+    
+    // Mouse event debouncing to prevent video freezes
+    Timer m_mouseEventTimer;
+    Point m_pendingMousePos;
+    bool m_pendingMouseLeave;
+    bool m_mouseEventScheduled;
 
     // Static tracking of all active WebViews (thread-safe)
     static std::vector<UICEFWebView*> s_activeWebViews;
