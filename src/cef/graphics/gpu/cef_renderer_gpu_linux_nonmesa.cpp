@@ -1,9 +1,9 @@
 #include "cef_renderer_gpu_linux_nonmesa.h"
 #include "linux_gpu_context.h"
-#include <framework/core/logger.h>
+#include "../../ui/uicefwebview.h"
+#include <framework/global.h>
 #include <framework/core/eventdispatcher.h>
 #include <framework/graphics/graphics.h>
-#include <framework/stdext.h>
 #include <GL/glx.h>
 #include <drm/drm_fourcc.h>
 #include <GL/gl.h>

@@ -1,5 +1,6 @@
 #include "cef_renderer_gpu_linux_mesa.h"
 #include "linux_gpu_context.h"
+#include "../../ui/uicefwebview.h"
 #include <framework/core/logger.h>
 #include <framework/core/eventdispatcher.h>
 #include <framework/graphics/graphics.h>
