@@ -10,7 +10,7 @@ CefLuaHandler::CefLuaHandler(UICEFWebView* webview) : m_webview(webview)
 
 bool CefLuaHandler::OnQuery(CefRefPtr<CefBrowser> browser,
                              CefRefPtr<CefFrame> frame,
-                             int64 query_id,
+                             int64_t query_id,
                              const CefString& request,
                              bool persistent,
                              CefRefPtr<Callback> callback)
@@ -61,7 +61,7 @@ bool CefLuaHandler::OnQuery(CefRefPtr<CefBrowser> browser,
 
 void CefLuaHandler::OnQueryCanceled(CefRefPtr<CefBrowser> browser,
                                     CefRefPtr<CefFrame> frame,
-                                    int64 query_id)
+                                    int64_t query_id)
 {
     (void)browser;
     (void)frame;
