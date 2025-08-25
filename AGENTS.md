@@ -11,7 +11,7 @@ This project now uses an intelligent build system with automatic caching for fas
 ### Advanced Options
 
 ```bash
-# Force rebuild (clears cache)
+# Force rebuild (clears cache, may take up to 15 minutes)
 ./pre-build.sh --rebuild
 
 # Custom build parameters
@@ -22,3 +22,39 @@ This project now uses an intelligent build system with automatic caching for fas
 ```
 
 **Note:** The new system is much faster and handles all the complexity automatically. Use it for the best development experience!
+
+## Coding Standards
+
+### Indentation
+- Always use 4 spaces for indentation
+
+### File Naming Convention
+- All lowercase with no separators
+- Rare exceptions may include prefixes (e.g., `cef`)
+
+### Class Naming Convention
+- First letter of each word capitalized: `AnimatedText`
+
+### Function Naming Convention
+- First letter lowercase, subsequent words capitalized: `animatedText->drawText()`
+
+### Brace Placement
+
+#### Functions
+```cpp
+void myFunc()
+{
+    // code here
+}
+```
+
+#### Conditionals
+```cpp
+if(m_animation) {
+    // code here
+}
+```
+
+### Language
+- All comments and code must be written in English
+
