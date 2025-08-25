@@ -5,6 +5,7 @@
 
 #if defined(USE_CEF) && defined(__linux__)
 #include <GL/gl.h>
+#include <GL/glx.h>
 
 #ifndef GL_EXT_memory_object_fd
 #define GL_EXT_memory_object_fd 1
@@ -36,7 +37,11 @@ private:
     mutable PFNGLDELETEMEMORYOBJECTSEXTPROC m_glDeleteMemoryObjectsEXT;
     
     // Context caching to optimize context switching
+#if defined(USE_CEF) && defined(__linux__)
     mutable GLXContext m_lastKnownContext;
+#else
+    mutable void* m_lastKnownContext;
+#endif
     mutable bool m_contextCacheValid;
     
     // Helper methods for optimized context switching
