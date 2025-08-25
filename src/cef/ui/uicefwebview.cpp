@@ -25,6 +25,8 @@
 #include <framework/core/clock.h>
 #include <framework/core/graphicalapplication.h>
 #include <framework/core/eventdispatcher.h>
+#include <framework/core/resourcemanager.h>
+#include <framework/luaengine/luainterface.h>
 #include <framework/graphics/graphics.h>
 #include "../graphics/cef_rendererfactory.h"
 #include "cef_client.h"
@@ -75,6 +77,17 @@ std::string GetDataURI(const std::string& data, const std::string& mime_type) {
                .ToString();
 }
 
+static std::string escape(const std::string& str) {
+    std::string result;
+    result.reserve(str.size());
+    for(char c : str) {
+        if(c == '\\' || c == '"')
+            result.push_back('\\');
+        result.push_back(c);
+    }
+    return result;
+}
+
 // Global flag to check if CEF was initialized
 extern bool g_cefInitialized;
 
@@ -86,69 +99,228 @@ std::mutex UICEFWebView::s_activeWebViewsMutex;
 
 
 UICEFWebView::UICEFWebView()
-    : UIWebView()
+    : UIWidget()
     , m_browser(nullptr)
     , m_client(nullptr)
     , m_renderer(nullptr)
     , m_lastMousePos(0, 0)
     , m_isValid(true)
+    , m_currentUrl("")
+    , m_currentTitle("")
+    , m_userAgent("OTClient WebView/1.0")
+    , m_zoomLevel(1.0f)
+    , m_scrollPosition(0, 0)
+    , m_scrollable(true)
+    , m_loading(false)
 {
-    setSize(Size(800, 600)); // Set initial size
-    setDraggable(true); // Enable dragging for scrollbar interaction
-    
-    // Thread-safe addition to active list
+    setSize(Size(800, 600));
+    setDraggable(true);
+
     {
         std::lock_guard<std::mutex> lock(s_activeWebViewsMutex);
         s_activeWebViews.push_back(this);
     }
-    
+
     m_renderer = CefRendererFactory::createRenderer(*this);
 }
 
 UICEFWebView::UICEFWebView(UIWidgetPtr parent)
-    : UIWebView(parent)
+    : UIWidget()
     , m_browser(nullptr)
     , m_client(nullptr)
     , m_renderer(nullptr)
     , m_lastMousePos(0, 0)
     , m_isValid(true)
+    , m_currentUrl("")
+    , m_currentTitle("")
+    , m_userAgent("OTClient WebView/1.0")
+    , m_zoomLevel(1.0f)
+    , m_scrollPosition(0, 0)
+    , m_scrollable(true)
+    , m_loading(false)
 {
-    setSize(Size(800, 600)); // Set initial size
-    setDraggable(true); // Enable dragging for scrollbar interaction
-    
-    // Thread-safe addition to active list
+    if (parent)
+        setParent(parent);
+
+    setSize(Size(800, 600));
+    setDraggable(true);
+
     {
         std::lock_guard<std::mutex> lock(s_activeWebViewsMutex);
         s_activeWebViews.push_back(this);
     }
-    
+
     m_renderer = CefRendererFactory::createRenderer(*this);
 }
 
 UICEFWebView::~UICEFWebView()
 {
     g_logger.info("UICEFWebView: Destructor called");
-    
-    // Mark as invalid FIRST to prevent scheduled events from using this object
+
+    for (auto& pair : m_jsCallbacks) {
+        if (pair.second.luaRef != -1)
+            g_lua.unref(pair.second.luaRef);
+    }
+    m_jsCallbacks.clear();
+
     m_isValid.store(false);
-    
-    // Thread-safe removal from active list
+
     {
         std::lock_guard<std::mutex> lock(s_activeWebViewsMutex);
         auto it = std::find(s_activeWebViews.begin(), s_activeWebViews.end(), this);
-        if (it != s_activeWebViews.end()) {
+        if (it != s_activeWebViews.end())
             s_activeWebViews.erase(it);
-            g_logger.info(stdext::format("UICEFWebView: Removed from active list. Remaining: %d", s_activeWebViews.size()));
-        }
     }
-    
+
     if (m_browser) {
-        g_logger.info("UICEFWebView: Closing browser");
         m_browser->GetHost()->CloseBrowser(true);
         m_browser = nullptr;
     }
     m_client = nullptr;
-    g_logger.info("UICEFWebView: Destructor completed");
+}
+
+void UICEFWebView::loadUrl(const std::string& url)
+{
+    m_currentUrl = url;
+    m_loading = true;
+    onLoadStarted();
+    loadUrlInternal(url);
+}
+
+void UICEFWebView::loadHtml(const std::string& html, const std::string& baseUrl)
+{
+    m_loading = true;
+    onLoadStarted();
+    loadHtmlInternal(html, baseUrl);
+}
+
+void UICEFWebView::loadFile(const std::string& filePath)
+{
+    std::string fullPath = g_resources.guessFilePath(filePath, "html");
+    if(fullPath.empty())
+        fullPath = g_resources.guessFilePath(filePath, "htm");
+
+    if(!fullPath.empty()) {
+        std::string html = g_resources.readFileContents(fullPath);
+        if(!html.empty())
+            loadHtml(html, "file://" + fullPath);
+    }
+}
+
+void UICEFWebView::executeJavaScript(const std::string& script)
+{
+    executeJavaScriptInternal(script);
+}
+
+void UICEFWebView::setZoomLevel(float zoom)
+{
+    m_zoomLevel = (std::max)(0.25f, (std::min)(5.0f, zoom));
+    if(m_browser)
+        m_browser->GetHost()->SetZoomLevel(m_zoomLevel);
+}
+
+float UICEFWebView::getZoomLevel()
+{
+    return m_zoomLevel;
+}
+
+void UICEFWebView::setUserAgent(const std::string& userAgent)
+{
+    m_userAgent = userAgent;
+}
+
+std::string UICEFWebView::getUserAgent()
+
+{
+    return m_userAgent;
+}
+
+void UICEFWebView::setScrollPosition(const Point& position)
+{
+    m_scrollPosition = position;
+}
+
+Point UICEFWebView::getScrollPosition()
+{
+    return m_scrollPosition;
+}
+
+void UICEFWebView::setScrollable(bool scrollable)
+{
+    m_scrollable = scrollable;
+}
+
+bool UICEFWebView::isScrollable()
+{
+    return m_scrollable;
+}
+
+void UICEFWebView::goBack()
+{
+    if(m_browser)
+        m_browser->GoBack();
+}
+
+void UICEFWebView::goForward()
+{
+    if(m_browser)
+        m_browser->GoForward();
+}
+
+void UICEFWebView::reload()
+{
+    if(m_browser)
+        m_browser->Reload();
+}
+
+void UICEFWebView::stop()
+{
+    if(m_browser)
+        m_browser->StopLoad();
+}
+
+bool UICEFWebView::canGoBack()
+{
+    return m_browser && m_browser->CanGoBack();
+}
+
+bool UICEFWebView::canGoForward()
+{
+    return m_browser && m_browser->CanGoForward();
+}
+
+bool UICEFWebView::isLoading()
+{
+    return m_loading;
+}
+
+void UICEFWebView::registerJavaScriptCallback(const std::string& name,
+                                             const std::function<void(const std::string&)>& callback,
+                                             int luaRef)
+{
+    auto it = m_jsCallbacks.find(name);
+    if(it != m_jsCallbacks.end()) {
+        if(it->second.luaRef != -1)
+            g_lua.unref(it->second.luaRef);
+    }
+    m_jsCallbacks[name] = {callback, luaRef};
+}
+
+void UICEFWebView::unregisterJavaScriptCallback(const std::string& name)
+{
+    auto it = m_jsCallbacks.find(name);
+    if(it != m_jsCallbacks.end()) {
+        if(it->second.luaRef != -1)
+            g_lua.unref(it->second.luaRef);
+        m_jsCallbacks.erase(it);
+    }
+}
+
+void UICEFWebView::sendToJavaScript(const std::string& name, const std::string& data)
+{
+    std::string script = std::string("if(window.receiveFromLua){window.receiveFromLua({\\\"name\\\":\\\"") +
+        escape(name) + "\\\",\\\"data\\\":\\\"" + escape(data) + "\\\"});}";
+    executeJavaScriptInternal(script);
 }
 
 void UICEFWebView::createWebView()
@@ -378,13 +550,29 @@ bool UICEFWebView::onKeyUp(uchar keyCode, int keyboardModifiers)
     return UIWidget::onKeyUp(keyCode, keyboardModifiers);
 }
 
-// Event handlers with correct signatures
+// Event handlers
 void UICEFWebView::onLoadStarted() {}
-void UICEFWebView::onLoadFinished(bool success) {}
-void UICEFWebView::onUrlChanged(const std::string& url) {}
-void UICEFWebView::onTitleChanged(const std::string& title) {}
-void UICEFWebView::onJavaScriptCallback(const std::string& name, const std::string& data) {
-    UIWebView::onJavaScriptCallback(name, data);
+
+void UICEFWebView::onLoadFinished(bool success)
+{
+    m_loading = false;
+}
+
+void UICEFWebView::onUrlChanged(const std::string& url)
+{
+    m_currentUrl = url;
+}
+
+void UICEFWebView::onTitleChanged(const std::string& title)
+{
+    m_currentTitle = title;
+}
+
+void UICEFWebView::onJavaScriptCallback(const std::string& name, const std::string& data)
+{
+    auto it = m_jsCallbacks.find(name);
+    if(it != m_jsCallbacks.end())
+        it->second.callback(data);
 }
 
 void UICEFWebView::onGeometryChange(const Rect& oldRect, const Rect& newRect)
