@@ -1,6 +1,7 @@
 #include "cef_renderer_factory.h"
 #include "cef_renderer_cpu.h"
-#include "gpu/cef_renderer_gpu_linux.h"
+#include "gpu/cef_renderer_gpu_linux_mesa.h"
+#include "gpu/cef_renderer_gpu_linux_nonmesa.h"
 #include "gpu/cef_renderer_gpu_win.h"
 
 std::unique_ptr<CefRenderer> CefRendererFactory::createRenderer(UICEFWebView& view)
@@ -15,7 +16,12 @@ std::unique_ptr<CefRenderer> CefRendererFactory::createRenderer(UICEFWebView& vi
 #endif
 #if defined(__linux__)
     {
-        auto renderer = std::make_unique<CefRendererGPULinux>(view);
+        auto renderer = std::make_unique<CefRendererGPULinuxMesa>(view);
+        if(renderer->isSupported())
+            return renderer;
+    }
+    {
+        auto renderer = std::make_unique<CefRendererGPULinuxNonMesa>(view);
         if(renderer->isSupported())
             return renderer;
     }

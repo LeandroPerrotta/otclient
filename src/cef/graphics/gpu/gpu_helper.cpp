@@ -1,5 +1,8 @@
 #include "gpu_helper.h"
 #include <framework/core/logger.h>
+#include <framework/stdext.h>
+#include <GL/gl.h>
+#include <cstring>
 
 const char* getEGLErrorString(EGLint error)
 {
@@ -41,6 +44,28 @@ const char* getEGLErrorString(EGLint error)
 #else
     (void)error;
     return "EGL not supported";
+#endif
+}
+
+bool isMesaDriver()
+{
+#if defined(USE_CEF) && defined(__linux__)
+    const char* vendorStr = (const char*)glGetString(GL_VENDOR);
+    const char* rendererStr = (const char*)glGetString(GL_RENDERER);
+    const char* versionStr = (const char*)glGetString(GL_VERSION);
+    static bool logged = false;
+    if(!logged) {
+        g_logger.info(stdext::format("CefRendererGPULinux: vendor: %s, renderer: %s, version: %s",
+                                     vendorStr ? vendorStr : "?",
+                                     rendererStr ? rendererStr : "?",
+                                     versionStr ? versionStr : "?"));
+        logged = true;
+    }
+    return (vendorStr && strstr(vendorStr, "Mesa")) ||
+           (rendererStr && (strstr(rendererStr, "Gallium") || strstr(rendererStr, "Mesa"))) ||
+           (versionStr && strstr(versionStr, "Mesa"));
+#else
+    return false;
 #endif
 }
 

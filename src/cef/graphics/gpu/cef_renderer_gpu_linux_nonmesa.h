@@ -1,15 +1,13 @@
 #pragma once
 
 #include "../cef_renderer.h"
-#include "linux_gpu_context.h"
 #include "gpu_helper.h"
 #include <framework/graphics/texture.h>
-#include <vector>
 
-class CefRendererGPULinux : public CefRenderer
+class CefRendererGPULinuxNonMesa : public CefRenderer
 {
 public:
-    explicit CefRendererGPULinux(UICEFWebView& view);
+    explicit CefRendererGPULinuxNonMesa(UICEFWebView& view);
     void onPaint(const void* buffer, int width, int height,
                  const CefRenderHandler::RectList& dirtyRects) override;
     void onAcceleratedPaint(const CefAcceleratedPaintInfo& info) override;
@@ -22,4 +20,3 @@ private:
     int m_lastWidth;
     int m_lastHeight;
 };
-

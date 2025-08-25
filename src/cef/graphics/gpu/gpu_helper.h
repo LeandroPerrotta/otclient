@@ -9,4 +9,5 @@
 #endif
 
 const char* getEGLErrorString(EGLint error);
+bool isMesaDriver();
 
