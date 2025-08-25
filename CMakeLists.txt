@@ -278,6 +278,7 @@ if(USE_CEF)
     # Add manifest to subprocess for GPU detection consistency
     set(SUBPROCESS_SOURCES
         src/cef/subprocess/main.cpp
+        src/cef/core/cef_app.cpp
         src/cef/core/cef_helper.cpp
         src/cef/core/cef_config.cpp
         src/app.manifest

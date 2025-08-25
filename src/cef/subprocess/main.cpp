@@ -1,82 +1,8 @@
-#include "include/cef_app.h"
-#include "include/cef_render_process_handler.h"
-#include "include/cef_command_line.h"
-#include "include/wrapper/cef_message_router.h"
-#include "../core/cef_helper.h"
-#include "../core/cef_config.h"
-#include "../../framework/stdext/format.h"
+#include "../core/cef_app.h"
 
 #ifdef _WIN32
 #  include <windows.h>
 #endif
-
-
-
-// Render process application used in the dedicated subprocess. It mirrors the
-// behaviour that previously lived in the main executable when running in
-// single-process mode.
-class OTClientRenderApp : public CefApp, public CefRenderProcessHandler {
-public:
-    void OnRegisterCustomSchemes(CefRawPtr<CefSchemeRegistrar> registrar) override {
-        registrar->AddCustomScheme("otclient",
-                                   CEF_SCHEME_OPTION_STANDARD |
-                                   CEF_SCHEME_OPTION_LOCAL |
-                                   CEF_SCHEME_OPTION_DISPLAY_ISOLATED);
-    }
-
-    CefRefPtr<CefRenderProcessHandler> GetRenderProcessHandler() override {
-        return this;
-    }
-
-    void OnBeforeCommandLineProcessing(const CefString& process_type,
-                                       CefRefPtr<CefCommandLine> command_line) override {
-        // Use the configuration system to apply platform-specific command line flags
-        auto config = cef::CefConfigFactory::createConfig();
-        if (config) {
-            config->applyCommandLineFlags(command_line);
-            cef::logMessage("CEF-subprocess", 
-                           stdext::format("Process type: %s on %s", 
-                                        process_type.ToString(), 
-                                        config->getPlatformName()).c_str());
-        } else {
-            cef::logMessage("CEF-subprocess", "ERROR: Failed to create CEF configuration");
-        }
-    }
-
-    void OnContextCreated(CefRefPtr<CefBrowser> browser,
-                          CefRefPtr<CefFrame> frame,
-                          CefRefPtr<CefV8Context> context) override {
-        if (!m_messageRouter) {
-            CefMessageRouterConfig config;
-            config.js_query_function = "luaCallback";
-            config.js_cancel_function = "luaCallbackCancel";
-            m_messageRouter = CefMessageRouterRendererSide::Create(config);
-        }
-        m_messageRouter->OnContextCreated(browser, frame, context);
-    }
-
-    void OnContextReleased(CefRefPtr<CefBrowser> browser,
-                           CefRefPtr<CefFrame> frame,
-                           CefRefPtr<CefV8Context> context) override {
-        if (m_messageRouter)
-            m_messageRouter->OnContextReleased(browser, frame, context);
-    }
-
-    bool OnProcessMessageReceived(CefRefPtr<CefBrowser> browser,
-                                  CefRefPtr<CefFrame> frame,
-                                  CefProcessId source_process,
-                                  CefRefPtr<CefProcessMessage> message) override {
-        if (m_messageRouter &&
-            m_messageRouter->OnProcessMessageReceived(browser, frame, source_process, message))
-            return true;
-        return false;
-    }
-
-private:
-    CefRefPtr<CefMessageRouterRendererSide> m_messageRouter;
-
-    IMPLEMENT_REFCOUNTING(OTClientRenderApp);
-};
 
 #if defined(_WIN32)
 // Windows entry point. Using wWinMain ensures wide-character arguments and
