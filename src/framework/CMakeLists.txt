@@ -496,8 +496,6 @@ if(FRAMEWORK_GRAPHICS)
         ${CMAKE_CURRENT_LIST_DIR}/ui/uiwidget.h
         ${CMAKE_CURRENT_LIST_DIR}/ui/uiwidgetimage.cpp
         ${CMAKE_CURRENT_LIST_DIR}/ui/uiwidgettext.cpp
-        ${CMAKE_CURRENT_LIST_DIR}/ui/uiwebview.cpp
-        ${CMAKE_CURRENT_LIST_DIR}/ui/uiwebview.h
 
         # platform window
         ${CMAKE_CURRENT_LIST_DIR}/platform/platformwindow.cpp
