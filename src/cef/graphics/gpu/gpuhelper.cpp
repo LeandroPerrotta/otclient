@@ -3,12 +3,6 @@
 #include <framework/stdext/format.h>
 #include <GL/gl.h>
 #include <cstring>
-#if defined(USE_CEF) && defined(_WIN32)
-#include <d3d11.h>
-#include <dxgi.h>
-#include <EGL/egl.h>
-#include <EGL/eglext.h>
-#endif
 
 const char* getEGLErrorString(EGLint error)
 {
@@ -74,76 +68,4 @@ bool isMesaDriver()
     return false;
 #endif
 }
-
-#if defined(USE_CEF) && defined(_WIN32)
-void logD3D11DeviceInfo()
-{
-    static bool logged = false;
-    if (logged) return;
-    logged = true;
-
-    // Create a temporary D3D11 device to get system info
-    ID3D11Device* device = nullptr;
-    ID3D11DeviceContext* context = nullptr;
-    D3D_FEATURE_LEVEL featureLevel;
-    
-    HRESULT hr = D3D11CreateDevice(
-        nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, 0,
-        nullptr, 0, D3D11_SDK_VERSION,
-        &device, &featureLevel, &context
-    );
-    
-    if (SUCCEEDED(hr)) {
-        // Get DXGI adapter info
-        IDXGIDevice* dxgiDevice = nullptr;
-        if (SUCCEEDED(device->QueryInterface(__uuidof(IDXGIDevice), (void**)&dxgiDevice))) {
-            IDXGIAdapter* adapter = nullptr;
-            if (SUCCEEDED(dxgiDevice->GetAdapter(&adapter))) {
-                DXGI_ADAPTER_DESC desc;
-                if (SUCCEEDED(adapter->GetDesc(&desc))) {
-                    char adapterName[256];
-                    wcstombs(adapterName, desc.Description, sizeof(adapterName));
-                    g_logger.info(stdext::format("D3D11 Adapter: %s", adapterName));
-                    g_logger.info(stdext::format("D3D11 Video Memory: %u MB", 
-                                                desc.DedicatedVideoMemory / (1024 * 1024)));
-                }
-                adapter->Release();
-            }
-            dxgiDevice->Release();
-        }
-        
-        g_logger.info(stdext::format("D3D11 Feature Level: 0x%x", featureLevel));
-        
-        context->Release();
-        device->Release();
-    } else {
-        g_logger.error(stdext::format("Failed to create D3D11 device for diagnostics: 0x%x", hr));
-    }
-}
-
-void logEGLInfo()
-{
-    static bool logged = false;
-    if (logged) return;
-    logged = true;
-
-    EGLDisplay display = eglGetCurrentDisplay();
-    if (display != EGL_NO_DISPLAY) {
-        const char* vendor = eglQueryString(display, EGL_VENDOR);
-        const char* version = eglQueryString(display, EGL_VERSION);
-        const char* clientAPIs = eglQueryString(display, EGL_CLIENT_APIS);
-        
-        g_logger.info(stdext::format("EGL Vendor: %s", vendor ? vendor : "unknown"));
-        g_logger.info(stdext::format("EGL Version: %s", version ? version : "unknown"));
-        g_logger.info(stdext::format("EGL Client APIs: %s", clientAPIs ? clientAPIs : "unknown"));
-        
-        // Check for ANGLE
-        if (vendor && strstr(vendor, "Google Inc.")) {
-            g_logger.info("ANGLE renderer detected");
-        }
-    } else {
-        g_logger.error("No current EGL display available");
-    }
-}
-#endif
 
