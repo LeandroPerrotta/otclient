@@ -81,10 +81,6 @@ void CefConfigWindows::applySettings(CefSettings& settings) {
 void CefConfigWindows::applyCommandLineFlags(CefRefPtr<CefCommandLine> command_line) {
 #if defined(OPENGL_ES) && OPENGL_ES == 2
     configureAngle(command_line);
-#else
-    command_line->AppendSwitch("disable-gpu");
-    command_line->AppendSwitch("disable-gpu-compositing");
-    command_line->AppendSwitch("disable-gpu-rasterization");
 #endif
     applyGenericCommandLineFlags(command_line);
 
