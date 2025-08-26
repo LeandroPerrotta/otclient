@@ -144,7 +144,7 @@ void SimpleCEFClient::OnAcceleratedPaint(CefRefPtr<CefBrowser> browser,
             m_webview->onBrowserCreated(browser);
         }
         if(type == PET_VIEW) {
-            m_webview->onAcceleratedPaint(info);
+            m_webview->onAcceleratedPaint(info, &dirtyRects);
         }
     }
 }

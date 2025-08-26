@@ -1,6 +1,8 @@
 #include "cef_renderergpulinuxmesa.h"
 #include "linuxgpucontext.h"
 #include "../../ui/uicefwebview.h"
+#include "../../core/cef_init.h"
+#include "../../core/cef_config.h"
 #include <framework/core/logger.h>
 #include <framework/core/eventdispatcher.h>
 #include <framework/graphics/graphics.h>
@@ -35,7 +37,7 @@ void CefRendererGPULinuxMesa::onPaint(const void* buffer, int width, int height,
     (void)buffer; (void)width; (void)height; (void)dirtyRects;
 }
 
-void CefRendererGPULinuxMesa::onAcceleratedPaint(const CefAcceleratedPaintInfo& info)
+void CefRendererGPULinuxMesa::onAcceleratedPaint(const CefAcceleratedPaintInfo& info, const CefRenderHandler::RectList* dirtyRects)
 {
 #if defined(USE_CEF) && defined(__linux__)
     const int fd = info.planes[0].fd;
@@ -99,9 +101,10 @@ void CefRendererGPULinuxMesa::onAcceleratedPaint(const CefAcceleratedPaintInfo& 
             g_logger.error("CefRendererGPULinuxMesa: GPU import failed");
         }
     });
-#else
+  #else
     (void)info;
-#endif
+    (void)dirtyRects;
+  #endif
 }
 
 bool CefRendererGPULinuxMesa::isSupported() const
@@ -111,19 +114,31 @@ bool CefRendererGPULinuxMesa::isSupported() const
         return m_supported;
     m_checkedSupport = true;
 
-    Display* x11Display = LinuxGPUContext::x11Display();
-    if(!x11Display)
+    if(g_cefConfig && !g_cefConfig->shouldUseSharedTexture()) {
+        g_logger.info("CefRendererGPULinuxNonMesa: Shared texture disabled by config");
         return m_supported = false;
+    }    
+
+    Display* x11Display = LinuxGPUContext::x11Display();
+    if(!x11Display) {
+        g_logger.info("CefRendererGPULinuxMesa: No X11 display");
+        return m_supported = false;
+    }
 
     if(glXGetCurrentContext() != LinuxGPUContext::mainContext())
         glXMakeCurrent(x11Display, LinuxGPUContext::drawable(), LinuxGPUContext::mainContext());
 
-    if(!isMesaDriver())
+    if(!isMesaDriver()) {
+        g_logger.info("CefRendererGPULinuxMesa: Not a Mesa driver");
         return m_supported = false;
+    }
 
     const char* exts = (const char*)glGetString(GL_EXTENSIONS);
-    if(!exts || !strstr(exts, "GL_EXT_memory_object_fd"))
+    if(!exts || !strstr(exts, "GL_EXT_memory_object_fd")){
+        g_logger.info("CefRendererGPULinuxMesa: GL_EXT_memory_object_fd not supported");
         return m_supported = false;
+    }
+        
 
     m_glCreateMemoryObjectsEXT = (PFNGLCREATEMEMORYOBJECTSEXTPROC)resolveGLProc("glCreateMemoryObjectsEXT");
     m_glImportMemoryFdEXT = (PFNGLIMPORTMEMORYFDEXTPROC)resolveGLProc("glImportMemoryFdEXT");
@@ -131,11 +146,22 @@ bool CefRendererGPULinuxMesa::isSupported() const
     m_glDeleteMemoryObjectsEXT = (PFNGLDELETEMEMORYOBJECTSEXTPROC)resolveGLProc("glDeleteMemoryObjectsEXT");
 
     if(!m_glCreateMemoryObjectsEXT || !m_glImportMemoryFdEXT ||
-       !m_glTexStorageMem2DEXT || !m_glDeleteMemoryObjectsEXT)
+       !m_glTexStorageMem2DEXT || !m_glDeleteMemoryObjectsEXT) {
+        g_logger.info("CefRendererGPULinuxMesa: GL_EXT_memory_object_fd not supported");
         return m_supported = false;
-
+    }
+        
+    g_logger.info("CefRendererGPULinuxMesa: Supported");
     return m_supported = true;
 #else
     return false;
 #endif
+}
+
+void CefRendererGPULinuxMesa::onRenderSupported(CefWindowInfo& windowInfo) const
+{
+    if (isSupported()) {
+        windowInfo.shared_texture_enabled = true;
+        g_logger.info("CefRendererGPULinuxMesa: Shared texture enabled for CEF browser");
+    }
 }

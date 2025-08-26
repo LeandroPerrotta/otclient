@@ -324,6 +324,9 @@ void UICEFWebView::createWebView()
         window_info.shared_texture_enabled = false;
     // window_info.external_begin_frame_enabled = true; // Not needed with multi_threaded_message_loop = true
 
+    g_logger.info("UICEFWebView: Using acceleration paint: " + std::to_string(window_info.shared_texture_enabled));
+
+    
     g_logger.info("UICEFWebView: Window info configured for off-screen rendering");
 
     // Create browser asynchronously
@@ -402,10 +405,11 @@ void UICEFWebView::onPaint(const void* buffer, int width, int height,
         m_renderer->onPaint(buffer, width, height, dirtyRects);
 }
 
-void UICEFWebView::onAcceleratedPaint(const CefAcceleratedPaintInfo& info)
+void UICEFWebView::onAcceleratedPaint(const CefAcceleratedPaintInfo& info, const CefRenderHandler::RectList* dirtyRects)
 {
-    if (m_renderer)
-        m_renderer->onAcceleratedPaint(info);
+    if (m_renderer) {
+        m_renderer->onAcceleratedPaint(info, dirtyRects);
+    }
 }
 void UICEFWebView::onBrowserCreated(CefRefPtr<CefBrowser> browser)
 {

@@ -62,26 +62,12 @@ void CefConfigWindows::configurePaths(CefSettings& settings) {
     logMessage("Windows", stdext::format("CEF directory: %s", std::string(cefDir.begin(), cefDir.end())).c_str());
 }
 
-void CefConfigWindows::configureAngle(CefRefPtr<CefCommandLine> command_line) {
-#if defined(OPENGL_ES) && OPENGL_ES == 2
-    command_line->AppendSwitch("angle");
-    command_line->AppendSwitchWithValue("use-angle", "d3d11");
-    command_line->AppendSwitch("shared-texture-enabled");
-    command_line->AppendSwitch("disable-gpu-watchdog"); // Prevent GPU process timeout
-    
-    logMessage("Windows", "ANGLE D3D11 configuration applied");
-#endif
-}
-
 void CefConfigWindows::applySettings(CefSettings& settings) {
     applyGenericSettings(settings);
     configurePaths(settings);
 }
 
 void CefConfigWindows::applyCommandLineFlags(CefRefPtr<CefCommandLine> command_line) {
-#if defined(OPENGL_ES) && OPENGL_ES == 2
-    configureAngle(command_line);
-#endif
     applyGenericCommandLineFlags(command_line);
 
     logMessage("Windows", stdext::format("Command line flags: %s",

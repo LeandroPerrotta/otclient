@@ -1,6 +1,8 @@
 #include "cef_renderergpulinuxnonmesa.h"
 #include "linuxgpucontext.h"
 #include "../../ui/uicefwebview.h"
+#include "../../core/cef_init.h"
+#include "../../core/cef_config.h"
 #include <framework/core/logger.h>
 #include <framework/stdext/format.h>
 #include <framework/core/eventdispatcher.h>
@@ -81,7 +83,7 @@ void CefRendererGPULinuxNonMesa::onPaint(const void* buffer, int width, int heig
     (void)buffer; (void)width; (void)height; (void)dirtyRects;
 }
 
-void CefRendererGPULinuxNonMesa::onAcceleratedPaint(const CefAcceleratedPaintInfo& info)
+void CefRendererGPULinuxNonMesa::onAcceleratedPaint(const CefAcceleratedPaintInfo& info, const CefRenderHandler::RectList* dirtyRects)
 {
 #if defined(USE_CEF) && defined(__linux__)
     if(!LinuxGPUContext::eglSidecarReady()) {
@@ -186,14 +188,20 @@ void CefRendererGPULinuxNonMesa::onAcceleratedPaint(const CefAcceleratedPaintInf
             g_logger.error("CefRendererGPULinuxNonMesa: GPU import failed");
         }
     });
-#else
+  #else
     (void)info;
-#endif
+    (void)dirtyRects;
+  #endif
 }
 
 bool CefRendererGPULinuxNonMesa::isSupported() const
 {
 #if defined(USE_CEF) && defined(__linux__)
+    if(g_cefConfig && !g_cefConfig->shouldUseSharedTexture()) {
+        g_logger.info("CefRendererGPULinuxNonMesa: Shared texture disabled by config");
+        return false;
+    }
+
     if(!LinuxGPUContext::eglSidecarReady())
         return false;
     Display* x11Display = LinuxGPUContext::x11Display();
@@ -207,8 +215,18 @@ bool CefRendererGPULinuxNonMesa::isSupported() const
         return false;
     auto eglCreateImageKHRFunc = (PFNEGLCREATEIMAGEKHRPROC)eglGetProcAddress("eglCreateImageKHR");
     auto eglDestroyImageKHRFunc = (PFNEGLDESTROYIMAGEKHRPROC)eglGetProcAddress("eglDestroyImageKHR");
+    
+    g_logger.info("CefRendererGPULinuxNonMesa: Supported");
     return eglCreateImageKHRFunc && eglDestroyImageKHRFunc;
 #else
     return false;
 #endif
+}
+
+void CefRendererGPULinuxNonMesa::onRenderSupported(CefWindowInfo& windowInfo) const
+{
+    if (isSupported()) {
+        windowInfo.shared_texture_enabled = true;
+        g_logger.info("CefRendererGPULinuxNonMesa: Shared texture enabled for CEF browser");
+    }
 }

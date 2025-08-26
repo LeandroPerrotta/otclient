@@ -22,8 +22,9 @@ public:
     explicit CefRendererGPULinuxMesa(UICEFWebView& view);
     void onPaint(const void* buffer, int width, int height,
                  const CefRenderHandler::RectList& dirtyRects) override;
-    void onAcceleratedPaint(const CefAcceleratedPaintInfo& info) override;
+    void onAcceleratedPaint(const CefAcceleratedPaintInfo& info, const CefRenderHandler::RectList* dirtyRects = nullptr) override;
     bool isSupported() const override;
+    void onRenderSupported(CefWindowInfo& windowInfo) const override;
 
 private:
     int m_lastWidth;

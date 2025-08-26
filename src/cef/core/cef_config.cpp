@@ -27,33 +27,9 @@ void CefConfig::applyGenericSettings(CefSettings& settings) {
 }
 
 void CefConfig::applyGenericCommandLineFlags(CefRefPtr<CefCommandLine> command_line) {
-    if (m_genericFlags.enable_gpu)
-        command_line->AppendSwitch("enable-gpu");
-    if (m_genericFlags.enable_gpu_compositing)
-        command_line->AppendSwitch("enable-gpu-compositing");
-    if (m_genericFlags.enable_gpu_rasterization)
-        command_line->AppendSwitch("enable-gpu-rasterization");
-    if (m_genericFlags.disable_software_rasterizer)
-        command_line->AppendSwitch("disable-software-rasterizer");
-    if (m_genericFlags.disable_gpu_sandbox)
-        command_line->AppendSwitch("disable-gpu-sandbox");
-    
-    if (m_genericFlags.enable_begin_frame_scheduling)
-        command_line->AppendSwitch("enable-begin-frame-scheduling");
-    if (m_genericFlags.disable_background_timer_throttling)
-        command_line->AppendSwitch("disable-background-timer-throttling");
-    if (m_genericFlags.disable_renderer_backgrounding)
-        command_line->AppendSwitch("disable-renderer-backgrounding");
-    
     // Disable unnecessary features
     if (m_genericFlags.disable_background_networking)
         command_line->AppendSwitch("disable-background-networking");
-    if (m_genericFlags.disable_sync)
-        command_line->AppendSwitch("disable-sync");
-    if (m_genericFlags.disable_background_mode)
-        command_line->AppendSwitch("disable-background-mode");
-    if (m_genericFlags.disable_component_extensions_with_background_pages)
-        command_line->AppendSwitch("disable-component-extensions-with-background-pages");
     if (m_genericFlags.disable_default_apps)
         command_line->AppendSwitch("disable-default-apps");
     if (m_genericFlags.disable_extensions)

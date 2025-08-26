@@ -10,8 +10,10 @@
 
 std::unique_ptr<CefRenderer> CefRendererFactory::createRenderer(UICEFWebView& view)
 {
+    
 #if defined(USE_CEF)
 #if defined(_WIN32) && defined(OPENGL_ES) && OPENGL_ES == 2
+    g_logger.info("CefRendererFactory: Checking for GPU Windows renderer");
     {
         auto renderer = std::make_unique<CefRendererGPUWin>(view);
         if(renderer->isSupported())
@@ -19,6 +21,7 @@ std::unique_ptr<CefRenderer> CefRendererFactory::createRenderer(UICEFWebView& vi
     }
 #endif
 #if defined(__linux__)
+    g_logger.info("CefRendererFactory: Checking for GPU Linux renderer");
     {
         auto renderer = std::make_unique<CefRendererGPULinuxMesa>(view);
         if(renderer->isSupported())
@@ -30,6 +33,7 @@ std::unique_ptr<CefRenderer> CefRendererFactory::createRenderer(UICEFWebView& vi
             return renderer;
     }
 #endif
+    g_logger.info("CefRendererFactory: Creating CPU renderer");
     return std::make_unique<CefRendererCPU>(view);
 #else
     (void)view;
