@@ -23,7 +23,6 @@ public:
 
 private:
     std::wstring getExecutableDirectory() const;
-    void configureAngle(CefRefPtr<CefCommandLine> command_line);
     void setupDllDirectories() const;
 };
 
