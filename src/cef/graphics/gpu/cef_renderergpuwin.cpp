@@ -322,23 +322,12 @@ bool CefRendererGPUWin::setupEGLPbuffer()
         return false;
     }
     
-    // Try different EGL config approaches - ANGLE can be very picky
+    // Try configs with bind-to-texture support first, then fallback to basic configs
     struct ConfigAttempt {
         const char* name;
         EGLint attrs[20];
+        bool supportsBinding;
     } attempts[] = {
-        {
-            "Basic RGBA8 config",
-            {
-                EGL_SURFACE_TYPE, EGL_PBUFFER_BIT,
-                EGL_RENDERABLE_TYPE, EGL_OPENGL_ES2_BIT,
-                EGL_RED_SIZE, 8,
-                EGL_GREEN_SIZE, 8,
-                EGL_BLUE_SIZE, 8,
-                EGL_ALPHA_SIZE, 8,
-                EGL_NONE
-            }
-        },
         {
             "RGBA8 with bind to texture",
             {
@@ -350,7 +339,21 @@ bool CefRendererGPUWin::setupEGLPbuffer()
                 EGL_ALPHA_SIZE, 8,
                 EGL_BIND_TO_TEXTURE_RGBA, EGL_TRUE,
                 EGL_NONE
-            }
+            },
+            true
+        },
+        {
+            "Basic RGBA8 config",
+            {
+                EGL_SURFACE_TYPE, EGL_PBUFFER_BIT,
+                EGL_RENDERABLE_TYPE, EGL_OPENGL_ES2_BIT,
+                EGL_RED_SIZE, 8,
+                EGL_GREEN_SIZE, 8,
+                EGL_BLUE_SIZE, 8,
+                EGL_ALPHA_SIZE, 8,
+                EGL_NONE
+            },
+            false
         },
         {
             "Minimal config",
@@ -358,11 +361,13 @@ bool CefRendererGPUWin::setupEGLPbuffer()
                 EGL_SURFACE_TYPE, EGL_PBUFFER_BIT,
                 EGL_RENDERABLE_TYPE, EGL_OPENGL_ES2_BIT,
                 EGL_NONE
-            }
+            },
+            false
         }
     };
     
     bool configFound = false;
+    bool configSupportsBinding = false;
     for (int configAttempt = 0; configAttempt < 3 && !configFound; configAttempt++) {
         EGLint numCfg;
         if (!eglChooseConfig(display, attempts[configAttempt].attrs, &m_eglConfig, 1, &numCfg) || numCfg == 0) {
@@ -372,6 +377,7 @@ bool CefRendererGPUWin::setupEGLPbuffer()
         
         g_logger.debug(stdext::format("CefRendererGPUWin: Using config: %s", attempts[configAttempt].name));
         configFound = true;
+        configSupportsBinding = attempts[configAttempt].supportsBinding;
     }
     
     if (!configFound) {
@@ -379,103 +385,41 @@ bool CefRendererGPUWin::setupEGLPbuffer()
         return false;
     }
 
-    // Log the config to verify bind to texture support if applicable
+    // Verify the actual bind-to-texture support
     EGLint bindToTextureRGBA = 0;
     eglGetConfigAttrib(display, m_eglConfig, EGL_BIND_TO_TEXTURE_RGBA, &bindToTextureRGBA);
-    g_logger.debug(stdext::format("CefRendererGPUWin: EGL_BIND_TO_TEXTURE_RGBA = %d", bindToTextureRGBA));
+    g_logger.debug(stdext::format("CefRendererGPUWin: EGL_BIND_TO_TEXTURE_RGBA = %d (expected: %d)", 
+                                  bindToTextureRGBA, configSupportsBinding ? 1 : 0));
 
     // Log additional texture info for debugging
     g_logger.debug(stdext::format("CefRendererGPUWin: Texture size: %dx%d, Classic handle: %016llx", 
                                   m_lastWidth, m_lastHeight, (uint64_t)m_classicSharedHandle));
 
-    // Try creating pbuffer with different attribute approaches
+    // Try creating pbuffer - use approach that worked based on your logs
+    g_logger.debug("CefRendererGPUWin: Trying pbuffer creation with explicit dimensions (known working approach)");
     
-    // Approach 1: Just the essential attributes (let ANGLE auto-detect everything)
-    {
-        EGLint attrs[] = {
-            EGL_NONE  // No attributes at all - let ANGLE figure it out from the D3D texture
-        };
+    EGLint attrs[] = {
+        EGL_WIDTH, m_lastWidth,
+        EGL_HEIGHT, m_lastHeight,
+        EGL_NONE
+    };
 
-        g_logger.debug("CefRendererGPUWin: Trying pbuffer creation with no attributes");
-        m_pbuffer = eglCreatePbufferFromClientBuffer(
-            display,
-            EGL_D3D_TEXTURE_2D_SHARE_HANDLE_ANGLE,
-            (EGLClientBuffer)m_classicSharedHandle,
-            m_eglConfig,
-            attrs
-        );
-
-        if (m_pbuffer != EGL_NO_SURFACE) {
-            g_logger.info("CefRendererGPUWin: Success with no attributes");
-        } else {
-            EGLint eglError = eglGetError();
-            g_logger.debug(stdext::format("CefRendererGPUWin: No attributes failed - EGL error: 0x%x (%s)",
-                                          eglError, getEGLErrorString(eglError)));
-        }
-    }
-
-    // Approach 2: Explicit width/height 
-    if (m_pbuffer == EGL_NO_SURFACE) {
-        EGLint attrs[] = {
-            EGL_WIDTH, m_lastWidth,
-            EGL_HEIGHT, m_lastHeight,
-            EGL_NONE
-        };
-
-        g_logger.debug("CefRendererGPUWin: Trying pbuffer creation with explicit dimensions");
-        m_pbuffer = eglCreatePbufferFromClientBuffer(
-            display,
-            EGL_D3D_TEXTURE_2D_SHARE_HANDLE_ANGLE,
-            (EGLClientBuffer)m_classicSharedHandle,
-            m_eglConfig,
-            attrs
-        );
-
-        if (m_pbuffer != EGL_NO_SURFACE) {
-            g_logger.info("CefRendererGPUWin: Success with explicit dimensions");
-        } else {
-            EGLint eglError = eglGetError();
-            g_logger.debug(stdext::format("CefRendererGPUWin: Explicit dimensions failed - EGL error: 0x%x (%s)",
-                                          eglError, getEGLErrorString(eglError)));
-        }
-    }
-
-    // Approach 3: Only if config supports texture binding
-    if (m_pbuffer == EGL_NO_SURFACE && bindToTextureRGBA) {
-        EGLint attrs[] = {
-            EGL_WIDTH, m_lastWidth,
-            EGL_HEIGHT, m_lastHeight,
-            EGL_TEXTURE_FORMAT, EGL_TEXTURE_RGBA,
-            EGL_TEXTURE_TARGET, EGL_TEXTURE_2D,
-            EGL_NONE
-        };
-
-        g_logger.debug("CefRendererGPUWin: Trying pbuffer creation with texture binding attributes");
-        m_pbuffer = eglCreatePbufferFromClientBuffer(
-            display,
-            EGL_D3D_TEXTURE_2D_SHARE_HANDLE_ANGLE,
-            (EGLClientBuffer)m_classicSharedHandle,
-            m_eglConfig,
-            attrs
-        );
-
-        if (m_pbuffer != EGL_NO_SURFACE) {
-            g_logger.info("CefRendererGPUWin: Success with texture binding attributes");
-        } else {
-            EGLint eglError = eglGetError();
-            g_logger.error(stdext::format("CefRendererGPUWin: All approaches failed - EGL error: 0x%x (%s)",
-                                          eglError, getEGLErrorString(eglError)));
-            return false;
-        }
-    }
+    m_pbuffer = eglCreatePbufferFromClientBuffer(
+        display,
+        EGL_D3D_TEXTURE_2D_SHARE_HANDLE_ANGLE,
+        (EGLClientBuffer)m_classicSharedHandle,
+        m_eglConfig,
+        attrs
+    );
 
     if (m_pbuffer == EGL_NO_SURFACE) {
-        g_logger.error("CefRendererGPUWin: All pbuffer creation approaches failed");
+        EGLint eglError = eglGetError();
+        g_logger.error(stdext::format("CefRendererGPUWin: Pbuffer creation failed - EGL error: 0x%x (%s)",
+                                      eglError, getEGLErrorString(eglError)));
         return false;
     }
 
-    // Success! Now try to bind to texture
-    g_logger.info("CefRendererGPUWin: Pbuffer created successfully, attempting to bind to texture");
+    g_logger.info("CefRendererGPUWin: Pbuffer created successfully");
 
     // Make sure we have a valid OpenGL texture
     if (!m_cefTexture) {
@@ -483,25 +427,41 @@ bool CefRendererGPUWin::setupEGLPbuffer()
         return false;
     }
 
-    // Bind to OpenGL texture
-    glBindTexture(GL_TEXTURE_2D, m_cefTexture->getId());
-    
-    if (!eglBindTexImage(display, m_pbuffer, EGL_BACK_BUFFER)) {
-        EGLint eglError = eglGetError();
-        g_logger.error(stdext::format("CefRendererGPUWin: Failed to bind pbuffer to texture, EGL error: 0x%x (%s)",
-                                      eglError, getEGLErrorString(eglError)));
-        return false;
+    // Only try to bind to texture if the config supports it
+    if (bindToTextureRGBA) {
+        g_logger.debug("CefRendererGPUWin: Config supports bind-to-texture, attempting to bind");
+        
+        glBindTexture(GL_TEXTURE_2D, m_cefTexture->getId());
+        
+        if (!eglBindTexImage(display, m_pbuffer, EGL_BACK_BUFFER)) {
+            EGLint eglError = eglGetError();
+            g_logger.error(stdext::format("CefRendererGPUWin: Failed to bind pbuffer to texture, EGL error: 0x%x (%s)",
+                                          eglError, getEGLErrorString(eglError)));
+            return false;
+        }
+        
+        m_pbufferBound = true;
+        
+        // Set texture parameters
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        
+        g_logger.info("CefRendererGPUWin: EGL pbuffer bound to texture successfully!");
+    } else {
+        g_logger.warning("CefRendererGPUWin: Config doesn't support bind-to-texture - using alternative approach");
+        
+        // Alternative: We have the pbuffer but can't bind it directly to texture
+        // We'll need to copy from pbuffer to texture manually each frame
+        // For now, let's see if we can at least get the pbuffer working
+        g_logger.info("CefRendererGPUWin: Pbuffer created but texture binding not supported by config");
+        
+        // We could implement glReadPixels + glTexImage2D here as a fallback
+        // But let's first see if this gets us further
     }
 
-    m_pbufferBound = true;
-
-    // Set texture parameters
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-
-    g_logger.info("CefRendererGPUWin: EGL pbuffer setup completed successfully!");
+    g_logger.info("CefRendererGPUWin: EGL pbuffer setup completed!");
     return true;
 }
 
