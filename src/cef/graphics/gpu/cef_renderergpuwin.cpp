@@ -416,15 +416,7 @@ bool CefRendererGPUWin::setupEGLPbuffer()
         EGLint eglError = eglGetError();
         g_logger.error(stdext::format("CefRendererGPUWin: Failed to bind pbuffer to texture, EGL error: 0x%x (%s)",
                                       eglError, getEGLErrorString(eglError)));
-        
-        // Try front buffer if back buffer fails
-        g_logger.debug("CefRendererGPUWin: Trying EGL_FRONT_BUFFER");
-        if (!eglBindTexImage(display, m_pbuffer, EGL_FRONT_BUFFER)) {
-            eglError = eglGetError();
-            g_logger.error(stdext::format("CefRendererGPUWin: Front buffer also failed, EGL error: 0x%x (%s)",
-                                          eglError, getEGLErrorString(eglError)));
-            return false;
-        }
+        return false;
     }
 
     m_pbufferBound = true;
