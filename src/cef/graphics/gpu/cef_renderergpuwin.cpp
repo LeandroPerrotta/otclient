@@ -57,19 +57,31 @@ void CefRendererGPUWin::onAcceleratedPaint(const CefAcceleratedPaintInfo& info)
     const int width = info.extra.coded_size.width;
     const int height = info.extra.coded_size.height;
 
-    g_logger.debug(stdext::format("CefRendererGPUWin: Processing NT handle %p, size: %dx%d", 
-                                  ntHandle, width, height));
+    // Duplicate the handle for cross-thread usage
+    HANDLE duplicatedHandle = nullptr;
+    if (!DuplicateHandle(GetCurrentProcess(), ntHandle, GetCurrentProcess(), &duplicatedHandle, 
+                         0, FALSE, DUPLICATE_SAME_ACCESS)) {
+        DWORD error = GetLastError();
+        g_logger.error(stdext::format("CefRendererGPUWin: Failed to duplicate handle, error: 0x%x", error));
+        return;
+    }
+
+    g_logger.debug(stdext::format("CefRendererGPUWin: Processing NT handle %p (duplicated: %p), size: %dx%d", 
+                                  ntHandle, duplicatedHandle, width, height));
 
     // Move operations to main thread where OpenGL context lives
-    g_dispatcher.addEventFromOtherThread([this, ntHandle, width, height]() {
+    g_dispatcher.addEventFromOtherThread([this, duplicatedHandle, width, height]() {
+        auto closeHandle = [](HANDLE& h) { if (h && h != INVALID_HANDLE_VALUE) { CloseHandle(h); h = nullptr; } };
+        
         // First, ensure we have a D3D11 device by trying to open the CEF texture
         if (!m_d3d11Device) {
             ID3D11Texture2D* tempTexture = nullptr;
             LUID adapterLuid = {};
             
             // Open CEF texture to find which adapter it's on
-            if (!openSharedResourceSafely(ntHandle, &tempTexture, &adapterLuid)) {
+            if (!openSharedResourceSafely(duplicatedHandle, &tempTexture, &adapterLuid)) {
                 g_logger.error("CefRendererGPUWin: Failed to open CEF texture to determine adapter");
+                closeHandle(duplicatedHandle);
                 return;
             }
             
@@ -78,6 +90,7 @@ void CefRendererGPUWin::onAcceleratedPaint(const CefAcceleratedPaintInfo& info)
             // Create device on the same adapter as CEF
             if (!createDeviceOnAdapter(adapterLuid)) {
                 g_logger.error("CefRendererGPUWin: Failed to create device on CEF adapter");
+                closeHandle(duplicatedHandle);
                 return;
             }
         }
@@ -86,11 +99,13 @@ void CefRendererGPUWin::onAcceleratedPaint(const CefAcceleratedPaintInfo& info)
         if (!m_destTexture || m_lastWidth != width || m_lastHeight != height) {
             if (!createDestinationTexture(width, height)) {
                 g_logger.error("CefRendererGPUWin: Failed to create destination texture");
+                closeHandle(duplicatedHandle);
                 return;
             }
             
             if (!setupEGLPbuffer()) {
                 g_logger.error("CefRendererGPUWin: Failed to setup EGL pbuffer");
+                closeHandle(duplicatedHandle);
                 return;
             }
             
@@ -104,11 +119,14 @@ void CefRendererGPUWin::onAcceleratedPaint(const CefAcceleratedPaintInfo& info)
         }
 
         // Copy from CEF's NT handle to our classic handle texture
-        if (!copyFromCEFTexture(ntHandle)) {
+        if (!copyFromCEFTexture(duplicatedHandle)) {
             g_logger.error("CefRendererGPUWin: Failed to copy from CEF texture");
+            closeHandle(duplicatedHandle);
             return;
         }
 
+        // Clean up the duplicated handle
+        closeHandle(duplicatedHandle);
         g_logger.debug("CefRendererGPUWin: Successfully processed frame");
     });
 #else
