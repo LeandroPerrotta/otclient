@@ -35,7 +35,7 @@ void CefRendererGPULinuxMesa::onPaint(const void* buffer, int width, int height,
     (void)buffer; (void)width; (void)height; (void)dirtyRects;
 }
 
-void CefRendererGPULinuxMesa::onAcceleratedPaint(const CefAcceleratedPaintInfo& info)
+void CefRendererGPULinuxMesa::onAcceleratedPaint(const CefAcceleratedPaintInfo& info, const CefRenderHandler::RectList* dirtyRects)
 {
 #if defined(USE_CEF) && defined(__linux__)
     const int fd = info.planes[0].fd;
@@ -99,9 +99,10 @@ void CefRendererGPULinuxMesa::onAcceleratedPaint(const CefAcceleratedPaintInfo& 
             g_logger.error("CefRendererGPULinuxMesa: GPU import failed");
         }
     });
-#else
+  #else
     (void)info;
-#endif
+    (void)dirtyRects;
+  #endif
 }
 
 bool CefRendererGPULinuxMesa::isSupported() const

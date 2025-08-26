@@ -45,14 +45,7 @@ void CefRendererGPUWin::onPaint(const void* buffer, int width, int height,
     (void)buffer; (void)width; (void)height; (void)dirtyRects;
 }
 
-void CefRendererGPUWin::onAcceleratedPaint(const CefAcceleratedPaintInfo& info)
-{
-    // Default to full frame update when no dirty rects provided
-    CefRenderHandler::RectList emptyRects;
-    onAcceleratedPaint(info, emptyRects);
-}
-
-void CefRendererGPUWin::onAcceleratedPaint(const CefAcceleratedPaintInfo& info, const CefRenderHandler::RectList& dirtyRects)
+void CefRendererGPUWin::onAcceleratedPaint(const CefAcceleratedPaintInfo& info, const CefRenderHandler::RectList* dirtyRects)
 {
 #if defined(USE_CEF) && defined(_WIN32) && defined(OPENGL_ES) && OPENGL_ES == 2
     HANDLE ntHandle = static_cast<HANDLE>(info.shared_texture_handle);
@@ -75,8 +68,8 @@ void CefRendererGPUWin::onAcceleratedPaint(const CefAcceleratedPaintInfo& info, 
 
         // Remove per-frame debug log
 
-            // Copy dirty rects for use in the lambda
-        CefRenderHandler::RectList rectsCopy = dirtyRects;
+            // Copy dirty rects for use in the lambda (empty if null)
+        CefRenderHandler::RectList rectsCopy = dirtyRects ? *dirtyRects : CefRenderHandler::RectList();
         
         // Move operations to main thread where OpenGL context lives  
         g_dispatcher.addEventFromOtherThread([this, duplicatedHandle, width, height, rectsCopy]() mutable {
@@ -156,6 +149,7 @@ void CefRendererGPUWin::onAcceleratedPaint(const CefAcceleratedPaintInfo& info, 
     });
 #else
     (void)info;
+    (void)dirtyRects;
 #endif
 }
 
@@ -484,13 +478,6 @@ void CefRendererGPUWin::cleanupEGLPbuffer()
         eglDestroySurface(display, m_pbuffer);
         m_pbuffer = EGL_NO_SURFACE;
     }
-}
-
-bool CefRendererGPUWin::copyFromCEFTexture(HANDLE ntHandle)
-{
-    // Use empty dirty rects list to trigger full copy
-    CefRenderHandler::RectList emptyRects;
-    return copyFromCEFTexture(ntHandle, emptyRects);
 }
 
 bool CefRendererGPUWin::copyFromCEFTexture(HANDLE ntHandle, const CefRenderHandler::RectList& dirtyRects)

@@ -26,7 +26,6 @@
 #include <framework/core/resourcemanager.h>
 #include <framework/luaengine/luainterface.h>
 #include "../graphics/cef_rendererfactory.h"
-#include "../graphics/gpu/cef_renderergpuwin.h"
 #include <cef/core/cef_config.h>
 #include <cef/core/cef_init.h>
 #include "cef_client.h"
@@ -403,23 +402,10 @@ void UICEFWebView::onPaint(const void* buffer, int width, int height,
         m_renderer->onPaint(buffer, width, height, dirtyRects);
 }
 
-void UICEFWebView::onAcceleratedPaint(const CefAcceleratedPaintInfo& info)
-{
-    if (m_renderer)
-        m_renderer->onAcceleratedPaint(info);
-}
-
-void UICEFWebView::onAcceleratedPaint(const CefAcceleratedPaintInfo& info, const CefRenderHandler::RectList& dirtyRects)
+void UICEFWebView::onAcceleratedPaint(const CefAcceleratedPaintInfo& info, const CefRenderHandler::RectList* dirtyRects)
 {
     if (m_renderer) {
-        // Try to use the dirty rects optimized version if available
-        auto* gpuRenderer = dynamic_cast<CefRendererGPUWin*>(m_renderer.get());
-        if (gpuRenderer) {
-            gpuRenderer->onAcceleratedPaint(info, dirtyRects);
-        } else {
-            // Fallback to regular version for other renderers
-            m_renderer->onAcceleratedPaint(info);
-        }
+        m_renderer->onAcceleratedPaint(info, dirtyRects);
     }
 }
 void UICEFWebView::onBrowserCreated(CefRefPtr<CefBrowser> browser)

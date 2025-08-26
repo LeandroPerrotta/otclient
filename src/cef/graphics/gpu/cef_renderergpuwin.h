@@ -18,8 +18,7 @@ public:
     ~CefRendererGPUWin();
     void onPaint(const void* buffer, int width, int height,
                  const CefRenderHandler::RectList& dirtyRects) override;
-    void onAcceleratedPaint(const CefAcceleratedPaintInfo& info) override;
-    void onAcceleratedPaint(const CefAcceleratedPaintInfo& info, const CefRenderHandler::RectList& dirtyRects);
+    void onAcceleratedPaint(const CefAcceleratedPaintInfo& info, const CefRenderHandler::RectList* dirtyRects = nullptr) override;
     bool isSupported() const override;
     void onRenderSupported(CefWindowInfo& windowInfo) const override;
 
@@ -50,8 +49,7 @@ private:
     void cleanupEGLPbuffer();
     
                 // Per-frame operations
-            bool copyFromCEFTexture(HANDLE ntHandle);
-            bool copyFromCEFTexture(HANDLE ntHandle, const CefRenderHandler::RectList& dirtyRects);
+            bool copyFromCEFTexture(HANDLE ntHandle, const CefRenderHandler::RectList& dirtyRects = {});
             bool openSharedResourceSafely(HANDLE handle, ID3D11Texture2D** outTexture, LUID* adapterLuid = nullptr);
     bool createDeviceOnAdapter(const LUID& adapterLuid);
     bool handleKeyedMutex(ID3D11Texture2D* srcTexture, ID3D11Texture2D* dstTexture, bool acquire);

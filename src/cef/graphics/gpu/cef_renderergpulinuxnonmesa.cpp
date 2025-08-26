@@ -81,7 +81,7 @@ void CefRendererGPULinuxNonMesa::onPaint(const void* buffer, int width, int heig
     (void)buffer; (void)width; (void)height; (void)dirtyRects;
 }
 
-void CefRendererGPULinuxNonMesa::onAcceleratedPaint(const CefAcceleratedPaintInfo& info)
+void CefRendererGPULinuxNonMesa::onAcceleratedPaint(const CefAcceleratedPaintInfo& info, const CefRenderHandler::RectList* dirtyRects)
 {
 #if defined(USE_CEF) && defined(__linux__)
     if(!LinuxGPUContext::eglSidecarReady()) {
@@ -186,9 +186,10 @@ void CefRendererGPULinuxNonMesa::onAcceleratedPaint(const CefAcceleratedPaintInf
             g_logger.error("CefRendererGPULinuxNonMesa: GPU import failed");
         }
     });
-#else
+  #else
     (void)info;
-#endif
+    (void)dirtyRects;
+  #endif
 }
 
 bool CefRendererGPULinuxNonMesa::isSupported() const

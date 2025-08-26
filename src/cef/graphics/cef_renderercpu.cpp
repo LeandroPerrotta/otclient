@@ -82,7 +82,8 @@ void CefRendererCPU::onPaint(const void* buffer, int width, int height,
     m_view.setVisible(true);
 }
 
-void CefRendererCPU::onAcceleratedPaint(const CefAcceleratedPaintInfo& info)
+void CefRendererCPU::onAcceleratedPaint(const CefAcceleratedPaintInfo& info, const CefRenderHandler::RectList* dirtyRects)
 {
     (void)info;
+    (void)dirtyRects;
 }
