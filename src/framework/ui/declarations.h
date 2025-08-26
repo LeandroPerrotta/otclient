@@ -37,11 +37,9 @@ class UIAnchor;
 class UIAnchorGroup;
 class UIAnchorLayout;
 class UIParticles;
-class UIWebView;
 class UICEFWebView;
 
 typedef stdext::shared_object_ptr<UIWidget> UIWidgetPtr;
-typedef stdext::shared_object_ptr<UIWebView> UIWebViewPtr;
 typedef stdext::shared_object_ptr<UICEFWebView> UICEFWebViewPtr;
 typedef stdext::shared_object_ptr<UIParticles> UIParticlesPtr;
 typedef stdext::shared_object_ptr<UITextEdit> UITextEditPtr;

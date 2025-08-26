@@ -12,7 +12,8 @@ CEF_ARCHIVE="/tmp/cef_binary_${CEF_VERSION}_linux64_minimal.tar.bz2"
 
 # Default to local development mode
 INSTALL_MODE="local"
-CEF_RUNTIME_DIR="cef"
+CEF_PREBUILT_DIR="./pre-build/cef/ubuntu-24"
+CEF_RUNTIME_DIR=$CEF_PREBUILT_DIR
 
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
@@ -111,6 +112,21 @@ if [ "$INSTALL_MODE" = "global" ]; then
     fi
 fi
 
+# Ensure pre-build submodule is initialized and up to date
+echo "[INFO] Ensuring pre-build submodule is ready..."
+if [ -d ".git" ]; then
+    if git submodule status pre-build >/dev/null 2>&1; then
+        echo "   Updating pre-build submodule..."
+        git submodule update --init pre-build
+        echo "[OK] Pre-build submodule ready"
+    else
+        echo "   Warning: pre-build submodule not found, continuing without cache..."
+    fi
+else
+    echo "   Warning: Not a git repository, continuing without submodule update..."
+fi
+echo ""
+
 # Download CEF if not exists
 if [ ! -f "$CEF_ARCHIVE" ]; then
     echo "[INFO] Downloading CEF to /tmp (this may take a few minutes)..."
@@ -126,33 +142,45 @@ else
 fi
 
 # Extract CEF to runtime directory
-echo "[INFO] Extracting CEF to runtime directory..."
-mkdir -p "$CEF_RUNTIME_DIR"
-cd "$CEF_RUNTIME_DIR"
-tar -xf "$CEF_ARCHIVE"
-
-# Find the extracted directory
-CEF_EXTRACTED_DIR=$(find . -maxdepth 1 -type d -name "cef_binary_*" | head -1)
-if [ -z "$CEF_EXTRACTED_DIR" ]; then
-    echo "[ERROR] Failed to extract CEF"
-    exit 1
+if [ -d "$CEF_RUNTIME_DIR" ] && [ "$(ls -A "$CEF_RUNTIME_DIR" 2>/dev/null)" ]; then
+    echo "[INFO] CEF runtime directory already exists and not empty, skipping extraction..."
+    echo "   Location: $CEF_RUNTIME_DIR"
+else
+    echo "[INFO] Extracting CEF to runtime directory..."
+    mkdir -p "$CEF_RUNTIME_DIR"
+    cd "$CEF_RUNTIME_DIR"
+    tar -xf "$CEF_ARCHIVE"
+    
+    # Find the extracted directory
+    CEF_EXTRACTED_DIR=$(find . -maxdepth 1 -type d -name "cef_binary_*" | head -1)
+    if [ -z "$CEF_EXTRACTED_DIR" ]; then
+        echo "[ERROR] Failed to extract CEF"
+        exit 1
+    fi
+    
+    # Move contents to runtime directory
+    echo "[INFO] Moving CEF files to runtime directory..."
+    # Move all files including hidden ones (starting with .)
+    mv "$CEF_EXTRACTED_DIR"/.* . 2>/dev/null || true
+    mv "$CEF_EXTRACTED_DIR"/* . 2>/dev/null || true
+    rmdir "$CEF_EXTRACTED_DIR"
+    
+    echo "[INFO] Cleaning up download..."
+    rm -f "$CEF_ARCHIVE"
+    echo "[OK] CEF extracted to runtime directory"
+    
+    cd - > /dev/null
 fi
 
-# Move contents to runtime directory
-echo "[INFO] Moving CEF files to runtime directory..."
-# Move all files including hidden ones (starting with .)
-mv "$CEF_EXTRACTED_DIR"/.* . 2>/dev/null || true
-mv "$CEF_EXTRACTED_DIR"/* . 2>/dev/null || true
-rmdir "$CEF_EXTRACTED_DIR"
-
-echo "[INFO] Cleaning up download..."
-rm -f "$CEF_ARCHIVE"
-echo "[OK] CEF extracted to runtime directory"
-
-cd - > /dev/null
-
 # Compile CEF wrapper if not exists
-if [ ! -f "$CEF_RUNTIME_DIR/Release/libcef_dll_wrapper.a" ]; then
+PREBUILT_WRAPPER="${CEF_PREBUILT_DIR}/libcef_dll_wrapper.a"
+
+# Check if pre-built wrapper exists in cache
+if [ -f "$PREBUILT_WRAPPER" ]; then
+    echo "[INFO] Found pre-built wrapper in cache, copying to destination..."
+    cp "$PREBUILT_WRAPPER" "$CEF_RUNTIME_DIR/Release/"
+    echo "[OK] Pre-built wrapper copied from cache"
+elif [ ! -f "$CEF_RUNTIME_DIR/Release/libcef_dll_wrapper.a" ]; then
     echo "[INFO] Compiling CEF wrapper library..."
     
     # Go to CEF directory

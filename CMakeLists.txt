@@ -95,6 +95,7 @@ if(USE_CEF)
             set(CEF_SEARCH_INCLUDE_PATHS
                 "/opt/otclient-cef"
                 "$ENV{HOME}/.local/share/otclient-cef"
+                "${CMAKE_SOURCE_DIR}/cef"
                 "${CMAKE_SOURCE_DIR}/cef_binary_*"
             )
             
@@ -147,8 +148,8 @@ if(USE_CEF)
     # Add CEF definitions
     add_compile_definitions(USE_CEF)
     
-    # Include CEF directories
-    include_directories(${CEF_INCLUDE_DIRS})
+    # Include CEF directories as SYSTEM to suppress warnings from external library
+    include_directories(SYSTEM ${CEF_INCLUDE_DIRS})
     link_directories(${CEF_LIBRARY_DIRS})
     
     # Windows-specific: Configure runtime library search
@@ -162,6 +163,7 @@ if(USE_CEF)
 endif()
 
 include(src/framework/CMakeLists.txt)
+include(src/cef/CMakeLists.txt)
 include(src/client/CMakeLists.txt)
 
 if(USE_CEF)
@@ -208,9 +210,9 @@ add_definitions(-D"VERSION=\\"${VERSION}\\"")
 # add client executable
 if(WIN32)
     # Add app.manifest for better GPU detection in VMs - based on OpenKneeboard working manifest
-    add_executable(${PROJECT_NAME} ${framework_SOURCES} ${client_SOURCES} ${executable_SOURCES} src/app.manifest)
+    add_executable(${PROJECT_NAME} ${framework_SOURCES} ${client_SOURCES} ${cef_SOURCES} ${executable_SOURCES} src/app.manifest)
 else()
-    add_executable(${PROJECT_NAME} ${framework_SOURCES} ${client_SOURCES} ${executable_SOURCES})
+    add_executable(${PROJECT_NAME} ${framework_SOURCES} ${client_SOURCES} ${cef_SOURCES} ${executable_SOURCES})
 endif()
 
 if(MSVC AND NOT WINDOWS_CONSOLE)
@@ -244,6 +246,16 @@ if(WIN32)
     target_link_libraries(${PROJECT_NAME} PRIVATE bcrypt)
 endif()
 
+# Add DirectX 11 libraries for CEF accelerated paint on Windows
+if(WIN32 AND USE_CEF)
+    target_link_libraries(${PROJECT_NAME} PRIVATE 
+        d3d11
+        dxgi
+        d3dcompiler
+    )
+    message(STATUS "Added DirectX 11 libraries for CEF accelerated paint")
+endif()
+
 if(USE_CEF)
     otclient_link_cef(${PROJECT_NAME})
 
@@ -264,14 +276,37 @@ endif()
 # Dedicated CEF subprocess executable
 if(USE_CEF)
     # Add manifest to subprocess for GPU detection consistency
-    add_executable(otclient_cef_subproc src/cef_subprocess/main.cpp src/app.manifest)
-    target_compile_definitions(otclient_cef_subproc PRIVATE USE_CEF)
+    set(SUBPROCESS_SOURCES
+        src/cef/subprocess/main.cpp
+        src/cef/core/cef_app.cpp
+        src/cef/core/cef_helper.cpp
+        src/cef/core/cef_config.cpp
+        src/app.manifest
+    )
+    
+    # Add platform-specific configuration files
+    if(WIN32)
+        list(APPEND SUBPROCESS_SOURCES src/cef/core/cef_confwin.cpp)
+    else()
+        list(APPEND SUBPROCESS_SOURCES src/cef/core/cef_conflinux.cpp)
+    endif()
+    
+    add_executable(otclient_cef_subproc ${SUBPROCESS_SOURCES})
+    target_compile_definitions(otclient_cef_subproc PRIVATE USE_CEF CEF_SUBPROCESS_BUILD)
     set_target_properties(otclient_cef_subproc PROPERTIES CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON)
     otclient_link_cef(otclient_cef_subproc)
     
     # Add bcrypt library for Windows 10+ APIs (needed for subprocess too)
     if(WIN32)
         target_link_libraries(otclient_cef_subproc PRIVATE bcrypt)
+        
+        # Add DirectX 11 libraries for CEF subprocess (may be needed for shared textures)
+        target_link_libraries(otclient_cef_subproc PRIVATE 
+            d3d11
+            dxgi
+            d3dcompiler
+        )
+        
         set_target_properties(otclient_cef_subproc PROPERTIES MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
 
         # Set Windows subsystem for the subprocess executable

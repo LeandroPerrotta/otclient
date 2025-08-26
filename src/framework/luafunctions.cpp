@@ -48,9 +48,8 @@
 #include <framework/graphics/particlemanager.h>
 #include <framework/graphics/fontmanager.h>
 #include <framework/ui/ui.h>
-#include <framework/ui/uiwebview.h>
 #ifdef USE_CEF
-#include <framework/ui/uicefwebview.h>
+#include <cef/ui/uicefwebview.h>
 #endif
 #include <framework/input/mouse.h>
 #endif
