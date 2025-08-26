@@ -68,6 +68,9 @@ public:
     virtual void setUserPreference(const std::string& key, const std::string& value) {}
     virtual std::string getUserPreference(const std::string& key) const { return ""; }
 
+    // Shared texture usage (GPU-only features)
+    virtual bool shouldUseSharedTexture() const { return false; }
+
     // Create browser settings with platform-specific defaults
     CefBrowserSettings createBrowserSettings();
 

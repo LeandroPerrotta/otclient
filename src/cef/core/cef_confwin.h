@@ -18,6 +18,7 @@ public:
     CefMainArgs createMainArgs(int argc, const char* argv[]) override;
     bool handleSubprocessExecution(const CefMainArgs& args, CefRefPtr<CefApp> app) override;
     void registerSchemeHandlers() override;
+    bool shouldUseSharedTexture() const override;
     std::string getPlatformName() const override { return "Windows"; }
 
 private:

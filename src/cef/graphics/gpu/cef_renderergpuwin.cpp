@@ -2,6 +2,7 @@
 #include "../../ui/uicefwebview.h"
 #include <framework/core/logger.h>
 #include <framework/graphics/graphics.h>
+#include "../../core/cef_init.h"
 #if defined(USE_CEF) && defined(_WIN32)
 #include <EGL/egl.h>
 #include <EGL/eglext.h>
@@ -97,5 +98,11 @@ bool CefRendererGPUWin::isSupported() const
 #else
     return false;
 #endif
+}
+
+void CefRendererGPUWin::onRenderSupported(CefWindowInfo& windowInfo) const
+{
+    if(g_cefConfig && g_cefConfig->shouldUseSharedTexture())
+        windowInfo.shared_texture_enabled = true;
 }
 

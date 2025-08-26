@@ -121,6 +121,14 @@ void CefConfigWindows::registerSchemeHandlers() {
 #endif
 }
 
+bool CefConfigWindows::shouldUseSharedTexture() const {
+#if defined(OPENGL_ES) && OPENGL_ES == 2
+    return true;
+#else
+    return false;
+#endif
+}
+
 } // namespace cef
 
 #endif // _WIN32

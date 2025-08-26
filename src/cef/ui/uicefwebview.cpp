@@ -317,12 +317,10 @@ void UICEFWebView::createWebView()
     CefWindowInfo window_info;
     window_info.SetAsWindowless(0); // 0 = no parent window
    
-    // Enable shared textures only when GPU acceleration is available
-#if defined(_WIN32) && defined(OPENGL_ES) && OPENGL_ES == 2
-    window_info.shared_texture_enabled = true;
-#else
-    window_info.shared_texture_enabled = false;
-#endif
+    if(m_renderer)
+        m_renderer->onRenderSupported(window_info);
+    else
+        window_info.shared_texture_enabled = false;
     // window_info.external_begin_frame_enabled = true; // Not needed with multi_threaded_message_loop = true
 
     g_logger.info("UICEFWebView: Window info configured for off-screen rendering");
