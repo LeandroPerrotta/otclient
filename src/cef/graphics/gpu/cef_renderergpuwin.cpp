@@ -47,6 +47,13 @@ void CefRendererGPUWin::onPaint(const void* buffer, int width, int height,
 
 void CefRendererGPUWin::onAcceleratedPaint(const CefAcceleratedPaintInfo& info)
 {
+    // Default to full frame update when no dirty rects provided
+    CefRenderHandler::RectList emptyRects;
+    onAcceleratedPaint(info, emptyRects);
+}
+
+void CefRendererGPUWin::onAcceleratedPaint(const CefAcceleratedPaintInfo& info, const CefRenderHandler::RectList& dirtyRects)
+{
 #if defined(USE_CEF) && defined(_WIN32) && defined(OPENGL_ES) && OPENGL_ES == 2
     HANDLE ntHandle = static_cast<HANDLE>(info.shared_texture_handle);
     if (!ntHandle || ntHandle == INVALID_HANDLE_VALUE) {
@@ -69,8 +76,11 @@ void CefRendererGPUWin::onAcceleratedPaint(const CefAcceleratedPaintInfo& info)
     g_logger.debug(stdext::format("CefRendererGPUWin: Processing NT handle %p (duplicated: %p), size: %dx%d", 
                                   ntHandle, duplicatedHandle, width, height));
 
-    // Move operations to main thread where OpenGL context lives
-    g_dispatcher.addEventFromOtherThread([this, duplicatedHandle, width, height]() mutable {
+            // Copy dirty rects for use in the lambda
+        CefRenderHandler::RectList rectsCopy = dirtyRects;
+        
+        // Move operations to main thread where OpenGL context lives  
+        g_dispatcher.addEventFromOtherThread([this, duplicatedHandle, width, height, rectsCopy]() mutable {
         auto closeHandle = [](HANDLE& h) { if (h && h != INVALID_HANDLE_VALUE) { CloseHandle(h); h = nullptr; } };
         
         // First, ensure we have a D3D11 device by trying to open the CEF texture
@@ -118,12 +128,12 @@ void CefRendererGPUWin::onAcceleratedPaint(const CefAcceleratedPaintInfo& info)
             g_logger.info(stdext::format("CefRendererGPUWin: Created new texture %dx%d", width, height));
         }
 
-        // Copy from CEF's NT handle to our classic handle texture
-        if (!copyFromCEFTexture(duplicatedHandle)) {
-            g_logger.error("CefRendererGPUWin: Failed to copy from CEF texture");
-            closeHandle(duplicatedHandle);
-            return;
-        }
+                    // Copy from CEF's NT handle to our classic handle texture
+            if (!copyFromCEFTexture(duplicatedHandle, rectsCopy)) {
+                g_logger.error("CefRendererGPUWin: Failed to copy from CEF texture");
+                closeHandle(duplicatedHandle);
+                return;
+            }
 
         // After D3D11 copy, we may need to refresh the EGL binding
         // This ensures the OpenGL texture sees the updated content
@@ -495,9 +505,17 @@ void CefRendererGPUWin::cleanupEGLPbuffer()
 
 bool CefRendererGPUWin::copyFromCEFTexture(HANDLE ntHandle)
 {
+    // Use empty dirty rects list to trigger full copy
+    CefRenderHandler::RectList emptyRects;
+    return copyFromCEFTexture(ntHandle, emptyRects);
+}
+
+bool CefRendererGPUWin::copyFromCEFTexture(HANDLE ntHandle, const CefRenderHandler::RectList& dirtyRects)
+{
     ID3D11Texture2D* srcTexture = nullptr;
     
-    g_logger.debug(stdext::format("CefRendererGPUWin: Copying from CEF texture handle %p", ntHandle));
+    g_logger.debug(stdext::format("CefRendererGPUWin: Copying from CEF texture handle %p with %zu dirty rects", 
+                                  ntHandle, dirtyRects.size()));
     
     // Open CEF's shared resource with our existing device
     if (!openSharedResourceSafely(ntHandle, &srcTexture)) {
@@ -511,9 +529,53 @@ bool CefRendererGPUWin::copyFromCEFTexture(HANDLE ntHandle)
         g_logger.debug("CefRendererGPUWin: Acquired keyed mutex for copy operation");
     }
 
-    // Copy from source to destination
-    g_logger.debug("CefRendererGPUWin: Performing D3D11 CopyResource");
-    m_d3d11Context->CopyResource(m_destTexture, srcTexture);
+    // Perform copy operation
+    if (dirtyRects.empty()) {
+        // No dirty rects provided - copy entire texture
+        g_logger.debug("CefRendererGPUWin: Performing full D3D11 CopyResource (no dirty rects)");
+        m_d3d11Context->CopyResource(m_destTexture, srcTexture);
+    } else {
+        // Copy only dirty regions for better performance
+        g_logger.debug(stdext::format("CefRendererGPUWin: Performing optimized copy of %zu dirty regions", dirtyRects.size()));
+        
+        size_t totalPixelsCopied = 0;
+        for (const auto& rect : dirtyRects) {
+            // Validate rect bounds
+            if (rect.x < 0 || rect.y < 0 || rect.width <= 0 || rect.height <= 0 ||
+                rect.x + rect.width > m_lastWidth || rect.y + rect.height > m_lastHeight) {
+                g_logger.warning(stdext::format("CefRendererGPUWin: Skipping invalid dirty rect: (%d,%d) %dx%d (texture: %dx%d)",
+                                               rect.x, rect.y, rect.width, rect.height, m_lastWidth, m_lastHeight));
+                continue;
+            }
+
+            // Create D3D11 box for the dirty region
+            D3D11_BOX srcBox = {
+                static_cast<UINT>(rect.x),                    // left
+                static_cast<UINT>(rect.y),                    // top  
+                0,                                            // front
+                static_cast<UINT>(rect.x + rect.width),       // right
+                static_cast<UINT>(rect.y + rect.height),      // bottom
+                1                                             // back
+            };
+            
+            // Copy this specific region
+            m_d3d11Context->CopySubresourceRegion(
+                m_destTexture, 0,                             // dest texture, subresource
+                static_cast<UINT>(rect.x),                    // dest x
+                static_cast<UINT>(rect.y),                    // dest y
+                0,                                            // dest z
+                srcTexture, 0,                                // src texture, subresource
+                &srcBox                                       // src region
+            );
+            
+            totalPixelsCopied += rect.width * rect.height;
+        }
+        
+        g_logger.debug(stdext::format("CefRendererGPUWin: Copied %zu pixels total (%.1f%% of %dx%d texture)",
+                                      totalPixelsCopied, 
+                                      (totalPixelsCopied * 100.0) / (m_lastWidth * m_lastHeight),
+                                      m_lastWidth, m_lastHeight));
+    }
     
     // Flush to ensure copy completes
     m_d3d11Context->Flush();
