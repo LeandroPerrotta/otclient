@@ -125,6 +125,25 @@ void CefRendererGPUWin::onAcceleratedPaint(const CefAcceleratedPaintInfo& info)
             return;
         }
 
+        // After D3D11 copy, we may need to refresh the EGL binding
+        // This ensures the OpenGL texture sees the updated content
+        if (m_pbufferBound) {
+            EGLDisplay display = eglGetCurrentDisplay();
+            
+            // Release and rebind the texture to refresh content
+            g_logger.debug("CefRendererGPUWin: Refreshing EGL texture binding after D3D11 copy");
+            
+            glBindTexture(GL_TEXTURE_2D, m_cefTexture->getId());
+            eglReleaseTexImage(display, m_pbuffer, EGL_BACK_BUFFER);
+            
+            if (eglBindTexImage(display, m_pbuffer, EGL_BACK_BUFFER)) {
+                g_logger.debug("CefRendererGPUWin: Successfully refreshed texture binding");
+            } else {
+                EGLint eglError = eglGetError();
+                g_logger.warning(stdext::format("CefRendererGPUWin: Failed to refresh texture binding, EGL error: 0x%x", eglError));
+            }
+        }
+
         // Clean up the duplicated handle
         closeHandle(duplicatedHandle);
         g_logger.debug("CefRendererGPUWin: Successfully processed frame");
@@ -478,23 +497,35 @@ bool CefRendererGPUWin::copyFromCEFTexture(HANDLE ntHandle)
 {
     ID3D11Texture2D* srcTexture = nullptr;
     
+    g_logger.debug(stdext::format("CefRendererGPUWin: Copying from CEF texture handle %p", ntHandle));
+    
     // Open CEF's shared resource with our existing device
     if (!openSharedResourceSafely(ntHandle, &srcTexture)) {
+        g_logger.error("CefRendererGPUWin: Failed to open CEF shared texture");
         return false;
     }
 
     // Handle keyed mutex if present
     bool mutexAcquired = handleKeyedMutex(srcTexture, m_destTexture, true);
+    if (mutexAcquired) {
+        g_logger.debug("CefRendererGPUWin: Acquired keyed mutex for copy operation");
+    }
 
     // Copy from source to destination
+    g_logger.debug("CefRendererGPUWin: Performing D3D11 CopyResource");
     m_d3d11Context->CopyResource(m_destTexture, srcTexture);
+    
+    // Flush to ensure copy completes
+    m_d3d11Context->Flush();
 
     // Release keyed mutex if acquired
     if (mutexAcquired) {
         handleKeyedMutex(srcTexture, m_destTexture, false);
+        g_logger.debug("CefRendererGPUWin: Released keyed mutex");
     }
 
     srcTexture->Release();
+    g_logger.debug("CefRendererGPUWin: D3D11 copy completed successfully");
     return true;
 }
 
