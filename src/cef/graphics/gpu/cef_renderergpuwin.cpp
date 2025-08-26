@@ -140,15 +140,50 @@ void CefRendererGPUWin::onAcceleratedPaint(const CefAcceleratedPaintInfo& info)
 bool CefRendererGPUWin::isSupported() const
 {
 #if defined(USE_CEF) && defined(_WIN32) && defined(OPENGL_ES) && OPENGL_ES == 2
+    g_logger.info("CefRendererGPUWin: Checking GPU acceleration support...");
+    
     // Check if ANGLE D3D texture sharing extension is available
     EGLDisplay display = eglGetCurrentDisplay();
     if (display == EGL_NO_DISPLAY) {
+        g_logger.error("CefRendererGPUWin: No current EGL display - GPU acceleration not supported");
         return false;
     }
     
+    g_logger.info("CefRendererGPUWin: EGL display available");
+    
     const char* extensions = eglQueryString(display, EGL_EXTENSIONS);
-    return extensions && strstr(extensions, "EGL_ANGLE_d3d_share_handle_client_buffer") != nullptr;
+    if (!extensions) {
+        g_logger.error("CefRendererGPUWin: Failed to query EGL extensions - GPU acceleration not supported");
+        return false;
+    }
+    
+    g_logger.debug(stdext::format("CefRendererGPUWin: Available EGL extensions: %s", extensions));
+    
+    // Check for required ANGLE extension
+    bool hasAngleExtension = strstr(extensions, "EGL_ANGLE_d3d_share_handle_client_buffer") != nullptr;
+    if (!hasAngleExtension) {
+        g_logger.error("CefRendererGPUWin: EGL_ANGLE_d3d_share_handle_client_buffer extension not found - GPU acceleration not supported");
+        g_logger.info("CefRendererGPUWin: This extension is required for D3D11 texture sharing with ANGLE");
+        return false;
+    }
+    
+    // Check EGL vendor to confirm we're using ANGLE
+    const char* vendor = eglQueryString(display, EGL_VENDOR);
+    const char* version = eglQueryString(display, EGL_VERSION);
+    
+    g_logger.info(stdext::format("CefRendererGPUWin: EGL Vendor: %s", vendor ? vendor : "unknown"));
+    g_logger.info(stdext::format("CefRendererGPUWin: EGL Version: %s", version ? version : "unknown"));
+    
+    if (vendor && strstr(vendor, "Google Inc.")) {
+        g_logger.info("CefRendererGPUWin: ANGLE renderer detected");
+    } else {
+        g_logger.warning("CefRendererGPUWin: Non-ANGLE EGL implementation detected - GPU acceleration may not work properly");
+    }
+    
+    g_logger.info("CefRendererGPUWin: GPU acceleration is supported!");
+    return true;
 #else
+    g_logger.info("CefRendererGPUWin: GPU acceleration disabled - not compiled for Windows OpenGL ES 2.0");
     return false;
 #endif
 }
