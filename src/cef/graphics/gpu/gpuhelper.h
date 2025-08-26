@@ -11,3 +11,8 @@
 const char* getEGLErrorString(EGLint error);
 bool isMesaDriver();
 
+#if defined(USE_CEF) && defined(_WIN32)
+void logD3D11DeviceInfo();
+void logEGLInfo();
+#endif
+
