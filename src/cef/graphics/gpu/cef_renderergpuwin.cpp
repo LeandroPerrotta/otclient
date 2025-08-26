@@ -2,10 +2,13 @@
 #include "../../ui/uicefwebview.h"
 #include <framework/core/logger.h>
 #include <framework/graphics/graphics.h>
+#include "../../core/cef_init.h"
+#if defined(USE_CEF)
+#include <include/cef_browser.h>
+#endif
 #if defined(USE_CEF) && defined(_WIN32)
 #include <EGL/egl.h>
 #include <EGL/eglext.h>
-#include <GLES2/gl2ext.h>
 #include <d3d11.h>
 #include <dxgi.h>
 #endif
@@ -93,10 +96,16 @@ void CefRendererGPUWin::onAcceleratedPaint(const CefAcceleratedPaintInfo& info)
 
 bool CefRendererGPUWin::isSupported() const
 {
-#if defined(USE_CEF) && defined(_WIN32)
+#if defined(USE_CEF) && defined(_WIN32) && defined(OPENGL_ES) && OPENGL_ES == 2
     return true;
 #else
     return false;
 #endif
+}
+
+void CefRendererGPUWin::onRenderSupported(CefWindowInfo& windowInfo) const
+{
+    if(g_cefConfig && g_cefConfig->shouldUseSharedTexture())
+        windowInfo.shared_texture_enabled = true;
 }
 

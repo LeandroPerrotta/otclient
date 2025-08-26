@@ -26,6 +26,8 @@
 #include <framework/core/resourcemanager.h>
 #include <framework/luaengine/luainterface.h>
 #include "../graphics/cef_rendererfactory.h"
+#include <cef/core/cef_config.h>
+#include <cef/core/cef_init.h>
 #include "cef_client.h"
 #include "cef_inputhandler.h"
 #include <string>
@@ -35,6 +37,7 @@
 
 #ifdef USE_CEF
 #include "../graphics/cef_renderer.h"
+#include <include/cef_browser.h>
 #include <include/cef_frame.h>
 #include "include/cef_parser.h"
 #endif
@@ -56,8 +59,6 @@ static std::string escape(const std::string& str) {
     return result;
 }
 
-// Global flag to check if CEF was initialized
-extern bool g_cefInitialized;
 
 // Static member initialization
 std::vector<UICEFWebView*> UICEFWebView::s_activeWebViews;
@@ -305,7 +306,7 @@ void UICEFWebView::createWebView()
     g_logger.info("UICEFWebView: Client created successfully");
 
     // Browser settings
-    CefBrowserSettings browser_settings;
+    CefBrowserSettings browser_settings = g_cefConfig ? g_cefConfig->createBrowserSettings() : CefBrowserSettings();
     g_logger.info("UICEFWebView: Browser settings configured");
 
     int maxFps = g_app.getForegroundPaneMaxFps();
@@ -317,7 +318,10 @@ void UICEFWebView::createWebView()
     CefWindowInfo window_info;
     window_info.SetAsWindowless(0); // 0 = no parent window
    
-    window_info.shared_texture_enabled = true;
+    if(m_renderer)
+        m_renderer->onRenderSupported(window_info);
+    else
+        window_info.shared_texture_enabled = false;
     // window_info.external_begin_frame_enabled = true; // Not needed with multi_threaded_message_loop = true
 
     g_logger.info("UICEFWebView: Window info configured for off-screen rendering");

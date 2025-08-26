@@ -33,10 +33,10 @@ set(cef_SOURCES
     $<$<AND:$<BOOL:${USE_CEF}>,$<PLATFORM_ID:Linux>>:${CMAKE_CURRENT_LIST_DIR}/graphics/gpu/cef_renderergpulinuxnonmesa.h>
     $<$<AND:$<BOOL:${USE_CEF}>,$<PLATFORM_ID:Linux>>:${CMAKE_CURRENT_LIST_DIR}/graphics/gpu/linuxgpucontext.cpp>
     $<$<AND:$<BOOL:${USE_CEF}>,$<PLATFORM_ID:Linux>>:${CMAKE_CURRENT_LIST_DIR}/graphics/gpu/linuxgpucontext.h>
-    $<$<AND:$<BOOL:${USE_CEF}>,$<PLATFORM_ID:Windows>>:${CMAKE_CURRENT_LIST_DIR}/graphics/gpu/cef_renderergpuwin.cpp>
-    $<$<AND:$<BOOL:${USE_CEF}>,$<PLATFORM_ID:Windows>>:${CMAKE_CURRENT_LIST_DIR}/graphics/gpu/cef_renderergpuwin.h>
-    $<$<AND:$<BOOL:${USE_CEF}>,$<PLATFORM_ID:Windows>>:${CMAKE_CURRENT_LIST_DIR}/graphics/gpu/windowsgpucontext.cpp>
-    $<$<AND:$<BOOL:${USE_CEF}>,$<PLATFORM_ID:Windows>>:${CMAKE_CURRENT_LIST_DIR}/graphics/gpu/windowsgpucontext.h>
+    $<$<AND:$<BOOL:${USE_CEF}>,$<PLATFORM_ID:Windows>,$<STREQUAL:${OPENGLES},2.0>>:${CMAKE_CURRENT_LIST_DIR}/graphics/gpu/cef_renderergpuwin.cpp>
+    $<$<AND:$<BOOL:${USE_CEF}>,$<PLATFORM_ID:Windows>,$<STREQUAL:${OPENGLES},2.0>>:${CMAKE_CURRENT_LIST_DIR}/graphics/gpu/cef_renderergpuwin.h>
+    $<$<AND:$<BOOL:${USE_CEF}>,$<PLATFORM_ID:Windows>,$<STREQUAL:${OPENGLES},2.0>>:${CMAKE_CURRENT_LIST_DIR}/graphics/gpu/windowsgpucontext.cpp>
+    $<$<AND:$<BOOL:${USE_CEF}>,$<PLATFORM_ID:Windows>,$<STREQUAL:${OPENGLES},2.0>>:${CMAKE_CURRENT_LIST_DIR}/graphics/gpu/windowsgpucontext.h>
     $<$<BOOL:${USE_CEF}>:${CMAKE_CURRENT_LIST_DIR}/resources/cefphysfsresourcehandler.cpp>
     $<$<BOOL:${USE_CEF}>:${CMAKE_CURRENT_LIST_DIR}/resources/cefphysfsresourcehandler.h>
 )
