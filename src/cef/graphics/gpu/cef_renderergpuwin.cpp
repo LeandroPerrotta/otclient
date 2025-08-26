@@ -240,29 +240,41 @@ bool CefRendererGPUWin::createDestinationTexture(int width, int height)
         return false;
     }
 
-    // Try RGBA8 first (might be more compatible with ANGLE than BGRA8)
-    DXGI_FORMAT formats[] = {
-        DXGI_FORMAT_R8G8B8A8_UNORM,  // RGBA8 - try first
-        DXGI_FORMAT_B8G8R8A8_UNORM   // BGRA8 - fallback
+    // ANGLE is very picky about texture parameters for shared handles
+    // Try different combinations that work well with ANGLE
+    struct TextureConfig {
+        DXGI_FORMAT format;
+        UINT bindFlags;
+        const char* name;
+    } configs[] = {
+        // Try the most basic configuration first - just shader resource
+        { DXGI_FORMAT_B8G8R8A8_UNORM, D3D11_BIND_SHADER_RESOURCE, "BGRA8 Shader Resource" },
+        { DXGI_FORMAT_R8G8B8A8_UNORM, D3D11_BIND_SHADER_RESOURCE, "RGBA8 Shader Resource" },
+        
+        // Try with render target (what we had before)
+        { DXGI_FORMAT_B8G8R8A8_UNORM, D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET, "BGRA8 Full" },
+        { DXGI_FORMAT_R8G8B8A8_UNORM, D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET, "RGBA8 Full" },
     };
 
-    for (int i = 0; i < 2; i++) {
+    for (int i = 0; i < 4; i++) {
         // Create texture with classic shared handle
         D3D11_TEXTURE2D_DESC desc = {};
         desc.Width = width;
         desc.Height = height;
         desc.MipLevels = 1;
         desc.ArraySize = 1;
-        desc.Format = formats[i];
+        desc.Format = configs[i].format;
         desc.SampleDesc.Count = 1;
+        desc.SampleDesc.Quality = 0;
         desc.Usage = D3D11_USAGE_DEFAULT;
-        desc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET;
+        desc.BindFlags = configs[i].bindFlags;
+        desc.CPUAccessFlags = 0;
         desc.MiscFlags = D3D11_RESOURCE_MISC_SHARED; // Classic shared handle
 
         HRESULT hr = m_d3d11Device->CreateTexture2D(&desc, nullptr, &m_destTexture);
         if (FAILED(hr)) {
-            g_logger.debug(stdext::format("CefRendererGPUWin: Failed to create texture with format %d, HRESULT: 0x%x", 
-                                         formats[i], hr));
+            g_logger.debug(stdext::format("CefRendererGPUWin: Failed to create texture (%s), HRESULT: 0x%x", 
+                                         configs[i].name, hr));
             continue;
         }
 
@@ -270,7 +282,7 @@ bool CefRendererGPUWin::createDestinationTexture(int width, int height)
         IDXGIResource* dxgiResource = nullptr;
         hr = m_destTexture->QueryInterface(__uuidof(IDXGIResource), (void**)&dxgiResource);
         if (FAILED(hr)) {
-            g_logger.error("CefRendererGPUWin: Failed to query DXGI resource interface");
+            g_logger.debug(stdext::format("CefRendererGPUWin: Failed to query DXGI resource interface (%s)", configs[i].name));
             m_destTexture->Release();
             m_destTexture = nullptr;
             continue;
@@ -280,20 +292,19 @@ bool CefRendererGPUWin::createDestinationTexture(int width, int height)
         dxgiResource->Release();
         
         if (FAILED(hr) || !m_classicSharedHandle) {
-            g_logger.error("CefRendererGPUWin: Failed to get classic shared handle");
+            g_logger.debug(stdext::format("CefRendererGPUWin: Failed to get classic shared handle (%s)", configs[i].name));
             m_destTexture->Release();
             m_destTexture = nullptr;
             continue;
         }
 
         // Success!
-        const char* formatName = (formats[i] == DXGI_FORMAT_R8G8B8A8_UNORM) ? "RGBA8" : "BGRA8";
-        g_logger.debug(stdext::format("CefRendererGPUWin: Created destination texture %dx%d (%s) with classic handle %p", 
-                                      width, height, formatName, m_classicSharedHandle));
+        g_logger.info(stdext::format("CefRendererGPUWin: Created destination texture %dx%d (%s) with handle %p", 
+                                     width, height, configs[i].name, m_classicSharedHandle));
         return true;
     }
 
-    g_logger.error("CefRendererGPUWin: Failed to create destination texture with any format");
+    g_logger.error("CefRendererGPUWin: Failed to create destination texture with any configuration");
     return false;
 }
 
@@ -301,34 +312,96 @@ bool CefRendererGPUWin::setupEGLPbuffer()
 {
     EGLDisplay display = eglGetCurrentDisplay();
     
-    // Choose EGL config - try different approaches
-    EGLint numCfg;
-    EGLint cfgAttrs[] = {
-        EGL_SURFACE_TYPE, EGL_PBUFFER_BIT,
-        EGL_RENDERABLE_TYPE, EGL_OPENGL_ES2_BIT,
-        EGL_RED_SIZE, 8,
-        EGL_GREEN_SIZE, 8,
-        EGL_BLUE_SIZE, 8,
-        EGL_ALPHA_SIZE, 8,
-        EGL_BIND_TO_TEXTURE_RGBA, EGL_TRUE,  // This is important for texture binding
-        EGL_NONE
+    // Try different EGL config approaches - ANGLE can be very picky
+    struct ConfigAttempt {
+        const char* name;
+        EGLint attrs[20];
+    } attempts[] = {
+        {
+            "Basic RGBA8 config",
+            {
+                EGL_SURFACE_TYPE, EGL_PBUFFER_BIT,
+                EGL_RENDERABLE_TYPE, EGL_OPENGL_ES2_BIT,
+                EGL_RED_SIZE, 8,
+                EGL_GREEN_SIZE, 8,
+                EGL_BLUE_SIZE, 8,
+                EGL_ALPHA_SIZE, 8,
+                EGL_NONE
+            }
+        },
+        {
+            "RGBA8 with bind to texture",
+            {
+                EGL_SURFACE_TYPE, EGL_PBUFFER_BIT,
+                EGL_RENDERABLE_TYPE, EGL_OPENGL_ES2_BIT,
+                EGL_RED_SIZE, 8,
+                EGL_GREEN_SIZE, 8,
+                EGL_BLUE_SIZE, 8,
+                EGL_ALPHA_SIZE, 8,
+                EGL_BIND_TO_TEXTURE_RGBA, EGL_TRUE,
+                EGL_NONE
+            }
+        },
+        {
+            "Minimal config",
+            {
+                EGL_SURFACE_TYPE, EGL_PBUFFER_BIT,
+                EGL_RENDERABLE_TYPE, EGL_OPENGL_ES2_BIT,
+                EGL_NONE
+            }
+        }
     };
     
-    if (!eglChooseConfig(display, cfgAttrs, &m_eglConfig, 1, &numCfg) || numCfg == 0) {
-        g_logger.error("CefRendererGPUWin: Failed to choose EGL config for pbuffer");
+    bool configFound = false;
+    for (int configAttempt = 0; configAttempt < 3 && !configFound; configAttempt++) {
+        EGLint numCfg;
+        if (!eglChooseConfig(display, attempts[configAttempt].attrs, &m_eglConfig, 1, &numCfg) || numCfg == 0) {
+            g_logger.debug(stdext::format("CefRendererGPUWin: Config attempt '%s' failed", attempts[configAttempt].name));
+            continue;
+        }
+        
+        g_logger.debug(stdext::format("CefRendererGPUWin: Using config: %s", attempts[configAttempt].name));
+        configFound = true;
+    }
+    
+    if (!configFound) {
+        g_logger.error("CefRendererGPUWin: Failed to find any suitable EGL config");
         return false;
     }
 
-    // Log the config to verify BIND_TO_TEXTURE support
+    // Log the config to verify bind to texture support if applicable
     EGLint bindToTextureRGBA = 0;
     eglGetConfigAttrib(display, m_eglConfig, EGL_BIND_TO_TEXTURE_RGBA, &bindToTextureRGBA);
     g_logger.debug(stdext::format("CefRendererGPUWin: EGL_BIND_TO_TEXTURE_RGBA = %d", bindToTextureRGBA));
 
-    // Try different attribute combinations
+    // Try different attribute combinations with our classic handle
     g_logger.debug(stdext::format("CefRendererGPUWin: Classic handle: %016llx", (uint64_t)m_classicSharedHandle));
 
-    // Approach 1: Basic attributes (most compatible)
+    // Approach 1: Just the essential attributes
     {
+        EGLint attrs[] = {
+            EGL_NONE  // No attributes at all - let ANGLE figure it out
+        };
+
+        m_pbuffer = eglCreatePbufferFromClientBuffer(
+            display,
+            EGL_D3D_TEXTURE_2D_SHARE_HANDLE_ANGLE,
+            (EGLClientBuffer)m_classicSharedHandle,
+            m_eglConfig,
+            attrs
+        );
+
+        if (m_pbuffer != EGL_NO_SURFACE) {
+            g_logger.info("CefRendererGPUWin: Success with no attributes");
+        } else {
+            EGLint eglError = eglGetError();
+            g_logger.debug(stdext::format("CefRendererGPUWin: No attributes failed - EGL error: 0x%x (%s)",
+                                          eglError, getEGLErrorString(eglError)));
+        }
+    }
+
+    // Approach 2: Basic width/height if approach 1 failed
+    if (m_pbuffer == EGL_NO_SURFACE) {
         EGLint attrs[] = {
             EGL_WIDTH, m_lastWidth,
             EGL_HEIGHT, m_lastHeight,
@@ -344,16 +417,16 @@ bool CefRendererGPUWin::setupEGLPbuffer()
         );
 
         if (m_pbuffer != EGL_NO_SURFACE) {
-            g_logger.info("CefRendererGPUWin: Success with basic attributes");
+            g_logger.info("CefRendererGPUWin: Success with basic width/height");
         } else {
             EGLint eglError = eglGetError();
-            g_logger.debug(stdext::format("CefRendererGPUWin: Basic attributes failed - EGL error: 0x%x (%s)",
+            g_logger.debug(stdext::format("CefRendererGPUWin: Basic width/height failed - EGL error: 0x%x (%s)",
                                           eglError, getEGLErrorString(eglError)));
         }
     }
 
-    // Approach 2: Try with texture binding attributes if approach 1 failed
-    if (m_pbuffer == EGL_NO_SURFACE) {
+    // Approach 3: Only if we have bind to texture support
+    if (m_pbuffer == EGL_NO_SURFACE && bindToTextureRGBA) {
         EGLint attrs[] = {
             EGL_WIDTH, m_lastWidth,
             EGL_HEIGHT, m_lastHeight,
@@ -374,36 +447,15 @@ bool CefRendererGPUWin::setupEGLPbuffer()
             g_logger.info("CefRendererGPUWin: Success with texture binding attributes");
         } else {
             EGLint eglError = eglGetError();
-            g_logger.debug(stdext::format("CefRendererGPUWin: Texture binding attributes failed - EGL error: 0x%x (%s)",
-                                          eglError, getEGLErrorString(eglError)));
-        }
-    }
-
-    // Approach 3: Try with just texture target if approach 2 failed
-    if (m_pbuffer == EGL_NO_SURFACE) {
-        EGLint attrs[] = {
-            EGL_WIDTH, m_lastWidth,
-            EGL_HEIGHT, m_lastHeight,
-            EGL_TEXTURE_TARGET, EGL_TEXTURE_2D,
-            EGL_NONE
-        };
-
-        m_pbuffer = eglCreatePbufferFromClientBuffer(
-            display,
-            EGL_D3D_TEXTURE_2D_SHARE_HANDLE_ANGLE,
-            (EGLClientBuffer)m_classicSharedHandle,
-            m_eglConfig,
-            attrs
-        );
-
-        if (m_pbuffer != EGL_NO_SURFACE) {
-            g_logger.info("CefRendererGPUWin: Success with texture target only");
-        } else {
-            EGLint eglError = eglGetError();
             g_logger.error(stdext::format("CefRendererGPUWin: All approaches failed - EGL error: 0x%x (%s)",
                                           eglError, getEGLErrorString(eglError)));
             return false;
         }
+    }
+
+    if (m_pbuffer == EGL_NO_SURFACE) {
+        g_logger.error("CefRendererGPUWin: All pbuffer creation approaches failed");
+        return false;
     }
 
     // If we got here, one of the approaches worked
