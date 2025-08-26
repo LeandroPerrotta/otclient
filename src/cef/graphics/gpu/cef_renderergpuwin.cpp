@@ -73,8 +73,7 @@ void CefRendererGPUWin::onAcceleratedPaint(const CefAcceleratedPaintInfo& info, 
         return;
     }
 
-    g_logger.debug(stdext::format("CefRendererGPUWin: Processing NT handle %p (duplicated: %p), size: %dx%d", 
-                                  ntHandle, duplicatedHandle, width, height));
+        // Remove per-frame debug log
 
             // Copy dirty rects for use in the lambda
         CefRenderHandler::RectList rectsCopy = dirtyRects;
@@ -141,22 +140,19 @@ void CefRendererGPUWin::onAcceleratedPaint(const CefAcceleratedPaintInfo& info, 
             EGLDisplay display = eglGetCurrentDisplay();
             
             // Release and rebind the texture to refresh content
-            g_logger.debug("CefRendererGPUWin: Refreshing EGL texture binding after D3D11 copy");
-            
             glBindTexture(GL_TEXTURE_2D, m_cefTexture->getId());
             eglReleaseTexImage(display, m_pbuffer, EGL_BACK_BUFFER);
             
-            if (eglBindTexImage(display, m_pbuffer, EGL_BACK_BUFFER)) {
-                g_logger.debug("CefRendererGPUWin: Successfully refreshed texture binding");
-            } else {
+            if (!eglBindTexImage(display, m_pbuffer, EGL_BACK_BUFFER)) {
                 EGLint eglError = eglGetError();
                 g_logger.warning(stdext::format("CefRendererGPUWin: Failed to refresh texture binding, EGL error: 0x%x", eglError));
             }
+            // Texture refresh completed (removed success log)
         }
 
         // Clean up the duplicated handle
         closeHandle(duplicatedHandle);
-        g_logger.debug("CefRendererGPUWin: Successfully processed frame");
+        // Frame processed successfully (removed per-frame log)
     });
 #else
     (void)info;
@@ -399,7 +395,7 @@ bool CefRendererGPUWin::setupEGLPbuffer()
         configFound = true;
         configSupportsBinding = attempts[configAttempt].expectsBinding;
         usedConfigName = attempts[configAttempt].name;
-        g_logger.info(stdext::format("CefRendererGPUWin: Using config: %s", usedConfigName));
+        // Using selected EGL config (removed per-setup log)
     }
     
     if (!configFound) {
@@ -410,16 +406,9 @@ bool CefRendererGPUWin::setupEGLPbuffer()
     // Verify the actual bind-to-texture support
     EGLint bindToTextureRGBA = 0;
     eglGetConfigAttrib(display, m_eglConfig, EGL_BIND_TO_TEXTURE_RGBA, &bindToTextureRGBA);
-    g_logger.info(stdext::format("CefRendererGPUWin: Config '%s' - EGL_BIND_TO_TEXTURE_RGBA = %d", 
-                                 usedConfigName, bindToTextureRGBA));
-
-    // Log texture info
-    g_logger.debug(stdext::format("CefRendererGPUWin: Texture size: %dx%d, Classic handle: %016llx", 
-                                  m_lastWidth, m_lastHeight, (uint64_t)m_classicSharedHandle));
+    // Config verified (removed detailed config log)
 
     // Create pbuffer with texture binding attributes
-    g_logger.debug(stdext::format("CefRendererGPUWin: Creating pbuffer with texture binding attributes: size=%dx%d, format=RGBA, target=2D", 
-                                  m_lastWidth, m_lastHeight));
     
     EGLint attrs[] = {
         EGL_WIDTH, m_lastWidth,
@@ -454,8 +443,6 @@ bool CefRendererGPUWin::setupEGLPbuffer()
 
     // Handle texture binding based on config capability
     if (bindToTextureRGBA) {
-        g_logger.info("CefRendererGPUWin: Config supports bind-to-texture, attempting direct binding");
-        
         glBindTexture(GL_TEXTURE_2D, m_cefTexture->getId());
         
         if (eglBindTexImage(display, m_pbuffer, EGL_BACK_BUFFER)) {
@@ -473,13 +460,9 @@ bool CefRendererGPUWin::setupEGLPbuffer()
             EGLint eglError = eglGetError();
             g_logger.warning(stdext::format("CefRendererGPUWin: Direct binding failed (EGL error: 0x%x), trying copy approach", eglError));
         }
-    } else {
-        g_logger.info("CefRendererGPUWin: Config doesn't support bind-to-texture, using copy approach");
     }
 
     // Fallback: Copy from pbuffer to texture using glReadPixels
-    g_logger.info("CefRendererGPUWin: Implementing pbuffer-to-texture copy mechanism");
-    
     // We'll implement the copy in the frame update logic
     // For now, just mark that we have a working pbuffer but no direct binding
     m_pbufferBound = false;  // Not directly bound, but available for copying
@@ -514,8 +497,10 @@ bool CefRendererGPUWin::copyFromCEFTexture(HANDLE ntHandle, const CefRenderHandl
 {
     ID3D11Texture2D* srcTexture = nullptr;
     
-    g_logger.debug(stdext::format("CefRendererGPUWin: Copying from CEF texture handle %p with %zu dirty rects", 
-                                  ntHandle, dirtyRects.size()));
+    // Only log when there are dirty rects for optimization tracking
+    if (!dirtyRects.empty()) {
+        g_logger.debug(stdext::format("CefRendererGPUWin: Optimized copy with %zu dirty rects", dirtyRects.size()));
+    }
     
     // Open CEF's shared resource with our existing device
     if (!openSharedResourceSafely(ntHandle, &srcTexture)) {
@@ -525,19 +510,14 @@ bool CefRendererGPUWin::copyFromCEFTexture(HANDLE ntHandle, const CefRenderHandl
 
     // Handle keyed mutex if present
     bool mutexAcquired = handleKeyedMutex(srcTexture, m_destTexture, true);
-    if (mutexAcquired) {
-        g_logger.debug("CefRendererGPUWin: Acquired keyed mutex for copy operation");
-    }
+    // Removed per-frame mutex log
 
     // Perform copy operation
     if (dirtyRects.empty()) {
-        // No dirty rects provided - copy entire texture
-        g_logger.debug("CefRendererGPUWin: Performing full D3D11 CopyResource (no dirty rects)");
+        // No dirty rects provided - copy entire texture (full copy mode)
         m_d3d11Context->CopyResource(m_destTexture, srcTexture);
     } else {
         // Copy only dirty regions for better performance
-        g_logger.debug(stdext::format("CefRendererGPUWin: Performing optimized copy of %zu dirty regions", dirtyRects.size()));
-        
         size_t totalPixelsCopied = 0;
         for (const auto& rect : dirtyRects) {
             // Validate rect bounds
@@ -571,10 +551,12 @@ bool CefRendererGPUWin::copyFromCEFTexture(HANDLE ntHandle, const CefRenderHandl
             totalPixelsCopied += rect.width * rect.height;
         }
         
-        g_logger.debug(stdext::format("CefRendererGPUWin: Copied %zu pixels total (%.1f%% of %dx%d texture)",
-                                      totalPixelsCopied, 
-                                      (totalPixelsCopied * 100.0) / (m_lastWidth * m_lastHeight),
-                                      m_lastWidth, m_lastHeight));
+        // Only log significant optimizations (< 50% of texture copied)
+        double percentageCopied = (totalPixelsCopied * 100.0) / (m_lastWidth * m_lastHeight);
+        if (percentageCopied < 50.0) {
+            g_logger.debug(stdext::format("CefRendererGPUWin: Optimized copy: %.1f%% of texture (%zu pixels)", 
+                                          percentageCopied, totalPixelsCopied));
+        }
     }
     
     // Flush to ensure copy completes
@@ -583,11 +565,10 @@ bool CefRendererGPUWin::copyFromCEFTexture(HANDLE ntHandle, const CefRenderHandl
     // Release keyed mutex if acquired
     if (mutexAcquired) {
         handleKeyedMutex(srcTexture, m_destTexture, false);
-        g_logger.debug("CefRendererGPUWin: Released keyed mutex");
     }
 
     srcTexture->Release();
-    g_logger.debug("CefRendererGPUWin: D3D11 copy completed successfully");
+    // D3D11 copy completed (removed per-frame log)
     return true;
 }
 
