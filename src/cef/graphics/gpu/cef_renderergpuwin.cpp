@@ -497,10 +497,7 @@ bool CefRendererGPUWin::copyFromCEFTexture(HANDLE ntHandle, const CefRenderHandl
 {
     ID3D11Texture2D* srcTexture = nullptr;
     
-    // Only log when there are dirty rects for optimization tracking
-    if (!dirtyRects.empty()) {
-        g_logger.info(stdext::format("CefRendererGPUWin: Optimized copy with %zu dirty rects", dirtyRects.size()));
-    }
+    // Removed per-frame dirty rects log
     
     // Open CEF's shared resource with our existing device
     if (!openSharedResourceSafely(ntHandle, &srcTexture)) {
@@ -551,12 +548,8 @@ bool CefRendererGPUWin::copyFromCEFTexture(HANDLE ntHandle, const CefRenderHandl
             totalPixelsCopied += rect.width * rect.height;
         }
         
-        // Only log significant optimizations (< 50% of texture copied)
-        double percentageCopied = (totalPixelsCopied * 100.0) / (m_lastWidth * m_lastHeight);
-        if (percentageCopied < 50.0) {
-            g_logger.info(stdext::format("CefRendererGPUWin: Optimized copy: %.1f%% of texture (%zu pixels)", 
-                                         percentageCopied, totalPixelsCopied));
-        }
+        // Optimization tracking removed to avoid per-frame spam
+        // (Performance metrics can be added back for debugging if needed)
     }
     
     // Flush to ensure copy completes
@@ -617,7 +610,7 @@ bool CefRendererGPUWin::openSharedResourceSafely(HANDLE handle, ID3D11Texture2D*
     if (device1ToUse) {
         hr = device1ToUse->OpenSharedResource1(handle, __uuidof(ID3D11Texture2D), (void**)outTexture);
         if (SUCCEEDED(hr)) {
-            g_logger.info("CefRendererGPUWin: Opened NT handle with OpenSharedResource1");
+            // Opened NT handle successfully (removed per-frame log)
             
             // Get adapter LUID if requested
             if (adapterLuid && *outTexture) {
@@ -628,8 +621,7 @@ bool CefRendererGPUWin::openSharedResourceSafely(HANDLE handle, ID3D11Texture2D*
                         DXGI_ADAPTER_DESC desc;
                         if (SUCCEEDED(adapter->GetDesc(&desc))) {
                             *adapterLuid = desc.AdapterLuid;
-                                                        g_logger.info(stdext::format("CefRendererGPUWin: Found adapter LUID: %08x-%08x", 
-                                                          adapterLuid->HighPart, adapterLuid->LowPart));
+                                                        // Found adapter LUID (removed per-frame log)
                         }
                         adapter->Release();
                     }
@@ -643,14 +635,14 @@ bool CefRendererGPUWin::openSharedResourceSafely(HANDLE handle, ID3D11Texture2D*
             if (tempDevice) tempDevice->Release();
             return true;
         }
-        g_logger.info(stdext::format("CefRendererGPUWin: OpenSharedResource1 failed with 0x%x, trying legacy method", hr));
+        // Falling back to legacy method (removed per-frame log)
     }
     
     // Fallback to classic OpenSharedResource
     if (deviceToUse) {
         hr = deviceToUse->OpenSharedResource(handle, __uuidof(ID3D11Texture2D), (void**)outTexture);
         if (SUCCEEDED(hr)) {
-            g_logger.info("CefRendererGPUWin: Opened handle with legacy OpenSharedResource");
+            // Opened handle with legacy method (removed per-frame log)
             
             // Cleanup temp resources
             if (tempContext) tempContext->Release();
