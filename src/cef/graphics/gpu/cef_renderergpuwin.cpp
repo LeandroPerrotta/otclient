@@ -240,20 +240,20 @@ bool CefRendererGPUWin::createDestinationTexture(int width, int height)
         return false;
     }
 
-    // Based on the error "texture not renderable", ANGLE needs RENDER_TARGET
-    // But we'll try different combinations to find what works
+    // Try RGBA8 first since it might be more compatible with EGL than BGRA8
+    // especially when D3D11_CREATE_DEVICE_BGRA_SUPPORT flag is involved
     struct TextureConfig {
         DXGI_FORMAT format;
         UINT bindFlags;
         const char* name;
     } configs[] = {
-        // ANGLE needs render target for the texture to be "renderable"
-        { DXGI_FORMAT_B8G8R8A8_UNORM, D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET, "BGRA8 Renderable" },
+        // Try RGBA8 first - more standard for OpenGL/EGL interop
         { DXGI_FORMAT_R8G8B8A8_UNORM, D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET, "RGBA8 Renderable" },
+        { DXGI_FORMAT_B8G8R8A8_UNORM, D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET, "BGRA8 Renderable" },
         
-        // Try with additional flags that might help ANGLE
-        { DXGI_FORMAT_B8G8R8A8_UNORM, D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET | D3D11_BIND_UNORDERED_ACCESS, "BGRA8 Full Access" },
+        // Fallback with additional flags
         { DXGI_FORMAT_R8G8B8A8_UNORM, D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET | D3D11_BIND_UNORDERED_ACCESS, "RGBA8 Full Access" },
+        { DXGI_FORMAT_B8G8R8A8_UNORM, D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET | D3D11_BIND_UNORDERED_ACCESS, "BGRA8 Full Access" },
     };
 
     for (int i = 0; i < 4; i++) {
@@ -525,7 +525,10 @@ bool CefRendererGPUWin::openSharedResourceSafely(HANDLE handle, ID3D11Texture2D*
         };
         
         D3D_FEATURE_LEVEL featureLevel;
-        UINT flags = D3D11_CREATE_DEVICE_BGRA_SUPPORT;
+        UINT flags = 0;  // Remove BGRA support flag for EGL compatibility
+#ifdef _DEBUG
+        flags |= D3D11_CREATE_DEVICE_DEBUG;
+#endif
         hr = D3D11CreateDevice(
             nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, flags,
             featureLevels, ARRAYSIZE(featureLevels), D3D11_SDK_VERSION,
@@ -638,6 +641,7 @@ bool CefRendererGPUWin::createDeviceOnAdapter(const LUID& adapterLuid)
     }
 
     // Create D3D11 device on the target adapter
+    // Remove BGRA_SUPPORT flag to avoid format compatibility issues with EGL
     D3D_FEATURE_LEVEL featureLevels[] = {
         D3D_FEATURE_LEVEL_11_1,
         D3D_FEATURE_LEVEL_11_0,
@@ -646,11 +650,16 @@ bool CefRendererGPUWin::createDeviceOnAdapter(const LUID& adapterLuid)
     };
 
     D3D_FEATURE_LEVEL featureLevel;
+    UINT createFlags = 0;  // No special flags - keep it simple for EGL compatibility
+#ifdef _DEBUG
+    createFlags |= D3D11_CREATE_DEVICE_DEBUG;
+#endif
+
     hr = D3D11CreateDevice(
         targetAdapter,
         D3D_DRIVER_TYPE_UNKNOWN, // Must use UNKNOWN when specifying adapter
         nullptr,
-        0,
+        createFlags,  // Removed D3D11_CREATE_DEVICE_BGRA_SUPPORT
         featureLevels,
         ARRAYSIZE(featureLevels),
         D3D11_SDK_VERSION,
@@ -669,7 +678,7 @@ bool CefRendererGPUWin::createDeviceOnAdapter(const LUID& adapterLuid)
     // Get D3D11.1 interface
     m_d3d11Device->QueryInterface(__uuidof(ID3D11Device1), (void**)&m_d3d11Device1);
 
-    g_logger.info(stdext::format("CefRendererGPUWin: Created D3D11 device on CEF adapter, feature level: 0x%x", featureLevel));
+    g_logger.info(stdext::format("CefRendererGPUWin: Created D3D11 device on CEF adapter (no BGRA flag), feature level: 0x%x", featureLevel));
     return true;
 }
 
