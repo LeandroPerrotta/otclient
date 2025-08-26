@@ -297,8 +297,8 @@ bool CefRendererGPUWin::createDestinationTexture(int width, int height)
 
         HRESULT hr = m_d3d11Device->CreateTexture2D(&desc, nullptr, &m_destTexture);
         if (FAILED(hr)) {
-            g_logger.debug(stdext::format("CefRendererGPUWin: Failed to create texture (%s), HRESULT: 0x%x", 
-                                         configs[i].name, hr));
+                        g_logger.info(stdext::format("CefRendererGPUWin: Failed to create texture (%s), HRESULT: 0x%x", 
+                                          configs[i].name, hr));
             continue;
         }
 
@@ -306,7 +306,7 @@ bool CefRendererGPUWin::createDestinationTexture(int width, int height)
         IDXGIResource* dxgiResource = nullptr;
         hr = m_destTexture->QueryInterface(__uuidof(IDXGIResource), (void**)&dxgiResource);
         if (FAILED(hr)) {
-            g_logger.debug(stdext::format("CefRendererGPUWin: Failed to query DXGI resource interface (%s)", configs[i].name));
+            g_logger.info(stdext::format("CefRendererGPUWin: Failed to query DXGI resource interface (%s)", configs[i].name));
             m_destTexture->Release();
             m_destTexture = nullptr;
             continue;
@@ -316,7 +316,7 @@ bool CefRendererGPUWin::createDestinationTexture(int width, int height)
         dxgiResource->Release();
         
         if (FAILED(hr) || !m_classicSharedHandle) {
-            g_logger.debug(stdext::format("CefRendererGPUWin: Failed to get classic shared handle (%s)", configs[i].name));
+            g_logger.info(stdext::format("CefRendererGPUWin: Failed to get classic shared handle (%s)", configs[i].name));
             m_destTexture->Release();
             m_destTexture = nullptr;
             continue;
@@ -338,8 +338,8 @@ bool CefRendererGPUWin::setupEGLPbuffer()
     EGLContext context = eglGetCurrentContext();
     EGLSurface currentSurface = eglGetCurrentSurface(EGL_DRAW);
     
-    g_logger.debug(stdext::format("CefRendererGPUWin: EGL state - Display: %p, Context: %p, Surface: %p", 
-                                  display, context, currentSurface));
+    g_logger.info(stdext::format("CefRendererGPUWin: EGL state - Display: %p, Context: %p, Surface: %p", 
+                                 display, context, currentSurface));
     
     if (display == EGL_NO_DISPLAY || context == EGL_NO_CONTEXT) {
         g_logger.error("CefRendererGPUWin: Invalid EGL state for pbuffer creation");
@@ -388,7 +388,7 @@ bool CefRendererGPUWin::setupEGLPbuffer()
     for (int configAttempt = 0; configAttempt < 2 && !configFound; configAttempt++) {
         EGLint numCfg;
         if (!eglChooseConfig(display, attempts[configAttempt].attrs, &m_eglConfig, 1, &numCfg) || numCfg == 0) {
-            g_logger.debug(stdext::format("CefRendererGPUWin: Config attempt '%s' failed", attempts[configAttempt].name));
+            g_logger.info(stdext::format("CefRendererGPUWin: Config attempt '%s' failed", attempts[configAttempt].name));
             continue;
         }
         
@@ -499,7 +499,7 @@ bool CefRendererGPUWin::copyFromCEFTexture(HANDLE ntHandle, const CefRenderHandl
     
     // Only log when there are dirty rects for optimization tracking
     if (!dirtyRects.empty()) {
-        g_logger.debug(stdext::format("CefRendererGPUWin: Optimized copy with %zu dirty rects", dirtyRects.size()));
+        g_logger.info(stdext::format("CefRendererGPUWin: Optimized copy with %zu dirty rects", dirtyRects.size()));
     }
     
     // Open CEF's shared resource with our existing device
@@ -554,8 +554,8 @@ bool CefRendererGPUWin::copyFromCEFTexture(HANDLE ntHandle, const CefRenderHandl
         // Only log significant optimizations (< 50% of texture copied)
         double percentageCopied = (totalPixelsCopied * 100.0) / (m_lastWidth * m_lastHeight);
         if (percentageCopied < 50.0) {
-            g_logger.debug(stdext::format("CefRendererGPUWin: Optimized copy: %.1f%% of texture (%zu pixels)", 
-                                          percentageCopied, totalPixelsCopied));
+            g_logger.info(stdext::format("CefRendererGPUWin: Optimized copy: %.1f%% of texture (%zu pixels)", 
+                                         percentageCopied, totalPixelsCopied));
         }
     }
     
@@ -617,7 +617,7 @@ bool CefRendererGPUWin::openSharedResourceSafely(HANDLE handle, ID3D11Texture2D*
     if (device1ToUse) {
         hr = device1ToUse->OpenSharedResource1(handle, __uuidof(ID3D11Texture2D), (void**)outTexture);
         if (SUCCEEDED(hr)) {
-            g_logger.debug("CefRendererGPUWin: Opened NT handle with OpenSharedResource1");
+            g_logger.info("CefRendererGPUWin: Opened NT handle with OpenSharedResource1");
             
             // Get adapter LUID if requested
             if (adapterLuid && *outTexture) {
@@ -628,8 +628,8 @@ bool CefRendererGPUWin::openSharedResourceSafely(HANDLE handle, ID3D11Texture2D*
                         DXGI_ADAPTER_DESC desc;
                         if (SUCCEEDED(adapter->GetDesc(&desc))) {
                             *adapterLuid = desc.AdapterLuid;
-                            g_logger.debug(stdext::format("CefRendererGPUWin: Found adapter LUID: %08x-%08x", 
-                                                         adapterLuid->HighPart, adapterLuid->LowPart));
+                                                        g_logger.info(stdext::format("CefRendererGPUWin: Found adapter LUID: %08x-%08x", 
+                                                          adapterLuid->HighPart, adapterLuid->LowPart));
                         }
                         adapter->Release();
                     }
@@ -643,14 +643,14 @@ bool CefRendererGPUWin::openSharedResourceSafely(HANDLE handle, ID3D11Texture2D*
             if (tempDevice) tempDevice->Release();
             return true;
         }
-        g_logger.debug(stdext::format("CefRendererGPUWin: OpenSharedResource1 failed with 0x%x, trying legacy method", hr));
+        g_logger.info(stdext::format("CefRendererGPUWin: OpenSharedResource1 failed with 0x%x, trying legacy method", hr));
     }
     
     // Fallback to classic OpenSharedResource
     if (deviceToUse) {
         hr = deviceToUse->OpenSharedResource(handle, __uuidof(ID3D11Texture2D), (void**)outTexture);
         if (SUCCEEDED(hr)) {
-            g_logger.debug("CefRendererGPUWin: Opened handle with legacy OpenSharedResource");
+            g_logger.info("CefRendererGPUWin: Opened handle with legacy OpenSharedResource");
             
             // Cleanup temp resources
             if (tempContext) tempContext->Release();
