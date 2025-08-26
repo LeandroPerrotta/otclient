@@ -158,7 +158,7 @@ bool CefRendererGPUWin::isSupported() const
 #if defined(USE_CEF) && defined(_WIN32) && defined(OPENGL_ES) && OPENGL_ES == 2
     if(g_cefConfig && !g_cefConfig->shouldUseSharedTexture()) {
         g_logger.info("CefRendererGPUWin: Shared texture disabled by config");
-        return m_supported = false;
+        return false;
     }
 
     const char* renderer = reinterpret_cast<const char*>(glGetString(GL_RENDERER));
