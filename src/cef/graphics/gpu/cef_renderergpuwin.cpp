@@ -62,10 +62,22 @@ void CefRendererGPUWin::onAcceleratedPaint(const CefAcceleratedPaintInfo& info)
 
     // Move operations to main thread where OpenGL context lives
     g_dispatcher.addEventFromOtherThread([this, ntHandle, width, height]() {
-        // Initialize D3D11 device on first frame or if needed
+        // First, ensure we have a D3D11 device by trying to open the CEF texture
         if (!m_d3d11Device) {
-            if (!initializeD3D11Device()) {
-                g_logger.error("CefRendererGPUWin: Failed to initialize D3D11 device");
+            ID3D11Texture2D* tempTexture = nullptr;
+            LUID adapterLuid = {};
+            
+            // Open CEF texture to find which adapter it's on
+            if (!openSharedResourceSafely(ntHandle, &tempTexture, &adapterLuid)) {
+                g_logger.error("CefRendererGPUWin: Failed to open CEF texture to determine adapter");
+                return;
+            }
+            
+            tempTexture->Release(); // We only needed this to find the adapter
+            
+            // Create device on the same adapter as CEF
+            if (!createDeviceOnAdapter(adapterLuid)) {
+                g_logger.error("CefRendererGPUWin: Failed to create device on CEF adapter");
                 return;
             }
         }
@@ -331,26 +343,10 @@ void CefRendererGPUWin::cleanupEGLPbuffer()
 bool CefRendererGPUWin::copyFromCEFTexture(HANDLE ntHandle)
 {
     ID3D11Texture2D* srcTexture = nullptr;
-    LUID adapterLuid = {};
     
-    // First, try to open with a temporary device to find the adapter
-    if (!openSharedResourceSafely(ntHandle, &srcTexture, &adapterLuid)) {
+    // Open CEF's shared resource with our existing device
+    if (!openSharedResourceSafely(ntHandle, &srcTexture)) {
         return false;
-    }
-
-    // If we don't have a device yet, or it's on the wrong adapter, create one
-    if (!m_d3d11Device) {
-        srcTexture->Release(); // Release temp texture
-        
-        if (!createDeviceOnAdapter(adapterLuid)) {
-            g_logger.error("CefRendererGPUWin: Failed to create device on CEF adapter");
-            return false;
-        }
-        
-        // Now re-open the texture with our new device
-        if (!openSharedResourceSafely(ntHandle, &srcTexture)) {
-            return false;
-        }
     }
 
     // Handle keyed mutex if present
