@@ -4,6 +4,7 @@
 #include <framework/core/eventdispatcher.h>
 #include <framework/graphics/graphics.h>
 #include "../../core/cef_init.h"
+#include "../../core/cef_config.h"
 #if defined(USE_CEF)
 #include <include/cef_browser.h>
 #endif
