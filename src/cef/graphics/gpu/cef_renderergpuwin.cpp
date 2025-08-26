@@ -70,7 +70,7 @@ void CefRendererGPUWin::onAcceleratedPaint(const CefAcceleratedPaintInfo& info)
                                   ntHandle, duplicatedHandle, width, height));
 
     // Move operations to main thread where OpenGL context lives
-    g_dispatcher.addEventFromOtherThread([this, duplicatedHandle, width, height]() {
+    g_dispatcher.addEventFromOtherThread([this, duplicatedHandle, width, height]() mutable {
         auto closeHandle = [](HANDLE& h) { if (h && h != INVALID_HANDLE_VALUE) { CloseHandle(h); h = nullptr; } };
         
         // First, ensure we have a D3D11 device by trying to open the CEF texture
