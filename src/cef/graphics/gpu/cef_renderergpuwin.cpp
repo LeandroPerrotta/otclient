@@ -240,20 +240,20 @@ bool CefRendererGPUWin::createDestinationTexture(int width, int height)
         return false;
     }
 
-    // ANGLE is very picky about texture parameters for shared handles
-    // Try different combinations that work well with ANGLE
+    // Based on the error "texture not renderable", ANGLE needs RENDER_TARGET
+    // But we'll try different combinations to find what works
     struct TextureConfig {
         DXGI_FORMAT format;
         UINT bindFlags;
         const char* name;
     } configs[] = {
-        // Try the most basic configuration first - just shader resource
-        { DXGI_FORMAT_B8G8R8A8_UNORM, D3D11_BIND_SHADER_RESOURCE, "BGRA8 Shader Resource" },
-        { DXGI_FORMAT_R8G8B8A8_UNORM, D3D11_BIND_SHADER_RESOURCE, "RGBA8 Shader Resource" },
+        // ANGLE needs render target for the texture to be "renderable"
+        { DXGI_FORMAT_B8G8R8A8_UNORM, D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET, "BGRA8 Renderable" },
+        { DXGI_FORMAT_R8G8B8A8_UNORM, D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET, "RGBA8 Renderable" },
         
-        // Try with render target (what we had before)
-        { DXGI_FORMAT_B8G8R8A8_UNORM, D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET, "BGRA8 Full" },
-        { DXGI_FORMAT_R8G8B8A8_UNORM, D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET, "RGBA8 Full" },
+        // Try with additional flags that might help ANGLE
+        { DXGI_FORMAT_B8G8R8A8_UNORM, D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET | D3D11_BIND_UNORDERED_ACCESS, "BGRA8 Full Access" },
+        { DXGI_FORMAT_R8G8B8A8_UNORM, D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET | D3D11_BIND_UNORDERED_ACCESS, "RGBA8 Full Access" },
     };
 
     for (int i = 0; i < 4; i++) {
@@ -311,6 +311,16 @@ bool CefRendererGPUWin::createDestinationTexture(int width, int height)
 bool CefRendererGPUWin::setupEGLPbuffer()
 {
     EGLDisplay display = eglGetCurrentDisplay();
+    EGLContext context = eglGetCurrentContext();
+    EGLSurface currentSurface = eglGetCurrentSurface(EGL_DRAW);
+    
+    g_logger.debug(stdext::format("CefRendererGPUWin: EGL state - Display: %p, Context: %p, Surface: %p", 
+                                  display, context, currentSurface));
+    
+    if (display == EGL_NO_DISPLAY || context == EGL_NO_CONTEXT) {
+        g_logger.error("CefRendererGPUWin: Invalid EGL state for pbuffer creation");
+        return false;
+    }
     
     // Try different EGL config approaches - ANGLE can be very picky
     struct ConfigAttempt {
@@ -374,15 +384,19 @@ bool CefRendererGPUWin::setupEGLPbuffer()
     eglGetConfigAttrib(display, m_eglConfig, EGL_BIND_TO_TEXTURE_RGBA, &bindToTextureRGBA);
     g_logger.debug(stdext::format("CefRendererGPUWin: EGL_BIND_TO_TEXTURE_RGBA = %d", bindToTextureRGBA));
 
-    // Try different attribute combinations with our classic handle
-    g_logger.debug(stdext::format("CefRendererGPUWin: Classic handle: %016llx", (uint64_t)m_classicSharedHandle));
+    // Log additional texture info for debugging
+    g_logger.debug(stdext::format("CefRendererGPUWin: Texture size: %dx%d, Classic handle: %016llx", 
+                                  m_lastWidth, m_lastHeight, (uint64_t)m_classicSharedHandle));
 
-    // Approach 1: Just the essential attributes
+    // Try creating pbuffer with different attribute approaches
+    
+    // Approach 1: Just the essential attributes (let ANGLE auto-detect everything)
     {
         EGLint attrs[] = {
-            EGL_NONE  // No attributes at all - let ANGLE figure it out
+            EGL_NONE  // No attributes at all - let ANGLE figure it out from the D3D texture
         };
 
+        g_logger.debug("CefRendererGPUWin: Trying pbuffer creation with no attributes");
         m_pbuffer = eglCreatePbufferFromClientBuffer(
             display,
             EGL_D3D_TEXTURE_2D_SHARE_HANDLE_ANGLE,
@@ -400,7 +414,7 @@ bool CefRendererGPUWin::setupEGLPbuffer()
         }
     }
 
-    // Approach 2: Basic width/height if approach 1 failed
+    // Approach 2: Explicit width/height 
     if (m_pbuffer == EGL_NO_SURFACE) {
         EGLint attrs[] = {
             EGL_WIDTH, m_lastWidth,
@@ -408,6 +422,7 @@ bool CefRendererGPUWin::setupEGLPbuffer()
             EGL_NONE
         };
 
+        g_logger.debug("CefRendererGPUWin: Trying pbuffer creation with explicit dimensions");
         m_pbuffer = eglCreatePbufferFromClientBuffer(
             display,
             EGL_D3D_TEXTURE_2D_SHARE_HANDLE_ANGLE,
@@ -417,15 +432,15 @@ bool CefRendererGPUWin::setupEGLPbuffer()
         );
 
         if (m_pbuffer != EGL_NO_SURFACE) {
-            g_logger.info("CefRendererGPUWin: Success with basic width/height");
+            g_logger.info("CefRendererGPUWin: Success with explicit dimensions");
         } else {
             EGLint eglError = eglGetError();
-            g_logger.debug(stdext::format("CefRendererGPUWin: Basic width/height failed - EGL error: 0x%x (%s)",
+            g_logger.debug(stdext::format("CefRendererGPUWin: Explicit dimensions failed - EGL error: 0x%x (%s)",
                                           eglError, getEGLErrorString(eglError)));
         }
     }
 
-    // Approach 3: Only if we have bind to texture support
+    // Approach 3: Only if config supports texture binding
     if (m_pbuffer == EGL_NO_SURFACE && bindToTextureRGBA) {
         EGLint attrs[] = {
             EGL_WIDTH, m_lastWidth,
@@ -435,6 +450,7 @@ bool CefRendererGPUWin::setupEGLPbuffer()
             EGL_NONE
         };
 
+        g_logger.debug("CefRendererGPUWin: Trying pbuffer creation with texture binding attributes");
         m_pbuffer = eglCreatePbufferFromClientBuffer(
             display,
             EGL_D3D_TEXTURE_2D_SHARE_HANDLE_ANGLE,
@@ -458,8 +474,14 @@ bool CefRendererGPUWin::setupEGLPbuffer()
         return false;
     }
 
-    // If we got here, one of the approaches worked
+    // Success! Now try to bind to texture
     g_logger.info("CefRendererGPUWin: Pbuffer created successfully, attempting to bind to texture");
+
+    // Make sure we have a valid OpenGL texture
+    if (!m_cefTexture) {
+        g_logger.error("CefRendererGPUWin: No OpenGL texture available for binding");
+        return false;
+    }
 
     // Bind to OpenGL texture
     glBindTexture(GL_TEXTURE_2D, m_cefTexture->getId());
@@ -479,7 +501,7 @@ bool CefRendererGPUWin::setupEGLPbuffer()
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
-    g_logger.debug("CefRendererGPUWin: EGL pbuffer setup successful");
+    g_logger.info("CefRendererGPUWin: EGL pbuffer setup completed successfully!");
     return true;
 }
 
