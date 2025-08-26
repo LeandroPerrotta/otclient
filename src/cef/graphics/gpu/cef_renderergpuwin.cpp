@@ -21,22 +21,15 @@ CefRendererGPUWin::CefRendererGPUWin(UICEFWebView& view)
     , m_lastWidth(0)
     , m_lastHeight(0)
 #if defined(USE_CEF) && defined(_WIN32) && defined(OPENGL_ES) && OPENGL_ES == 2
-    , m_angleD3D11Device(nullptr)
-    , m_angleD3D11Device1(nullptr)
-    , m_angleD3D11Context(nullptr)
-    , m_angleDestTexture(nullptr)
+    , m_d3d11Device(nullptr)
+    , m_d3d11Device1(nullptr)
+    , m_d3d11Context(nullptr)
+    , m_destTexture(nullptr)
     , m_classicSharedHandle(nullptr)
     , m_pbuffer(EGL_NO_SURFACE)
     , m_pbufferBound(false)
-    , eglQueryDisplayAttribEXT(nullptr)
-    , eglQueryDeviceAttribEXT(nullptr)
 #endif
 {
-#if defined(USE_CEF) && defined(_WIN32) && defined(OPENGL_ES) && OPENGL_ES == 2
-    if (!initializeAngleInterop()) {
-        g_logger.error("CefRendererGPUWin: Failed to initialize ANGLE interop");
-    }
-#endif
 }
 
 CefRendererGPUWin::~CefRendererGPUWin()
@@ -69,15 +62,18 @@ void CefRendererGPUWin::onAcceleratedPaint(const CefAcceleratedPaintInfo& info)
 
     // Move operations to main thread where OpenGL context lives
     g_dispatcher.addEventFromOtherThread([this, ntHandle, width, height]() {
-        if (!m_angleD3D11Device) {
-            g_logger.error("CefRendererGPUWin: ANGLE D3D11 device not available");
-            return;
+        // Initialize D3D11 device on first frame or if needed
+        if (!m_d3d11Device) {
+            if (!initializeD3D11Device()) {
+                g_logger.error("CefRendererGPUWin: Failed to initialize D3D11 device");
+                return;
+            }
         }
 
         // Check if we need to recreate destination texture for new size
-        if (!m_angleDestTexture || m_lastWidth != width || m_lastHeight != height) {
-            if (!createAngleDestinationTexture(width, height)) {
-                g_logger.error("CefRendererGPUWin: Failed to create ANGLE destination texture");
+        if (!m_destTexture || m_lastWidth != width || m_lastHeight != height) {
+            if (!createDestinationTexture(width, height)) {
+                g_logger.error("CefRendererGPUWin: Failed to create destination texture");
                 return;
             }
             
@@ -127,23 +123,11 @@ bool CefRendererGPUWin::isSupported() const
         return false;
     }
     
-    // Check for required extensions
+    // Check for required extension
     bool hasD3DExtension = strstr(extensions, "EGL_ANGLE_d3d_share_handle_client_buffer") != nullptr;
-    bool hasDeviceQuery = strstr(extensions, "EGL_EXT_device_query") != nullptr;
-    bool hasAngleDevice = strstr(extensions, "EGL_ANGLE_device_d3d") != nullptr;
     
     if (!hasD3DExtension) {
         g_logger.error("CefRendererGPUWin: EGL_ANGLE_d3d_share_handle_client_buffer extension not found");
-        return false;
-    }
-    
-    if (!hasDeviceQuery) {
-        g_logger.error("CefRendererGPUWin: EGL_EXT_device_query extension not found");
-        return false;
-    }
-    
-    if (!hasAngleDevice) {
-        g_logger.error("CefRendererGPUWin: EGL_ANGLE_device_d3d extension not found");
         return false;
     }
     
@@ -174,45 +158,11 @@ void CefRendererGPUWin::onRenderSupported(CefWindowInfo& windowInfo) const
 
 #if defined(USE_CEF) && defined(_WIN32) && defined(OPENGL_ES) && OPENGL_ES == 2
 
-bool CefRendererGPUWin::initializeAngleInterop()
+bool CefRendererGPUWin::initializeD3D11Device()
 {
-    EGLDisplay display = eglGetCurrentDisplay();
-    if (display == EGL_NO_DISPLAY) {
-        g_logger.error("CefRendererGPUWin: No current EGL display for ANGLE interop");
-        return false;
-    }
-
-    // Get extension function pointers
-    eglQueryDisplayAttribEXT = (PFNEGLQUERYDISPLAYATTRIBEXTPROC)eglGetProcAddress("eglQueryDisplayAttribEXT");
-    eglQueryDeviceAttribEXT = (PFNEGLQUERYDEVICEATTRIBEXTPROC)eglGetProcAddress("eglQueryDeviceAttribEXT");
-    
-    if (!eglQueryDisplayAttribEXT || !eglQueryDeviceAttribEXT) {
-        g_logger.error("CefRendererGPUWin: Failed to get EGL extension function pointers");
-        return false;
-    }
-
-    // Query ANGLE's D3D11 device
-    EGLDeviceEXT eglDevice = nullptr;
-    if (!eglQueryDisplayAttribEXT(display, EGL_DEVICE_EXT, (EGLAttrib*)&eglDevice) || !eglDevice) {
-        g_logger.error("CefRendererGPUWin: Failed to query EGL device");
-        return false;
-    }
-
-    if (!eglQueryDeviceAttribEXT(eglDevice, EGL_D3D11_DEVICE_ANGLE, (EGLAttrib*)&m_angleD3D11Device) || !m_angleD3D11Device) {
-        g_logger.error("CefRendererGPUWin: Failed to get ANGLE D3D11 device");
-        return false;
-    }
-
-    // Get D3D11.1 interface for OpenSharedResource1
-    HRESULT hr = m_angleD3D11Device->QueryInterface(__uuidof(ID3D11Device1), (void**)&m_angleD3D11Device1);
-    if (FAILED(hr)) {
-        g_logger.warning("CefRendererGPUWin: D3D11.1 interface not available, will use legacy OpenSharedResource");
-    }
-
-    // Get device context
-    m_angleD3D11Device->GetImmediateContext(&m_angleD3D11Context);
-
-    g_logger.info("CefRendererGPUWin: ANGLE D3D11 interop initialized successfully");
+    // We'll create the device on-demand when we get the first CEF texture
+    // and can determine which adapter it's on
+    g_logger.info("CefRendererGPUWin: D3D11 device will be created on-demand based on CEF texture adapter");
     return true;
 }
 
@@ -220,34 +170,41 @@ void CefRendererGPUWin::cleanupResources()
 {
     cleanupEGLPbuffer();
     
-    if (m_angleDestTexture) {
-        m_angleDestTexture->Release();
-        m_angleDestTexture = nullptr;
+    if (m_destTexture) {
+        m_destTexture->Release();
+        m_destTexture = nullptr;
     }
     
-    if (m_angleD3D11Context) {
-        m_angleD3D11Context->Release();
-        m_angleD3D11Context = nullptr;
+    if (m_d3d11Context) {
+        m_d3d11Context->Release();
+        m_d3d11Context = nullptr;
     }
     
-    if (m_angleD3D11Device1) {
-        m_angleD3D11Device1->Release();
-        m_angleD3D11Device1 = nullptr;
+    if (m_d3d11Device1) {
+        m_d3d11Device1->Release();
+        m_d3d11Device1 = nullptr;
     }
     
-    // Note: Don't release m_angleD3D11Device as it's owned by ANGLE
-    m_angleD3D11Device = nullptr;
+    if (m_d3d11Device) {
+        m_d3d11Device->Release();
+        m_d3d11Device = nullptr;
+    }
     
     m_classicSharedHandle = nullptr;
 }
 
-bool CefRendererGPUWin::createAngleDestinationTexture(int width, int height)
+bool CefRendererGPUWin::createDestinationTexture(int width, int height)
 {
     // Clean up existing texture
     cleanupEGLPbuffer();
-    if (m_angleDestTexture) {
-        m_angleDestTexture->Release();
-        m_angleDestTexture = nullptr;
+    if (m_destTexture) {
+        m_destTexture->Release();
+        m_destTexture = nullptr;
+    }
+
+    if (!m_d3d11Device) {
+        g_logger.error("CefRendererGPUWin: No D3D11 device available for texture creation");
+        return false;
     }
 
     // Create texture with classic shared handle
@@ -262,7 +219,7 @@ bool CefRendererGPUWin::createAngleDestinationTexture(int width, int height)
     desc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET;
     desc.MiscFlags = D3D11_RESOURCE_MISC_SHARED; // Classic shared handle
 
-    HRESULT hr = m_angleD3D11Device->CreateTexture2D(&desc, nullptr, &m_angleDestTexture);
+    HRESULT hr = m_d3d11Device->CreateTexture2D(&desc, nullptr, &m_destTexture);
     if (FAILED(hr)) {
         g_logger.error(stdext::format("CefRendererGPUWin: Failed to create destination texture, HRESULT: 0x%x", hr));
         return false;
@@ -270,7 +227,7 @@ bool CefRendererGPUWin::createAngleDestinationTexture(int width, int height)
 
     // Get classic shared handle
     IDXGIResource* dxgiResource = nullptr;
-    hr = m_angleDestTexture->QueryInterface(__uuidof(IDXGIResource), (void**)&dxgiResource);
+    hr = m_destTexture->QueryInterface(__uuidof(IDXGIResource), (void**)&dxgiResource);
     if (FAILED(hr)) {
         g_logger.error("CefRendererGPUWin: Failed to query DXGI resource interface");
         return false;
@@ -374,50 +331,209 @@ void CefRendererGPUWin::cleanupEGLPbuffer()
 bool CefRendererGPUWin::copyFromCEFTexture(HANDLE ntHandle)
 {
     ID3D11Texture2D* srcTexture = nullptr;
+    LUID adapterLuid = {};
     
-    // Open CEF's shared resource (try NT handle first, fallback to classic)
-    if (!openSharedResourceSafely(ntHandle, &srcTexture)) {
+    // First, try to open with a temporary device to find the adapter
+    if (!openSharedResourceSafely(ntHandle, &srcTexture, &adapterLuid)) {
         return false;
     }
 
+    // If we don't have a device yet, or it's on the wrong adapter, create one
+    if (!m_d3d11Device) {
+        srcTexture->Release(); // Release temp texture
+        
+        if (!createDeviceOnAdapter(adapterLuid)) {
+            g_logger.error("CefRendererGPUWin: Failed to create device on CEF adapter");
+            return false;
+        }
+        
+        // Now re-open the texture with our new device
+        if (!openSharedResourceSafely(ntHandle, &srcTexture)) {
+            return false;
+        }
+    }
+
     // Handle keyed mutex if present
-    bool mutexAcquired = handleKeyedMutex(srcTexture, m_angleDestTexture, true);
+    bool mutexAcquired = handleKeyedMutex(srcTexture, m_destTexture, true);
 
     // Copy from source to destination
-    m_angleD3D11Context->CopyResource(m_angleDestTexture, srcTexture);
+    m_d3d11Context->CopyResource(m_destTexture, srcTexture);
 
     // Release keyed mutex if acquired
     if (mutexAcquired) {
-        handleKeyedMutex(srcTexture, m_angleDestTexture, false);
+        handleKeyedMutex(srcTexture, m_destTexture, false);
     }
 
     srcTexture->Release();
     return true;
 }
 
-bool CefRendererGPUWin::openSharedResourceSafely(HANDLE handle, ID3D11Texture2D** outTexture)
+bool CefRendererGPUWin::openSharedResourceSafely(HANDLE handle, ID3D11Texture2D** outTexture, LUID* adapterLuid)
 {
     HRESULT hr = E_FAIL;
+    ID3D11Device* deviceToUse = m_d3d11Device;
+    ID3D11Device1* device1ToUse = m_d3d11Device1;
+    
+    // If we need to find the adapter, create a temporary device
+    ID3D11Device* tempDevice = nullptr;
+    ID3D11Device1* tempDevice1 = nullptr;
+    ID3D11DeviceContext* tempContext = nullptr;
+    
+    if (!deviceToUse && adapterLuid) {
+        // Create temporary device to find adapter
+        D3D_FEATURE_LEVEL featureLevels[] = {
+            D3D_FEATURE_LEVEL_11_1,
+            D3D_FEATURE_LEVEL_11_0,
+            D3D_FEATURE_LEVEL_10_1,
+            D3D_FEATURE_LEVEL_10_0
+        };
+        
+        D3D_FEATURE_LEVEL featureLevel;
+        hr = D3D11CreateDevice(
+            nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, 0,
+            featureLevels, ARRAYSIZE(featureLevels), D3D11_SDK_VERSION,
+            &tempDevice, &featureLevel, &tempContext
+        );
+        
+        if (FAILED(hr)) {
+            g_logger.error(stdext::format("CefRendererGPUWin: Failed to create temporary D3D11 device: 0x%x", hr));
+            return false;
+        }
+        
+        tempDevice->QueryInterface(__uuidof(ID3D11Device1), (void**)&tempDevice1);
+        deviceToUse = tempDevice;
+        device1ToUse = tempDevice1;
+    }
     
     // Try D3D11.1 OpenSharedResource1 first for NT handles
-    if (m_angleD3D11Device1) {
-        hr = m_angleD3D11Device1->OpenSharedResource1(handle, __uuidof(ID3D11Texture2D), (void**)outTexture);
+    if (device1ToUse) {
+        hr = device1ToUse->OpenSharedResource1(handle, __uuidof(ID3D11Texture2D), (void**)outTexture);
         if (SUCCEEDED(hr)) {
             g_logger.debug("CefRendererGPUWin: Opened NT handle with OpenSharedResource1");
+            
+            // Get adapter LUID if requested
+            if (adapterLuid && *outTexture) {
+                IDXGIDevice* dxgiDevice = nullptr;
+                if (SUCCEEDED(deviceToUse->QueryInterface(__uuidof(IDXGIDevice), (void**)&dxgiDevice))) {
+                    IDXGIAdapter* adapter = nullptr;
+                    if (SUCCEEDED(dxgiDevice->GetAdapter(&adapter))) {
+                        DXGI_ADAPTER_DESC desc;
+                        if (SUCCEEDED(adapter->GetDesc(&desc))) {
+                            *adapterLuid = desc.AdapterLuid;
+                            g_logger.debug(stdext::format("CefRendererGPUWin: Found adapter LUID: %08x-%08x", 
+                                                         adapterLuid->HighPart, adapterLuid->LowPart));
+                        }
+                        adapter->Release();
+                    }
+                    dxgiDevice->Release();
+                }
+            }
+            
+            // Cleanup temp resources
+            if (tempContext) tempContext->Release();
+            if (tempDevice1) tempDevice1->Release();
+            if (tempDevice) tempDevice->Release();
             return true;
         }
         g_logger.debug(stdext::format("CefRendererGPUWin: OpenSharedResource1 failed with 0x%x, trying legacy method", hr));
     }
     
     // Fallback to classic OpenSharedResource
-    hr = m_angleD3D11Device->OpenSharedResource(handle, __uuidof(ID3D11Texture2D), (void**)outTexture);
-    if (SUCCEEDED(hr)) {
-        g_logger.debug("CefRendererGPUWin: Opened handle with legacy OpenSharedResource");
-        return true;
+    if (deviceToUse) {
+        hr = deviceToUse->OpenSharedResource(handle, __uuidof(ID3D11Texture2D), (void**)outTexture);
+        if (SUCCEEDED(hr)) {
+            g_logger.debug("CefRendererGPUWin: Opened handle with legacy OpenSharedResource");
+            
+            // Cleanup temp resources
+            if (tempContext) tempContext->Release();
+            if (tempDevice1) tempDevice1->Release();
+            if (tempDevice) tempDevice->Release();
+            return true;
+        }
     }
+    
+    // Cleanup temp resources on failure
+    if (tempContext) tempContext->Release();
+    if (tempDevice1) tempDevice1->Release();
+    if (tempDevice) tempDevice->Release();
     
     g_logger.error(stdext::format("CefRendererGPUWin: Both OpenSharedResource methods failed, HRESULT: 0x%x", hr));
     return false;
+}
+
+bool CefRendererGPUWin::createDeviceOnAdapter(const LUID& adapterLuid)
+{
+    // Enumerate adapters to find the one with matching LUID
+    IDXGIFactory1* factory = nullptr;
+    HRESULT hr = CreateDXGIFactory1(__uuidof(IDXGIFactory1), (void**)&factory);
+    if (FAILED(hr)) {
+        g_logger.error("CefRendererGPUWin: Failed to create DXGI factory");
+        return false;
+    }
+
+    IDXGIAdapter1* targetAdapter = nullptr;
+    for (UINT i = 0; ; ++i) {
+        IDXGIAdapter1* adapter = nullptr;
+        hr = factory->EnumAdapters1(i, &adapter);
+        if (hr == DXGI_ERROR_NOT_FOUND) {
+            break; // No more adapters
+        }
+        if (FAILED(hr)) {
+            continue;
+        }
+
+        DXGI_ADAPTER_DESC1 desc;
+        if (SUCCEEDED(adapter->GetDesc1(&desc))) {
+            if (desc.AdapterLuid.LowPart == adapterLuid.LowPart && 
+                desc.AdapterLuid.HighPart == adapterLuid.HighPart) {
+                targetAdapter = adapter;
+                g_logger.info(stdext::format("CefRendererGPUWin: Found matching adapter: %ws", desc.Description));
+                break;
+            }
+        }
+        adapter->Release();
+    }
+    factory->Release();
+
+    if (!targetAdapter) {
+        g_logger.error("CefRendererGPUWin: Could not find adapter with matching LUID");
+        return false;
+    }
+
+    // Create D3D11 device on the target adapter
+    D3D_FEATURE_LEVEL featureLevels[] = {
+        D3D_FEATURE_LEVEL_11_1,
+        D3D_FEATURE_LEVEL_11_0,
+        D3D_FEATURE_LEVEL_10_1,
+        D3D_FEATURE_LEVEL_10_0
+    };
+
+    D3D_FEATURE_LEVEL featureLevel;
+    hr = D3D11CreateDevice(
+        targetAdapter,
+        D3D_DRIVER_TYPE_UNKNOWN, // Must use UNKNOWN when specifying adapter
+        nullptr,
+        0,
+        featureLevels,
+        ARRAYSIZE(featureLevels),
+        D3D11_SDK_VERSION,
+        &m_d3d11Device,
+        &featureLevel,
+        &m_d3d11Context
+    );
+
+    targetAdapter->Release();
+
+    if (FAILED(hr)) {
+        g_logger.error(stdext::format("CefRendererGPUWin: Failed to create D3D11 device on adapter, HRESULT: 0x%x", hr));
+        return false;
+    }
+
+    // Get D3D11.1 interface
+    m_d3d11Device->QueryInterface(__uuidof(ID3D11Device1), (void**)&m_d3d11Device1);
+
+    g_logger.info(stdext::format("CefRendererGPUWin: Created D3D11 device on CEF adapter, feature level: 0x%x", featureLevel));
+    return true;
 }
 
 bool CefRendererGPUWin::handleKeyedMutex(ID3D11Texture2D* srcTexture, ID3D11Texture2D* dstTexture, bool acquire)

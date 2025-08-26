@@ -27,13 +27,13 @@ private:
     int m_lastHeight;
     
 #if defined(USE_CEF) && defined(_WIN32) && defined(OPENGL_ES) && OPENGL_ES == 2
-    // ANGLE D3D11 device (obtained from EGL)
-    ID3D11Device* m_angleD3D11Device;
-    ID3D11Device1* m_angleD3D11Device1;
-    ID3D11DeviceContext* m_angleD3D11Context;
+    // Our D3D11 device (on same adapter as CEF)
+    ID3D11Device* m_d3d11Device;
+    ID3D11Device1* m_d3d11Device1;
+    ID3D11DeviceContext* m_d3d11Context;
     
     // Our destination texture (created with classic shared handle)
-    ID3D11Texture2D* m_angleDestTexture;
+    ID3D11Texture2D* m_destTexture;
     HANDLE m_classicSharedHandle;
     
     // EGL pbuffer for texture sharing
@@ -41,20 +41,17 @@ private:
     EGLConfig m_eglConfig;
     bool m_pbufferBound;
     
-    // Extension function pointers
-    PFNEGLQUERYDISPLAYATTRIBEXTPROC eglQueryDisplayAttribEXT;
-    PFNEGLQUERYDEVICEATTRIBEXTPROC eglQueryDeviceAttribEXT;
-    
     // Initialization and cleanup
-    bool initializeAngleInterop();
+    bool initializeD3D11Device();
     void cleanupResources();
-    bool createAngleDestinationTexture(int width, int height);
+    bool createDestinationTexture(int width, int height);
     bool setupEGLPbuffer();
     void cleanupEGLPbuffer();
     
     // Per-frame operations
     bool copyFromCEFTexture(HANDLE ntHandle);
-    bool openSharedResourceSafely(HANDLE handle, ID3D11Texture2D** outTexture);
+    bool openSharedResourceSafely(HANDLE handle, ID3D11Texture2D** outTexture, LUID* adapterLuid = nullptr);
+    bool createDeviceOnAdapter(const LUID& adapterLuid);
     bool handleKeyedMutex(ID3D11Texture2D* srcTexture, ID3D11Texture2D* dstTexture, bool acquire);
 #endif
 };
