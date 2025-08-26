@@ -15,11 +15,7 @@ normally be displayed by the browser.
 **Prerequisites:**
 - Same procedure as build regular OTClient, but when preparing the build with cmake you need to activate CEF:
   - `cmake -DUSE_CEF=ON ..`
-<<<<<<< HEAD
 - Download and install CEF. It's needed to be specific version 139.0 (automated script is available `setup_cef.sh`)
-=======
-- For faster incremental builds, use the provided `pre-build.sh` script which caches build artifacts.
->>>>>>> 828d13747009e196503c62438a6cfa363f43f959
 
 ### Windows Builds with vcpkg and Visual Studio 2022
 
