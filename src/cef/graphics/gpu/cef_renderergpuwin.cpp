@@ -3,6 +3,9 @@
 #include <framework/core/logger.h>
 #include <framework/graphics/graphics.h>
 #include "../../core/cef_init.h"
+#if defined(USE_CEF)
+#include <include/cef_browser.h>
+#endif
 #if defined(USE_CEF) && defined(_WIN32)
 #include <EGL/egl.h>
 #include <EGL/eglext.h>

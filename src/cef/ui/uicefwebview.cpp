@@ -37,6 +37,7 @@
 
 #ifdef USE_CEF
 #include "../graphics/cef_renderer.h"
+#include <include/cef_browser.h>
 #include <include/cef_frame.h>
 #include "include/cef_parser.h"
 #endif

@@ -2,6 +2,9 @@
 #include "../ui/uicefwebview.h"
 #include <framework/graphics/graphics.h>
 #include <framework/graphics/texture.h>
+#ifdef USE_CEF
+#include "include/cef_browser.h"
+#endif
 
 void CefRenderer::draw(Fw::DrawPane drawPane)
 {
@@ -12,3 +15,10 @@ void CefRenderer::draw(Fw::DrawPane drawPane)
     }
     (void)drawPane;
 }
+
+#ifdef USE_CEF
+void CefRenderer::onRenderSupported(CefWindowInfo& windowInfo) const
+{
+    windowInfo.shared_texture_enabled = false;
+}
+#endif

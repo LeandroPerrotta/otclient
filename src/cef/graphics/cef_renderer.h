@@ -4,7 +4,7 @@
 
 #ifdef USE_CEF
 #include "include/cef_render_handler.h"
-#include "include/cef_window_info.h"
+struct CefWindowInfo;
 #endif
 
 class UICEFWebView;
@@ -19,10 +19,7 @@ public:
     virtual void onPaint(const void* buffer, int width, int height,
                          const CefRenderHandler::RectList& dirtyRects) = 0;
     virtual void onAcceleratedPaint(const CefAcceleratedPaintInfo& info) = 0;
-    virtual void onRenderSupported(CefWindowInfo& windowInfo) const
-    {
-        windowInfo.shared_texture_enabled = false;
-    }
+    virtual void onRenderSupported(CefWindowInfo& windowInfo) const;
 #endif
     virtual void draw(Fw::DrawPane drawPane);
     virtual bool isSupported() const { return true; }
