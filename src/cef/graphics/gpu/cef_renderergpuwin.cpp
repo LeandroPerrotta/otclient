@@ -388,12 +388,15 @@ bool CefRendererGPUWin::setupEGLPbuffer()
     g_logger.debug(stdext::format("CefRendererGPUWin: Texture size: %dx%d, Classic handle: %016llx", 
                                   m_lastWidth, m_lastHeight, (uint64_t)m_classicSharedHandle));
 
-    // Create pbuffer with explicit dimensions (known to work)
-    g_logger.debug("CefRendererGPUWin: Creating pbuffer with explicit dimensions");
+    // Create pbuffer with texture binding attributes
+    g_logger.debug(stdext::format("CefRendererGPUWin: Creating pbuffer with texture binding attributes: size=%dx%d, format=RGBA, target=2D", 
+                                  m_lastWidth, m_lastHeight));
     
     EGLint attrs[] = {
         EGL_WIDTH, m_lastWidth,
         EGL_HEIGHT, m_lastHeight,
+        EGL_TEXTURE_FORMAT, EGL_TEXTURE_RGBA,
+        EGL_TEXTURE_TARGET, EGL_TEXTURE_2D,
         EGL_NONE
     };
 
