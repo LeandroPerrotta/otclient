@@ -41,6 +41,7 @@
 #include "framebuffermanager.h"
 #include <framework/platform/platformwindow.h>
 #include <cstring>
+#include <thread>
 
 Graphics g_graphics;
 
@@ -52,6 +53,28 @@ Graphics::Graphics()
 
 void Graphics::init()
 {
+    // Log da thread atual na inicialização do OpenGL
+    std::thread::id threadId = std::this_thread::get_id();
+    g_logger.info(stdext::format("OpenGL initialization running on thread ID: %s", 
+                                std::to_string(std::hash<std::thread::id>{}(threadId)).c_str()));
+    
+    // Log detalhado do contexto OpenGL atual
+#ifdef GLX_VERSION_1_3
+    Display* currentDisplay = glXGetCurrentDisplay();
+    GLXContext currentContext = glXGetCurrentContext();
+    GLXDrawable currentDrawable = glXGetCurrentDrawable();
+    g_logger.info(stdext::format("OpenGL Init - GLX Context: display=%p, context=%p, drawable=%p", 
+                                currentDisplay, currentContext, currentDrawable));
+#endif
+
+#ifdef EGL_VERSION_1_0
+    EGLDisplay eglDisplay = eglGetCurrentDisplay();
+    EGLContext eglContext = eglGetCurrentContext();
+    EGLSurface eglSurface = eglGetCurrentSurface(EGL_DRAW);
+    g_logger.info(stdext::format("OpenGL Init - EGL Context: display=%p, context=%p, surface=%p", 
+                                eglDisplay, eglContext, eglSurface));
+#endif
+    
     g_logger.info(stdext::format("GPU %s", glGetString(GL_RENDERER)));
     g_logger.info(stdext::format("OpenGL %s", glGetString(GL_VERSION)));
 

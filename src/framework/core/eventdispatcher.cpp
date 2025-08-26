@@ -42,6 +42,29 @@ void EventDispatcher::shutdown()
 
 void EventDispatcher::poll()
 {
+    // Process thread-safe events first
+    {
+        std::lock_guard<std::mutex> lock(m_threadSafeMutex);
+        while (!m_threadSafeEventQueue.empty()) {
+            auto [callback, pushFront] = m_threadSafeEventQueue.front();
+            m_threadSafeEventQueue.pop_front();
+            
+            if (callback && !m_disabled) {
+                EventPtr event(new Event(callback));
+                if (pushFront) {
+                    m_eventList.push_front(event);
+                    m_pollEventsSize++;
+                } else {
+                    m_eventList.push_back(event);
+                }
+            }
+        }
+    }
+
+    // Don't process events if disabled
+    if (m_disabled)
+        return;
+
     int loops = 0;
     for(int count = 0, max = m_scheduledEventList.size(); count < max && !m_scheduledEventList.empty(); ++count) {
         ScheduledEventPtr scheduledEvent = m_scheduledEventList.top();
@@ -77,6 +100,15 @@ void EventDispatcher::poll()
 
         loops++;
     }
+}
+
+void EventDispatcher::addEventFromOtherThread(const std::function<void()>& callback, bool pushFront)
+{
+    if(m_disabled || !callback)
+        return;
+        
+    std::lock_guard<std::mutex> lock(m_threadSafeMutex);
+    m_threadSafeEventQueue.emplace_back(callback, pushFront);
 }
 
 ScheduledEventPtr EventDispatcher::scheduleEvent(const std::function<void()>& callback, int delay)

@@ -7,13 +7,14 @@
 #include <include/cef_request.h>
 #include <include/cef_scheme.h>
 #include <string>
+#include <cstdint>
 
 class CefPhysFsResourceHandler : public CefResourceHandler {
 public:
     explicit CefPhysFsResourceHandler(const std::string& path);
 
     bool ProcessRequest(CefRefPtr<CefRequest> request, CefRefPtr<CefCallback> callback) override;
-    void GetResponseHeaders(CefRefPtr<CefResponse> response, int64& response_length, CefString& redirectUrl) override;
+    void GetResponseHeaders(CefRefPtr<CefResponse> response, int64_t& response_length, CefString& redirectUrl) override;
     bool Read(void* data_out, int bytes_to_read, int& bytes_read, CefRefPtr<CefResourceReadCallback> callback) override;
     void Cancel() override;
 

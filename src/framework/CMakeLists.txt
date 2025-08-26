@@ -326,7 +326,9 @@ if(WIN32)
         set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -mthreads")
     endif()
 
-    set(framework_DEFINITIONS ${framework_DEFINITIONS} -D_WIN32_WINNT=0x0501 -DWIN32)
+    # Update Windows version for modern GPU detection (was 0x0501 = WinXP)
+    # 0x0A00 = Windows 10, better for CEF GPU detection in VMs
+    set(framework_DEFINITIONS ${framework_DEFINITIONS} -D_WIN32_WINNT=0x0A00 -DWIN32)
     #set(CMAKE_CXX_LINK_FLAGS "${CMAKE_CXX_LINK_FLAGS} -Wl,--large-address-aware") # strip all debug information
     set(SYSTEM_LIBRARIES "")
 else()
@@ -369,6 +371,11 @@ if(FRAMEWORK_GRAPHICS)
             SET(OPENGL_LIBRARIES GL)
         else()
             find_package(OpenGL REQUIRED)
+            if(UNIX AND NOT APPLE)
+                find_package(EGL REQUIRED)
+                set(framework_INCLUDE_DIRS ${framework_INCLUDE_DIRS} ${EGL_INCLUDE_DIR})
+                set(framework_LIBRARIES ${framework_LIBRARIES} ${EGL_LIBRARY})
+            endif()
         endif()
         find_package(GLEW REQUIRED)
         set(framework_LIBRARIES ${framework_LIBRARIES} ${GLEW_LIBRARY} ${OPENGL_LIBRARIES})
@@ -489,14 +496,6 @@ if(FRAMEWORK_GRAPHICS)
         ${CMAKE_CURRENT_LIST_DIR}/ui/uiwidget.h
         ${CMAKE_CURRENT_LIST_DIR}/ui/uiwidgetimage.cpp
         ${CMAKE_CURRENT_LIST_DIR}/ui/uiwidgettext.cpp
-        ${CMAKE_CURRENT_LIST_DIR}/ui/uiwebview.cpp
-        ${CMAKE_CURRENT_LIST_DIR}/ui/uiwebview.h
-
-        # CEF WebView (conditional)
-        $<$<BOOL:${USE_CEF}>:${CMAKE_CURRENT_LIST_DIR}/ui/uicefwebview.cpp>
-        $<$<BOOL:${USE_CEF}>:${CMAKE_CURRENT_LIST_DIR}/ui/uicefwebview.h>
-        $<$<BOOL:${USE_CEF}>:${CMAKE_CURRENT_LIST_DIR}/ui/cefphysfsresourcehandler.cpp>
-        $<$<BOOL:${USE_CEF}>:${CMAKE_CURRENT_LIST_DIR}/ui/cefphysfsresourcehandler.h>        
 
         # platform window
         ${CMAKE_CURRENT_LIST_DIR}/platform/platformwindow.cpp
@@ -629,6 +628,12 @@ endif()
 
 if(EXTRA_LIBS)
     set(framework_LIBRARIES ${framework_LIBRARIES} ${EXTRA_LIBS})
+endif()
+
+# Add DirectX 11 libraries for CEF accelerated paint on Windows
+if(WIN32 AND USE_CEF)
+    set(framework_LIBRARIES ${framework_LIBRARIES} d3d11 dxgi d3dcompiler)
+    message(STATUS "Added DirectX 11 libraries to framework for CEF accelerated paint")
 endif()
 
 include_directories(${framework_INCLUDE_DIRS})

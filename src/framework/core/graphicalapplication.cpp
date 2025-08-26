@@ -38,7 +38,7 @@
 
 #ifdef USE_CEF
 #include "include/cef_app.h"
-#include <framework/ui/uicefwebview.h>
+#include <cef/ui/uicefwebview.h>
 #endif
 
 GraphicalApplication g_app;
@@ -137,8 +137,8 @@ void GraphicalApplication::run()
         poll();
 
 #ifdef USE_CEF
-        // Process CEF messages
-        CefDoMessageLoopWork();
+        // With multi_threaded_message_loop = true, CEF manages its own message loop and rendering
+        // No manual intervention needed in main loop
 #endif
 
         if(g_window.isVisible()) {

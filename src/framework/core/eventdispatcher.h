@@ -27,6 +27,8 @@
 #include "scheduledevent.h"
 
 #include <queue>
+#include <mutex>
+#include <condition_variable>
 
 // @bindsingleton g_dispatcher
 class EventDispatcher
@@ -38,12 +40,20 @@ public:
     EventPtr addEvent(const std::function<void()>& callback, bool pushFront = false);
     ScheduledEventPtr scheduleEvent(const std::function<void()>& callback, int delay);
     ScheduledEventPtr cycleEvent(const std::function<void()>& callback, int delay);
+    
+    // Thread-safe method for CEF callbacks
+    void addEventFromOtherThread(const std::function<void()>& callback, bool pushFront = false);
 
 private:
     std::deque<EventPtr> m_eventList;
     int m_pollEventsSize;
     stdext::boolean<false> m_disabled;
     std::priority_queue<ScheduledEventPtr, std::deque<ScheduledEventPtr>, ScheduledEvent::Compare> m_scheduledEventList;
+    
+    // Thread-safe queue for events from other threads
+    std::deque<std::pair<std::function<void()>, bool>> m_threadSafeEventQueue;
+    std::mutex m_threadSafeMutex;
+    std::condition_variable m_threadSafeCondition;
 };
 
 extern EventDispatcher g_dispatcher;

@@ -257,4 +257,6 @@ GitHub.sublime-settings
 
 # Runtime CEF files
 cef/
+!/src/cef/
+!/src/cef/**
 GPUCache/

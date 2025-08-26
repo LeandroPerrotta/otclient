@@ -13,6 +13,7 @@ normally be displayed by the browser.
 - Download and install CEF. It's needed to be specific version 103.0 (automated script is available `setup_cef.sh`)
 - Same procedure as build regular OTClient, but when preparing the build with cmake you need to set USE_CEF=ON:
   - `cmake -DUSE_CEF=ON ..`
+- For faster incremental builds, use the provided `pre-build.sh` script which caches build artifacts.
 
 ## TODO
 
