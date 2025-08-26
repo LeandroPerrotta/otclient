@@ -240,122 +240,202 @@ bool CefRendererGPUWin::createDestinationTexture(int width, int height)
         return false;
     }
 
-    // Create texture with classic shared handle
-    D3D11_TEXTURE2D_DESC desc = {};
-    desc.Width = width;
-    desc.Height = height;
-    desc.MipLevels = 1;
-    desc.ArraySize = 1;
-    desc.Format = DXGI_FORMAT_B8G8R8A8_UNORM; // BGRA8 for ANGLE compatibility
-    desc.SampleDesc.Count = 1;
-    desc.Usage = D3D11_USAGE_DEFAULT;
-    desc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET;
-    desc.MiscFlags = D3D11_RESOURCE_MISC_SHARED; // Classic shared handle
+    // Try RGBA8 first (might be more compatible with ANGLE than BGRA8)
+    DXGI_FORMAT formats[] = {
+        DXGI_FORMAT_R8G8B8A8_UNORM,  // RGBA8 - try first
+        DXGI_FORMAT_B8G8R8A8_UNORM   // BGRA8 - fallback
+    };
 
-    HRESULT hr = m_d3d11Device->CreateTexture2D(&desc, nullptr, &m_destTexture);
-    if (FAILED(hr)) {
-        g_logger.error(stdext::format("CefRendererGPUWin: Failed to create destination texture, HRESULT: 0x%x", hr));
-        return false;
+    for (int i = 0; i < 2; i++) {
+        // Create texture with classic shared handle
+        D3D11_TEXTURE2D_DESC desc = {};
+        desc.Width = width;
+        desc.Height = height;
+        desc.MipLevels = 1;
+        desc.ArraySize = 1;
+        desc.Format = formats[i];
+        desc.SampleDesc.Count = 1;
+        desc.Usage = D3D11_USAGE_DEFAULT;
+        desc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET;
+        desc.MiscFlags = D3D11_RESOURCE_MISC_SHARED; // Classic shared handle
+
+        HRESULT hr = m_d3d11Device->CreateTexture2D(&desc, nullptr, &m_destTexture);
+        if (FAILED(hr)) {
+            g_logger.debug(stdext::format("CefRendererGPUWin: Failed to create texture with format %d, HRESULT: 0x%x", 
+                                         formats[i], hr));
+            continue;
+        }
+
+        // Get classic shared handle
+        IDXGIResource* dxgiResource = nullptr;
+        hr = m_destTexture->QueryInterface(__uuidof(IDXGIResource), (void**)&dxgiResource);
+        if (FAILED(hr)) {
+            g_logger.error("CefRendererGPUWin: Failed to query DXGI resource interface");
+            m_destTexture->Release();
+            m_destTexture = nullptr;
+            continue;
+        }
+
+        hr = dxgiResource->GetSharedHandle(&m_classicSharedHandle);
+        dxgiResource->Release();
+        
+        if (FAILED(hr) || !m_classicSharedHandle) {
+            g_logger.error("CefRendererGPUWin: Failed to get classic shared handle");
+            m_destTexture->Release();
+            m_destTexture = nullptr;
+            continue;
+        }
+
+        // Success!
+        const char* formatName = (formats[i] == DXGI_FORMAT_R8G8B8A8_UNORM) ? "RGBA8" : "BGRA8";
+        g_logger.debug(stdext::format("CefRendererGPUWin: Created destination texture %dx%d (%s) with classic handle %p", 
+                                      width, height, formatName, m_classicSharedHandle));
+        return true;
     }
 
-    D3D11_TEXTURE2D_DESC d;
-    m_destTexture->GetDesc(&d);
-    g_logger.info(stdext::format("DestTexture: format=0x%x, BindFlags=0x%x, MiscFlags=0x%x",
-                                 d.Format, d.BindFlags, d.MiscFlags));   
-
-    // Get classic shared handle
-    IDXGIResource* dxgiResource = nullptr;
-    hr = m_destTexture->QueryInterface(__uuidof(IDXGIResource), (void**)&dxgiResource);
-    if (FAILED(hr)) {
-        g_logger.error("CefRendererGPUWin: Failed to query DXGI resource interface");
-        return false;
-    }
-
-    hr = dxgiResource->GetSharedHandle(&m_classicSharedHandle);
-    dxgiResource->Release();
-    
-    if (FAILED(hr) || !m_classicSharedHandle) {
-        g_logger.error("CefRendererGPUWin: Failed to get classic shared handle");
-        return false;
-    }
-
-    g_logger.debug(stdext::format("CefRendererGPUWin: Created destination texture %dx%d with classic handle %p", 
-                                  width, height, m_classicSharedHandle));
-    return true;
+    g_logger.error("CefRendererGPUWin: Failed to create destination texture with any format");
+    return false;
 }
 
 bool CefRendererGPUWin::setupEGLPbuffer()
 {
-    EGLDisplay dpy = eglGetCurrentDisplay();
-    if (dpy == EGL_NO_DISPLAY) {
-        g_logger.error("No EGL display");
+    EGLDisplay display = eglGetCurrentDisplay();
+    
+    // Choose EGL config - try different approaches
+    EGLint numCfg;
+    EGLint cfgAttrs[] = {
+        EGL_SURFACE_TYPE, EGL_PBUFFER_BIT,
+        EGL_RENDERABLE_TYPE, EGL_OPENGL_ES2_BIT,
+        EGL_RED_SIZE, 8,
+        EGL_GREEN_SIZE, 8,
+        EGL_BLUE_SIZE, 8,
+        EGL_ALPHA_SIZE, 8,
+        EGL_BIND_TO_TEXTURE_RGBA, EGL_TRUE,  // This is important for texture binding
+        EGL_NONE
+    };
+    
+    if (!eglChooseConfig(display, cfgAttrs, &m_eglConfig, 1, &numCfg) || numCfg == 0) {
+        g_logger.error("CefRendererGPUWin: Failed to choose EGL config for pbuffer");
         return false;
     }
 
-    // 1) Escolha um config que SUPORTE bind-to-texture RGBA
-    EGLint numCfg = 0;
-    EGLConfig cfg = nullptr;
-    const EGLint cfgAttrs[] = {
-        EGL_SURFACE_TYPE,           EGL_PBUFFER_BIT,
-        EGL_RENDERABLE_TYPE,        EGL_OPENGL_ES2_BIT,
-        EGL_BIND_TO_TEXTURE_RGBA,   EGL_TRUE,          // <- OBRIGATÓRIO aqui
-        EGL_RED_SIZE,               8,
-        EGL_GREEN_SIZE,             8,
-        EGL_BLUE_SIZE,              8,
-        EGL_ALPHA_SIZE,             8,
-        EGL_NONE
-    };
-    if (!eglChooseConfig(dpy, cfgAttrs, &cfg, 1, &numCfg) || numCfg == 0) {
-        g_logger.error("eglChooseConfig failed (needs BIND_TO_TEXTURE_RGBA)");
-        return false;
+    // Log the config to verify BIND_TO_TEXTURE support
+    EGLint bindToTextureRGBA = 0;
+    eglGetConfigAttrib(display, m_eglConfig, EGL_BIND_TO_TEXTURE_RGBA, &bindToTextureRGBA);
+    g_logger.debug(stdext::format("CefRendererGPUWin: EGL_BIND_TO_TEXTURE_RGBA = %d", bindToTextureRGBA));
+
+    // Try different attribute combinations
+    g_logger.debug(stdext::format("CefRendererGPUWin: Classic handle: %016llx", (uint64_t)m_classicSharedHandle));
+
+    // Approach 1: Basic attributes (most compatible)
+    {
+        EGLint attrs[] = {
+            EGL_WIDTH, m_lastWidth,
+            EGL_HEIGHT, m_lastHeight,
+            EGL_NONE
+        };
+
+        m_pbuffer = eglCreatePbufferFromClientBuffer(
+            display,
+            EGL_D3D_TEXTURE_2D_SHARE_HANDLE_ANGLE,
+            (EGLClientBuffer)m_classicSharedHandle,
+            m_eglConfig,
+            attrs
+        );
+
+        if (m_pbuffer != EGL_NO_SURFACE) {
+            g_logger.info("CefRendererGPUWin: Success with basic attributes");
+        } else {
+            EGLint eglError = eglGetError();
+            g_logger.debug(stdext::format("CefRendererGPUWin: Basic attributes failed - EGL error: 0x%x (%s)",
+                                          eglError, getEGLErrorString(eglError)));
+        }
     }
-    m_eglConfig = cfg;
 
-    // 2) NÃO passe WIDTH/HEIGHT aqui — o ANGLE lê do recurso D3D
-    const EGLint pbAttrs[] = {
-        // EGL_TEXTURE_FORMAT / TARGET often cause BAD_ATTRIBUTE for this client buffer; omit them
-        0x3DAB /* EGL_D3D_TEXTURE_SUBRESOURCE_ID_ANGLE */, 0,  // level/arraySlice = 0
-        EGL_NONE
-    };
-
-    EGLint val = 0;
-    eglGetConfigAttrib(dpy, m_eglConfig, EGL_BIND_TO_TEXTURE_RGBA, &val);
-    g_logger.info(stdext::format("EGL_BIND_TO_TEXTURE_RGBA = %d", val));
-
-    // 3) Crie o pbuffer a partir do HANDLE clássico
-    m_pbuffer = eglCreatePbufferFromClientBuffer(
-        dpy,
-        EGL_D3D_TEXTURE_2D_SHARE_HANDLE_ANGLE,
-        (EGLClientBuffer)m_classicSharedHandle,
-        m_eglConfig,
-        pbAttrs
-    );
+    // Approach 2: Try with texture binding attributes if approach 1 failed
     if (m_pbuffer == EGL_NO_SURFACE) {
-        g_logger.info(stdext::format("Classic handle: %p", m_classicSharedHandle));
-        const EGLint e = eglGetError();
-        g_logger.error(stdext::format(
-            "eglCreatePbufferFromClientBuffer failed: 0x%x (BAD_ATTRIBUTE normalmente = config sem BIND_TO_TEXTURE_* ou attrs inválidos)",
-            e));
-        return false;
+        EGLint attrs[] = {
+            EGL_WIDTH, m_lastWidth,
+            EGL_HEIGHT, m_lastHeight,
+            EGL_TEXTURE_FORMAT, EGL_TEXTURE_RGBA,
+            EGL_TEXTURE_TARGET, EGL_TEXTURE_2D,
+            EGL_NONE
+        };
+
+        m_pbuffer = eglCreatePbufferFromClientBuffer(
+            display,
+            EGL_D3D_TEXTURE_2D_SHARE_HANDLE_ANGLE,
+            (EGLClientBuffer)m_classicSharedHandle,
+            m_eglConfig,
+            attrs
+        );
+
+        if (m_pbuffer != EGL_NO_SURFACE) {
+            g_logger.info("CefRendererGPUWin: Success with texture binding attributes");
+        } else {
+            EGLint eglError = eglGetError();
+            g_logger.debug(stdext::format("CefRendererGPUWin: Texture binding attributes failed - EGL error: 0x%x (%s)",
+                                          eglError, getEGLErrorString(eglError)));
+        }
     }
 
-    // 4) Vincule o pbuffer à sua textura GLES2
-    glBindTexture(GL_TEXTURE_2D, m_cefTexture->getId());
-    if (!eglBindTexImage(dpy, m_pbuffer, EGL_BACK_BUFFER)) {
-        const EGLint e = eglGetError();
-        g_logger.error(stdext::format("eglBindTexImage failed: 0x%x", e));
-        eglDestroySurface(dpy, m_pbuffer);
-        m_pbuffer = EGL_NO_SURFACE;
-        return false;
+    // Approach 3: Try with just texture target if approach 2 failed
+    if (m_pbuffer == EGL_NO_SURFACE) {
+        EGLint attrs[] = {
+            EGL_WIDTH, m_lastWidth,
+            EGL_HEIGHT, m_lastHeight,
+            EGL_TEXTURE_TARGET, EGL_TEXTURE_2D,
+            EGL_NONE
+        };
+
+        m_pbuffer = eglCreatePbufferFromClientBuffer(
+            display,
+            EGL_D3D_TEXTURE_2D_SHARE_HANDLE_ANGLE,
+            (EGLClientBuffer)m_classicSharedHandle,
+            m_eglConfig,
+            attrs
+        );
+
+        if (m_pbuffer != EGL_NO_SURFACE) {
+            g_logger.info("CefRendererGPUWin: Success with texture target only");
+        } else {
+            EGLint eglError = eglGetError();
+            g_logger.error(stdext::format("CefRendererGPUWin: All approaches failed - EGL error: 0x%x (%s)",
+                                          eglError, getEGLErrorString(eglError)));
+            return false;
+        }
     }
+
+    // If we got here, one of the approaches worked
+    g_logger.info("CefRendererGPUWin: Pbuffer created successfully, attempting to bind to texture");
+
+    // Bind to OpenGL texture
+    glBindTexture(GL_TEXTURE_2D, m_cefTexture->getId());
+    
+    if (!eglBindTexImage(display, m_pbuffer, EGL_BACK_BUFFER)) {
+        EGLint eglError = eglGetError();
+        g_logger.error(stdext::format("CefRendererGPUWin: Failed to bind pbuffer to texture, EGL error: 0x%x (%s)",
+                                      eglError, getEGLErrorString(eglError)));
+        
+        // Try front buffer if back buffer fails
+        g_logger.debug("CefRendererGPUWin: Trying EGL_FRONT_BUFFER");
+        if (!eglBindTexImage(display, m_pbuffer, EGL_FRONT_BUFFER)) {
+            eglError = eglGetError();
+            g_logger.error(stdext::format("CefRendererGPUWin: Front buffer also failed, EGL error: 0x%x (%s)",
+                                          eglError, getEGLErrorString(eglError)));
+            return false;
+        }
+    }
+
     m_pbufferBound = true;
 
+    // Set texture parameters
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S,     GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T,     GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
-    g_logger.debug("EGL pbuffer created and bound successfully");
+    g_logger.debug("CefRendererGPUWin: EGL pbuffer setup successful");
     return true;
 }
 
