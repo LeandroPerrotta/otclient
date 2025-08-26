@@ -1,6 +1,8 @@
 #include "cef_renderergpulinuxnonmesa.h"
 #include "linuxgpucontext.h"
 #include "../../ui/uicefwebview.h"
+#include "../../core/cef_init.h"
+#include "../../core/cef_config.h"
 #include <framework/core/logger.h>
 #include <framework/stdext/format.h>
 #include <framework/core/eventdispatcher.h>
@@ -208,8 +210,18 @@ bool CefRendererGPULinuxNonMesa::isSupported() const
         return false;
     auto eglCreateImageKHRFunc = (PFNEGLCREATEIMAGEKHRPROC)eglGetProcAddress("eglCreateImageKHR");
     auto eglDestroyImageKHRFunc = (PFNEGLDESTROYIMAGEKHRPROC)eglGetProcAddress("eglDestroyImageKHR");
+    
+    g_logger.info("CefRendererGPULinuxNonMesa: Supported");
     return eglCreateImageKHRFunc && eglDestroyImageKHRFunc;
 #else
     return false;
 #endif
+}
+
+void CefRendererGPULinuxNonMesa::onRenderSupported(CefWindowInfo& windowInfo) const
+{
+    if (g_cefConfig && g_cefConfig->shouldUseSharedTexture() && isSupported()) {
+        windowInfo.shared_texture_enabled = true;
+        g_logger.info("CefRendererGPULinuxNonMesa: Shared texture enabled for CEF browser");
+    }
 }

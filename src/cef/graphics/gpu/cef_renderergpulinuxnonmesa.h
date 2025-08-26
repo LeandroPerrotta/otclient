@@ -11,6 +11,7 @@ public:
                  const CefRenderHandler::RectList& dirtyRects) override;
     void onAcceleratedPaint(const CefAcceleratedPaintInfo& info, const CefRenderHandler::RectList* dirtyRects = nullptr) override;
     bool isSupported() const override;
+    void onRenderSupported(CefWindowInfo& windowInfo) const override;
 
 private:
     int m_lastWidth;

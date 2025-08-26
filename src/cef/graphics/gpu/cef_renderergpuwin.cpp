@@ -192,7 +192,7 @@ bool CefRendererGPUWin::isSupported() const
         g_logger.warning("CefRendererGPUWin: Non-ANGLE EGL implementation detected");
     }
     
-    g_logger.info("CefRendererGPUWin: GPU acceleration is supported!");
+    g_logger.info("CefRendererGPUWin: Supported");
     return true;
 #else
     g_logger.info("CefRendererGPUWin: GPU acceleration disabled - not compiled for Windows OpenGL ES 2.0");
