@@ -114,6 +114,11 @@ bool CefRendererGPULinuxMesa::isSupported() const
         return m_supported;
     m_checkedSupport = true;
 
+    if(g_cefConfig && !g_cefConfig->shouldUseSharedTexture()) {
+        g_logger.info("CefRendererGPULinuxNonMesa: Shared texture disabled by config");
+        return m_supported = false;
+    }    
+
     Display* x11Display = LinuxGPUContext::x11Display();
     if(!x11Display) {
         g_logger.info("CefRendererGPULinuxMesa: No X11 display");
@@ -155,7 +160,7 @@ bool CefRendererGPULinuxMesa::isSupported() const
 
 void CefRendererGPULinuxMesa::onRenderSupported(CefWindowInfo& windowInfo) const
 {
-    if (g_cefConfig && g_cefConfig->shouldUseSharedTexture() && isSupported()) {
+    if (isSupported()) {
         windowInfo.shared_texture_enabled = true;
         g_logger.info("CefRendererGPULinuxMesa: Shared texture enabled for CEF browser");
     }

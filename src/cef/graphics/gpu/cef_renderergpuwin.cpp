@@ -156,7 +156,10 @@ void CefRendererGPUWin::onAcceleratedPaint(const CefAcceleratedPaintInfo& info, 
 bool CefRendererGPUWin::isSupported() const
 {
 #if defined(USE_CEF) && defined(_WIN32) && defined(OPENGL_ES) && OPENGL_ES == 2
-    g_logger.info("CefRendererGPUWin: Checking GPU acceleration support...");
+    if(g_cefConfig && !g_cefConfig->shouldUseSharedTexture()) {
+        g_logger.info("CefRendererGPUWin: Shared texture disabled by config");
+        return m_supported = false;
+    }
 
     const char* renderer = reinterpret_cast<const char*>(glGetString(GL_RENDERER));
     g_logger.info(stdext::format("GL_RENDERER: %s", renderer ? renderer : "null"));    
@@ -202,7 +205,7 @@ bool CefRendererGPUWin::isSupported() const
 
 void CefRendererGPUWin::onRenderSupported(CefWindowInfo& windowInfo) const
 {
-    if (g_cefConfig && g_cefConfig->shouldUseSharedTexture() && isSupported()) {
+    if (isSupported()) {
         windowInfo.shared_texture_enabled = true;
         g_logger.info("CefRendererGPUWin: Shared texture enabled for CEF browser");
     }
