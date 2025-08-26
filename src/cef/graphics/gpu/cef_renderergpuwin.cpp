@@ -158,7 +158,14 @@ bool CefRendererGPUWin::isSupported() const
         return false;
     }
     
-    g_logger.debug(stdext::format("CefRendererGPUWin: Available EGL extensions: %s", extensions));
+    // Safely log extensions (limit length to prevent crashes)
+    std::string extensionsStr(extensions);
+    if (extensionsStr.length() > 500) {
+        g_logger.debug(stdext::format("CefRendererGPUWin: EGL extensions (truncated): %s...", 
+                                      extensionsStr.substr(0, 500).c_str()));
+    } else {
+        g_logger.debug(stdext::format("CefRendererGPUWin: Available EGL extensions: %s", extensions));
+    }
     
     // Check for required ANGLE extension
     bool hasAngleExtension = strstr(extensions, "EGL_ANGLE_d3d_share_handle_client_buffer") != nullptr;
