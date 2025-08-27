@@ -10,7 +10,7 @@ BUILD_PARAMS="-DUSE_CEF=ON"
 REBUILD=false
 
 # Default branch configuration
-DEFAULT_BRANCH="cef-linux/gpuaccelerated"
+DEFAULT_BRANCH="cef/stable"
 
 # Build performance settings
 # Use 75% of available cores to leave resources for the system
