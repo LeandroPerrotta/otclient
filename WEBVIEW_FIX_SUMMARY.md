@@ -44,13 +44,20 @@ The issue was caused by OpenGL context management conflicts between the game's r
 
 ## Files Modified
 
+### Linux Mesa GPU Renderer
 1. `src/cef/graphics/gpu/cef_renderergpulinuxmesa.cpp`
-   - Enhanced `onAcceleratedPaint()` with proper context management
+   - Enhanced `onAcceleratedPaint()` with proper OpenGL context management
    - Improved `isSupported()` with context preservation
-   - Added extension function re-initialization
+   - Removed redundant extension checking (optimization)
 
 2. `src/cef/graphics/gpu/linuxgpucontext.cpp`
    - Added detailed context logging during initialization
+
+### Windows GPU Renderer (Similar Fix Applied)
+3. `src/cef/graphics/gpu/cef_renderergpuwin.cpp`
+   - Enhanced `onAcceleratedPaint()` with proper EGL context management
+   - Improved `setupEGLPbuffer()` with context preservation
+   - Added context validation and restoration for ANGLE/D3D11 operations
 
 ## Testing
 
@@ -108,10 +115,18 @@ if(!m_glCreateMemoryObjectsEXT) {
 
 ## Compatibility
 
+### Linux
 - **Platform**: Linux with Mesa drivers
 - **OpenGL**: Requires `GL_EXT_memory_object_fd` extension support
 - **CEF**: Compatible with shared texture rendering
-- **Thread Safety**: Maintains thread safety with proper context management
+- **Thread Safety**: Maintains thread safety with proper GLX context management
+
+### Windows  
+- **Platform**: Windows with ANGLE (OpenGL ES over D3D11)
+- **EGL**: Uses EGL context management through ANGLE
+- **D3D11**: Requires D3D11 device context synchronization
+- **CEF**: Compatible with shared texture rendering via NT handles
+- **Thread Safety**: Maintains thread safety with proper EGL context management
 
 ## Future Improvements
 
