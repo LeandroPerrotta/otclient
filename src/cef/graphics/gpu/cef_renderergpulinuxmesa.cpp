@@ -83,25 +83,6 @@ void CefRendererGPULinuxMesa::onAcceleratedPaint(const CefAcceleratedPaintInfo& 
         bool done = false;
         GLuint memoryObject = 0;
         
-        // Verify extensions are still available
-        if(!m_glCreateMemoryObjectsEXT || !m_glImportMemoryFdEXT || 
-           !m_glTexStorageMem2DEXT || !m_glDeleteMemoryObjectsEXT) {
-            g_logger.error("CefRendererGPULinuxMesa: GL_EXT_memory_object_fd functions not available");
-            // Try to re-initialize the function pointers if they became null
-            m_glCreateMemoryObjectsEXT = (PFNGLCREATEMEMORYOBJECTSEXTPROC)resolveGLProc("glCreateMemoryObjectsEXT");
-            m_glImportMemoryFdEXT = (PFNGLIMPORTMEMORYFDEXTPROC)resolveGLProc("glImportMemoryFdEXT");
-            m_glTexStorageMem2DEXT = (PFNGLTEXSTORAGEMEM2DEXTPROC)resolveGLProc("glTexStorageMem2DEXT");
-            m_glDeleteMemoryObjectsEXT = (PFNGLDELETEMEMORYOBJECTSEXTPROC)resolveGLProc("glDeleteMemoryObjectsEXT");
-            
-            if(!m_glCreateMemoryObjectsEXT || !m_glImportMemoryFdEXT || 
-               !m_glTexStorageMem2DEXT || !m_glDeleteMemoryObjectsEXT) {
-                g_logger.error("CefRendererGPULinuxMesa: Failed to re-initialize GL_EXT_memory_object_fd functions");
-                close_fd(memFd);
-                return;
-            }
-            g_logger.info("CefRendererGPULinuxMesa: Successfully re-initialized GL_EXT_memory_object_fd functions");
-        }
-        
         // Clear any existing GL errors before proceeding
         while(glGetError() != GL_NO_ERROR) { /* clear errors */ }
         
