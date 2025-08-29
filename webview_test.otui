@@ -1,0 +1,46 @@
+TestWebViewWindow < MainWindow
+  id: testWebViewWindow
+  !text: tr('WebView Test')
+  size: 600 420
+  @onEscape: self:hide()
+
+  TestWebViewButton < Button
+    id: toggleButton
+    !text: tr('Toggle Test WebView')
+    size: 150 30
+    anchors.top: parent.top
+    anchors.left: parent.left
+    margin-top: 5
+    margin-left: 10
+    @onClick: toggleTestWebView()
+
+  TestWebViewButton < Button
+    id: sendButton
+    !text: tr('Send Test Message')
+    size: 150 30
+    anchors.top: parent.top
+    anchors.left: toggleButton.right
+    margin-top: 5
+    margin-left: 10
+    @onClick: sendTestMessage()
+
+  TestWebViewButton < Button
+    id: statusButton
+    !text: tr('Show Status')
+    size: 150 30
+    anchors.top: parent.top
+    anchors.left: sendButton.right
+    margin-top: 5
+    margin-left: 10
+    @onClick: showWebViewStatus()
+
+  Label
+    id: infoLabel
+    !text: tr('Use this to test webview functionality before and after login')
+    anchors.top: toggleButton.bottom
+    anchors.left: parent.left
+    anchors.right: parent.right
+    margin-top: 5
+    margin-left: 10
+    margin-right: 10
+    text-auto-resize: true
