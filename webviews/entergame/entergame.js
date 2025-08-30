@@ -477,7 +477,8 @@ document.addEventListener('DOMContentLoaded', () => {
     window.addEventListener('keydown', onGlobalKeyDown);
 
     // Re-notify that JavaScript is loaded (safe if sent multiple times)
-    requestConfigIfNeeded();
+    // Request initial configuration from Lua
+    sendToLua('request_config');
 
     // Preload module-specific translations
     WebViewTranslations.preloadModuleTranslations([
