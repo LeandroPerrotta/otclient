@@ -35,12 +35,10 @@
 #include <algorithm>
 #include <memory>
 
-#ifdef USE_CEF
 #include "../graphics/cef_renderer.h"
 #include <include/cef_browser.h>
 #include <include/cef_frame.h>
 #include "include/cef_parser.h"
-#endif
 
 std::string GetDataURI(const std::string& data, const std::string& mime_type) {
     return "data:" + mime_type + ";base64," +
@@ -439,8 +437,12 @@ void UICEFWebView::onBrowserCreated(CefRefPtr<CefBrowser> browser)
         m_pendingUrl.clear();
     }
     
-    // With multi_threaded_message_loop = true, CEF handles rendering automatically
-    // No manual frame triggering needed
+    // If this widget is already focused in the OT UI, propagate focus to CEF
+    if (isFocused()) {
+        CefRefPtr<CefBrowserHost> host = m_browser->GetHost();
+        if (host)
+            host->SetFocus(true);
+    }
 }
 
 void UICEFWebView::drawSelf(Fw::DrawPane drawPane)
@@ -570,9 +572,21 @@ void UICEFWebView::onVisibilityChange(bool visible)
     visibilityChange(visible);
 }
 
+void UICEFWebView::onFocusChange(bool focused, Fw::FocusReason reason)
+{
+    UIWidget::onFocusChange(focused, reason);
+
+    if (!m_browser)
+        return;
+    CefRefPtr<CefBrowserHost> host = m_browser->GetHost();
+    if (!host)
+        return;
+    // Ensure the off-screen CEF browser tracks focus so that input works
+    host->SetFocus(focused);
+}
+
 void UICEFWebView::visibilityChange(bool visible)
 {
-#ifdef USE_CEF
     if (!m_browser)
         return;
     CefRefPtr<CefBrowserHost> host = m_browser->GetHost();
@@ -587,7 +601,6 @@ void UICEFWebView::visibilityChange(bool visible)
     host->SetWindowlessFrameRate(targetFps);
 
     host->SetAudioMuted(!visible);
-#endif
 }
 
 // Static methods for managing all WebViews

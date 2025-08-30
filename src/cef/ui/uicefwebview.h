@@ -95,6 +95,7 @@ public:
 
     // Visibility change handler to pause/resume CEF rendering
     void onVisibilityChange(bool visible) override;
+    void onFocusChange(bool focused, Fw::FocusReason reason) override;
 
 protected:
     void drawSelf(Fw::DrawPane drawPane) override;

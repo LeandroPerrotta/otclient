@@ -4,11 +4,8 @@
 HTTPEnterGame = {}
 
 -- Login API configuration
-local LOGIN_API_CONFIG = {
-    baseUrl = "http://localhost:3000/auth", -- Node.js login server URL
-    endpoints = {login = "/login"},
-    timeout = 10000 -- 10 seconds
-}
+-- Configuration is now owned by the webview (JS). Lua no longer keeps
+-- or sends API URLs/endpoints to avoid duplication and races.
 
 -- Private variables
 local httpLoginWindow
@@ -157,15 +154,6 @@ local function setupHTTPLoginCallbacks()
     httpLoginWebView:registerJavaScriptCallback('js_loaded', function()
         print('HTTP login interface loaded!')
 
-        -- Send initial configuration to JavaScript
-        local config = {
-            apiUrl = LOGIN_API_CONFIG.baseUrl,
-            endpoints = LOGIN_API_CONFIG.endpoints,
-            timeout = LOGIN_API_CONFIG.timeout
-        }
-
-        httpLoginWebView:sendToJavaScript('init_config', json.encode(config))
-
         -- Send current game state
         httpLoginWebView:sendToJavaScript('game_state_changed', json.encode(
                                               {isOnline = g_game.isOnline()}))
@@ -191,10 +179,11 @@ local function setupHTTPLoginCallbacks()
         end
 
         print('Login complete! Connecting to gameserver...')
-
         -- Connect to gameserver with final data
         connectToGameServer(result)
     end)
+
+    -- (debug logs removed)
 end
 
 -- Main function to start login process
@@ -209,6 +198,12 @@ function HTTPEnterGame.show()
         httpLoginWindow:show()
         httpLoginWindow:raise()
         httpLoginWindow:focus()
+
+        -- Ensure keyboard focus is given to the webview so in-page
+        -- autofocus and keyboard input work immediately
+        if httpLoginWebView then
+            httpLoginWebView:focus()
+        end
 
         -- Send command to JavaScript to reset state and show form
         httpLoginWebView:sendToJavaScript('reset_and_show_login', '')
@@ -250,7 +245,7 @@ function HTTPEnterGame.init()
         -- Configure callbacks for JavaScript communication
         setupHTTPLoginCallbacks()
 
-        -- Load login interface
+        -- Load login interface using custom scheme; localStorage persists for otclient://webviews origin
         httpLoginWebView:loadUrl('otclient://webviews/entergame/entergame.html')
     end
 

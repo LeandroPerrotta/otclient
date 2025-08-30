@@ -235,11 +235,73 @@ void CefInputHandler::handleKeyDown(CefRefPtr<CefBrowser> browser, uchar keyCode
     event.unmodified_character = 0;
     event.focus_on_editable_field = 0;
     host->SendKeyEvent(event);
+
+    // Some control keys (Enter, Tab, Backspace) do not generate onKeyText events
+    // in our platform layer. For proper text editing and default form actions
+    // in CEF, we need to synthesize a CHAR event for these keys as well.
+    if (keyCode == Fw::KeyEnter || keyCode == Fw::KeyTab || keyCode == Fw::KeyBackspace) {
+        int ch = 0;
+        if (keyCode == Fw::KeyEnter)
+            ch = 0x0D; // Carriage Return
+        else if (keyCode == Fw::KeyTab)
+            ch = 0x09; // Tab
+        else if (keyCode == Fw::KeyBackspace)
+            ch = 0x08; // Backspace
+
+        CefKeyEvent charEvent = {};
+        charEvent.type = KEYEVENT_CHAR;
+        charEvent.modifiers = getCefModifiers();
+        charEvent.character = static_cast<uint16>(ch);
+        charEvent.unmodified_character = static_cast<uint16>(ch);
+        charEvent.windows_key_code = ch;
+        charEvent.native_key_code = ch;
+        charEvent.is_system_key = 0;
+        charEvent.focus_on_editable_field = 0;
+        host->SendKeyEvent(charEvent);
+    }
 }
 
 void CefInputHandler::handleKeyPress(CefRefPtr<CefBrowser> browser, uchar keyCode)
 {
-    handleKeyDown(browser, keyCode);
+    // Key press repeats should resend RAWKEYDOWN, and for certain control keys
+    // also send a CHAR event to emulate OS behavior for text fields.
+    if (!browser)
+        return;
+    CefRefPtr<CefBrowserHost> host = browser->GetHost();
+    if (!host)
+        return;
+
+    CefKeyEvent event = {};
+    event.type = KEYEVENT_RAWKEYDOWN;
+    event.modifiers = getCefModifiers();
+    event.windows_key_code = translateKeyCode(keyCode);
+    event.native_key_code = event.windows_key_code;
+    event.is_system_key = 0;
+    event.character = 0;
+    event.unmodified_character = 0;
+    event.focus_on_editable_field = 0;
+    host->SendKeyEvent(event);
+
+    if (keyCode == Fw::KeyEnter || keyCode == Fw::KeyTab || keyCode == Fw::KeyBackspace) {
+        int ch = 0;
+        if (keyCode == Fw::KeyEnter)
+            ch = 0x0D;
+        else if (keyCode == Fw::KeyTab)
+            ch = 0x09;
+        else if (keyCode == Fw::KeyBackspace)
+            ch = 0x08;
+
+        CefKeyEvent charEvent = {};
+        charEvent.type = KEYEVENT_CHAR;
+        charEvent.modifiers = getCefModifiers();
+        charEvent.character = static_cast<uint16>(ch);
+        charEvent.unmodified_character = static_cast<uint16>(ch);
+        charEvent.windows_key_code = ch;
+        charEvent.native_key_code = ch;
+        charEvent.is_system_key = 0;
+        charEvent.focus_on_editable_field = 0;
+        host->SendKeyEvent(charEvent);
+    }
 }
 
 void CefInputHandler::handleKeyUp(CefRefPtr<CefBrowser> browser, uchar keyCode)

@@ -111,14 +111,23 @@ const LoginApp = {
         },
 
         back() {
-            // Return to login screen without clearing Remember-me data
-            // Keep localStorage intact so auto-login still works next session
+            // Return to login screen and clear stored credentials
             LoginApp.state.view = 'login';
             LoginApp.state.email = '';
             LoginApp.state.password = '';
-            // Do not force remember=false here; respect stored preference
+            LoginApp.state.remember = false;
             LoginApp.state.selectedCharacter = null;
             LoginApp.state.error = null;
+
+            // Clear any persisted data related to credentials
+            try {
+                LoginApp.actions.clearAllData(); // removes remember_me, saved_email, saved_password
+                // Optionally also clear the temporary session token to avoid confusion
+                localStorage.removeItem('session_token');
+            } catch (e) {
+                console.error('Error clearing localStorage:', e);
+            }
+
             m.redraw();
         },
 
@@ -149,7 +158,19 @@ const LoginApp = {
 // Login Component
 const LoginForm = {
     view() {
-        return m('.login-section', [
+        const ensureFocus = () => {
+            try {
+                if (LoginApp.state.isGameOnline || LoginApp.state.isLoading) return;
+                const emailEl = document.getElementById('email');
+                const passwordEl = document.getElementById('password');
+                if (emailEl && !LoginApp.state.email) {
+                    emailEl.focus();
+                } else if (passwordEl && LoginApp.state.email && !LoginApp.state.password) {
+                    passwordEl.focus();
+                }
+            } catch (e) { /* ignore */ }
+        };
+        return m('.login-section', { oncreate: ensureFocus }, [
             m('.header.otc-header', [
                 m('h1.otc-window-title', [
                     m('span.otc-icon', '🔐'),
@@ -409,8 +430,54 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
     }
 
-    // Notify that JavaScript is loaded
-    sendToLua('js_loaded', '');
+    // Keyboard handling on character selection view
+    const onGlobalKeyDown = (e) => {
+        // Only handle when on character list view
+        if (LoginApp.state.view !== 'characters')
+            return;
+
+        // Do not interfere if game is online or action in progress
+        if (LoginApp.state.isGameOnline || LoginApp.state.isLoading)
+            return;
+
+        const chars = LoginApp.state.characters || [];
+        if (!Array.isArray(chars) || chars.length === 0)
+            return;
+
+        // Normalize selected index
+        let index = chars.findIndex(c => LoginApp.state.selectedCharacter && c.name === LoginApp.state.selectedCharacter.name);
+
+        if (e.key === 'Enter') {
+            if (LoginApp.state.selectedCharacter) {
+                e.preventDefault();
+                LoginApp.actions.enterGame();
+            }
+            return;
+        }
+
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            if (index < 0) index = 0; else index = Math.min(index + 1, chars.length - 1);
+            if (!LoginApp.state.selectedCharacter || LoginApp.state.selectedCharacter.name !== chars[index].name) {
+                LoginApp.actions.selectCharacter(chars[index]);
+            }
+            return;
+        }
+
+        if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            if (index < 0) index = 0; else index = Math.max(index - 1, 0);
+            if (!LoginApp.state.selectedCharacter || LoginApp.state.selectedCharacter.name !== chars[index].name) {
+                LoginApp.actions.selectCharacter(chars[index]);
+            }
+            return;
+        }
+    };
+
+    window.addEventListener('keydown', onGlobalKeyDown);
+
+    // Re-notify that JavaScript is loaded (safe if sent multiple times)
+    requestConfigIfNeeded();
 
     // Preload module-specific translations
     WebViewTranslations.preloadModuleTranslations([
