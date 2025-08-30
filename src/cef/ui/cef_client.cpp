@@ -164,6 +164,14 @@ bool SimpleCEFClient::OnConsoleMessage(CefRefPtr<CefBrowser> browser,
     std::string msg = message.ToString();
     std::string src = source.ToString();
     std::string composed = stdext::format("[CEF Console] %s (%s:%d)", msg, src, line);
+    
+    // Add debug logging for syntax errors to help identify the issue
+    if(level == LOGSEVERITY_ERROR && msg.find("SyntaxError") != std::string::npos) {
+        g_logger.error(stdext::format("[CEF Debug] Syntax error detected - this may be caused by malformed JavaScript injection"));
+        g_logger.error(stdext::format("[CEF Debug] Error message: %s", msg));
+        g_logger.error(stdext::format("[CEF Debug] Source: %s:%d", src, line));
+    }
+    
     switch(level) {
     case LOGSEVERITY_ERROR:
     case LOGSEVERITY_FATAL:
