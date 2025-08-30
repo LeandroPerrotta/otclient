@@ -4,6 +4,7 @@
 #include "include/cef_render_handler.h"
 #include "include/cef_request_handler.h"
 #include "include/cef_life_span_handler.h"
+#include "include/cef_display_handler.h"
 #include "include/wrapper/cef_message_router.h"
 #include "include/cef_base.h"
 #include <memory>
@@ -15,7 +16,8 @@ class CefLuaHandler;
 class SimpleCEFClient : public CefClient,
                         public CefRenderHandler,
                         public CefRequestHandler,
-                        public CefLifeSpanHandler {
+                        public CefLifeSpanHandler,
+                        public CefDisplayHandler {
 public:
     explicit SimpleCEFClient(UICEFWebView* webview);
     ~SimpleCEFClient() override;
@@ -23,6 +25,7 @@ public:
     CefRefPtr<CefRenderHandler> GetRenderHandler() override;
     CefRefPtr<CefRequestHandler> GetRequestHandler() override;
     CefRefPtr<CefLifeSpanHandler> GetLifeSpanHandler() override;
+    CefRefPtr<CefDisplayHandler> GetDisplayHandler() override;
     CefRefPtr<CefResourceRequestHandler> GetResourceRequestHandler(
         CefRefPtr<CefBrowser> browser,
         CefRefPtr<CefFrame> frame,
@@ -57,6 +60,13 @@ public:
                             PaintElementType type,
                             const RectList& dirtyRects,
                             const CefAcceleratedPaintInfo& info) override;
+
+    // CefDisplayHandler methods
+    bool OnConsoleMessage(CefRefPtr<CefBrowser> browser,
+                         cef_log_severity_t level,
+                         const CefString& message,
+                         const CefString& source,
+                         int line) override;
 
 private:
     UICEFWebView* m_webview;

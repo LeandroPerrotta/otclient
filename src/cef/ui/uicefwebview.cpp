@@ -28,6 +28,8 @@
 #include "../graphics/cef_rendererfactory.h"
 #include <cef/core/cef_config.h>
 #include <cef/core/cef_init.h>
+#include "include/cef_parser.h"
+#include <cstdio>
 #include "cef_client.h"
 #include "cef_inputhandler.h"
 #include <string>
@@ -46,16 +48,7 @@ std::string GetDataURI(const std::string& data, const std::string& mime_type) {
                .ToString();
 }
 
-static std::string escape(const std::string& str) {
-    std::string result;
-    result.reserve(str.size());
-    for(char c : str) {
-        if(c == '\\' || c == '"')
-            result.push_back('\\');
-        result.push_back(c);
-    }
-    return result;
-}
+
 
 
 // Static member initialization
@@ -285,8 +278,24 @@ void UICEFWebView::unregisterJavaScriptCallback(const std::string& name)
 
 void UICEFWebView::sendToJavaScript(const std::string& name, const std::string& data)
 {
-    std::string script = std::string("if(window.receiveFromLua){window.receiveFromLua({\\\"name\\\":\\\"") +
-        escape(name) + "\\\",\\\"data\\\":\\\"" + escape(data) + "\\\"});}";
+    // Debug logging to help identify problematic data
+    g_logger.debug(stdext::format("[CEF Debug] Sending to JavaScript - name: '%s', data length: %d", name, data.length()));
+    if(data.find('\n') != std::string::npos || data.find('\r') != std::string::npos || data.find('"') != std::string::npos) {
+        g_logger.debug(stdext::format("[CEF Debug] Data contains special characters that need escaping"));
+    }
+    
+    // Use JSON encoding to properly escape all characters
+    CefRefPtr<CefValue> messageValue = CefValue::Create();
+    messageValue->SetDictionary(CefDictionaryValue::Create());
+    
+    CefRefPtr<CefDictionaryValue> messageDict = messageValue->GetDictionary();
+    messageDict->SetString("name", name);
+    messageDict->SetString("data", data);
+    
+    std::string jsonMessage = CefWriteJSON(messageValue, JSON_WRITER_DEFAULT).ToString();
+    std::string script = "if(window.receiveFromLua){window.receiveFromLua(" + jsonMessage + ");}";
+    
+    g_logger.debug(stdext::format("[CEF Debug] Generated JavaScript: %s", script));
     executeJavaScriptInternal(script);
 }
 
