@@ -22,6 +22,7 @@ const LoginApp = {
 
     actions: {
         async login() {
+            
             LoginApp.state.isLoading = true;
             LoginApp.state.error = null;
             LoginApp.state.success = null;
@@ -56,9 +57,11 @@ const LoginApp = {
                         localStorage.setItem('saved_email', LoginApp.state.email);
                         localStorage.setItem('saved_password', LoginApp.state.password);
                         localStorage.setItem('session_token', data.session_token);
+                        
                     } else {
                         // If "remember me" not checked, save only temporary token
                         localStorage.setItem('session_token', data.session_token);
+                        
                     }
                 } else {
                     LoginApp.state.error = tr('Email or password incorrect');
@@ -93,7 +96,8 @@ const LoginApp = {
                         email: LoginApp.state.email,
                         password: LoginApp.state.password
                     },
-                    method: 'traditional'
+                    method: 'traditional',
+                    remember: !!LoginApp.state.remember
                 };
 
                 sendToLua('login_complete', result);
@@ -107,12 +111,12 @@ const LoginApp = {
         },
 
         back() {
-            // Clear data and return to login screen
-            LoginApp.actions.clearAllData();
+            // Return to login screen without clearing Remember-me data
+            // Keep localStorage intact so auto-login still works next session
             LoginApp.state.view = 'login';
             LoginApp.state.email = '';
             LoginApp.state.password = '';
-            LoginApp.state.remember = false;
+            // Do not force remember=false here; respect stored preference
             LoginApp.state.selectedCharacter = null;
             LoginApp.state.error = null;
             m.redraw();
@@ -123,11 +127,13 @@ const LoginApp = {
             localStorage.removeItem('remember_me');
             localStorage.removeItem('saved_email');
             localStorage.removeItem('saved_password');
+            
         },
 
         clearSessionDataOnly() {
             // Clear only session token
             localStorage.removeItem('session_token');
+            
         },
     },
 
@@ -280,6 +286,7 @@ const CharacterList = {
 
 // Callbacks for Lua communication
 window.registerLuaCallback('init_config', async (data) => {
+    
     LoginApp.state.config = typeof data === 'string' ? JSON.parse(data) : data;
 
     // Check if "Remember me" is activated
@@ -304,6 +311,7 @@ window.registerLuaCallback('init_config', async (data) => {
 });
 
 window.registerLuaCallback('reset_and_show_login', () => {
+    
     // Reset state
     LoginApp.state.selectedCharacter = null;
     LoginApp.state.error = null;
@@ -360,6 +368,27 @@ window.registerLuaCallback('logout', () => {
 
 // Initialization
 document.addEventListener('DOMContentLoaded', () => {
+    
+    // Prefill UI state from localStorage immediately so the first render reflects saved data
+    try {
+        const rememberMe = localStorage.getItem('remember_me');
+        const savedEmail = localStorage.getItem('saved_email');
+        const savedPassword = localStorage.getItem('saved_password');
+        if (rememberMe === 'true' && savedEmail && savedPassword) {
+            LoginApp.state.email = savedEmail;
+            LoginApp.state.password = savedPassword;
+            LoginApp.state.remember = true;
+            if (!window.__otc_auto_login_started) {
+                window.__otc_auto_login_started = true;
+                
+                // Trigger login immediately; config defaults are used until init_config overrides
+                LoginApp.actions.login();
+            }
+        }
+    } catch (e) {
+        console.error('Error accessing localStorage:', e);
+    }
+
     // Initialize translations module first
     if (typeof WebViewTranslations !== 'undefined') {
         WebViewTranslations.init();

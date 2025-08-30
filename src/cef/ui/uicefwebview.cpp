@@ -415,6 +415,8 @@ void UICEFWebView::onBrowserCreated(CefRefPtr<CefBrowser> browser)
 {
     g_logger.info("UICEFWebView: Browser created successfully!");
     m_browser = browser;
+    // Sync initial hidden/visible state with CEF
+    visibilityChange(isVisible());
     
     if (!m_pendingHtml.empty()) {
         g_logger.info("UICEFWebView: Loading pending HTML content...");
@@ -562,6 +564,32 @@ void UICEFWebView::onGeometryChange(const Rect& oldRect, const Rect& newRect)
     }
 }
 
+void UICEFWebView::onVisibilityChange(bool visible)
+{
+    UIWidget::onVisibilityChange(visible);
+    visibilityChange(visible);
+}
+
+void UICEFWebView::visibilityChange(bool visible)
+{
+#ifdef USE_CEF
+    if (!m_browser)
+        return;
+    CefRefPtr<CefBrowserHost> host = m_browser->GetHost();
+    if (!host)
+        return;
+
+    host->WasHidden(!visible);
+
+    int targetFps = visible ? g_app.getForegroundPaneMaxFps() : 1;
+    if (targetFps <= 0)
+        targetFps = visible ? 60 : 1;
+    host->SetWindowlessFrameRate(targetFps);
+
+    host->SetAudioMuted(!visible);
+#endif
+}
+
 // Static methods for managing all WebViews
 void UICEFWebView::closeAllWebViews() {
     std::vector<UICEFWebView*> webViewsToClose;
@@ -621,6 +649,3 @@ void UICEFWebView::setAllWindowlessFrameRate(int fps)
             webview->setWindowlessFrameRate(fps);
     }
 }
-
-
-
