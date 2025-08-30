@@ -40,6 +40,9 @@ void LinuxGPUContext::initialize()
     }
     g_mainContext = mainCtx;
     g_drawable = mainDrawable;
+    
+    g_logger.info(stdext::format("LinuxGPUContext: Main context initialized - display=%p, context=%p, drawable=%lu", 
+                                x11Display, mainCtx, mainDrawable));
 
     int fbConfigAttribs[] = {
         GLX_RENDER_TYPE, GLX_RGBA_BIT,

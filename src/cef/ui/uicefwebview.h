@@ -93,6 +93,10 @@ public:
     // Geometry change handler for dynamic resizing
     void onGeometryChange(const Rect& oldRect, const Rect& newRect) override;
 
+    // Visibility change handler to pause/resume CEF rendering
+    void onVisibilityChange(bool visible) override;
+    void onFocusChange(bool focused, Fw::FocusReason reason) override;
+
 protected:
     void drawSelf(Fw::DrawPane drawPane) override;
 
@@ -101,6 +105,7 @@ private:
     void loadUrlInternal(const std::string& url);
     bool loadHtmlInternal(const std::string& html, const std::string& baseUrl);
     void executeJavaScriptInternal(const std::string& script);
+    void visibilityChange(bool visible);
 
 #ifdef USE_CEF
     friend class SimpleCEFClient;

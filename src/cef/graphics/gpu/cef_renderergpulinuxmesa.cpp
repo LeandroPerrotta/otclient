@@ -55,8 +55,15 @@ void CefRendererGPULinuxMesa::onAcceleratedPaint(const CefAcceleratedPaintInfo& 
     g_dispatcher.addEventFromOtherThread([this, memFd, width, height, stride, offset]() mutable {
         auto close_fd = [](int& x){ if(x>=0){ ::close(x); x=-1; } };
         Display* x11Display = LinuxGPUContext::x11Display();
-        if(glXGetCurrentContext() != LinuxGPUContext::mainContext()) {
+        
+        // Save current context
+        GLXContext currentContext = glXGetCurrentContext();
+        GLXDrawable currentDrawable = glXGetCurrentDrawable();
+        
+        // Ensure we're using the correct context for CEF operations
+        if(currentContext != LinuxGPUContext::mainContext()) {
             if(!glXMakeCurrent(x11Display, LinuxGPUContext::drawable(), LinuxGPUContext::mainContext())) {
+                g_logger.error("CefRendererGPULinuxMesa: Failed to make main context current");
                 close_fd(memFd); return; }
         }
 
@@ -75,27 +82,42 @@ void CefRendererGPULinuxMesa::onAcceleratedPaint(const CefAcceleratedPaintInfo& 
 
         bool done = false;
         GLuint memoryObject = 0;
+        
+        // Clear any existing GL errors before proceeding
+        while(glGetError() != GL_NO_ERROR) { /* clear errors */ }
+        
         m_glCreateMemoryObjectsEXT(1, &memoryObject);
-        if(glGetError() == GL_NO_ERROR && memoryObject != 0) {
+        GLenum err = glGetError();
+        if(err == GL_NO_ERROR && memoryObject != 0) {
             GLuint64 size = (GLuint64)height * stride;
             m_glImportMemoryFdEXT(memoryObject, size, GL_HANDLE_TYPE_OPAQUE_FD_EXT, memFd);
-            if(glGetError() == GL_NO_ERROR) {
+            err = glGetError();
+            if(err == GL_NO_ERROR) {
                 m_glTexStorageMem2DEXT(GL_TEXTURE_2D, 1, GL_RGBA8, width, height, memoryObject, offset);
-                if(glGetError() == GL_NO_ERROR) {
+                err = glGetError();
+                if(err == GL_NO_ERROR) {
                     done = true;
                 } else {
-                    g_logger.error("CefRendererGPULinuxMesa: glTexStorageMem2DEXT failed");
+                    g_logger.error(stdext::format("CefRendererGPULinuxMesa: glTexStorageMem2DEXT failed with error 0x%x", err));
                 }
                 memFd = -1;
             } else {
-                g_logger.error("CefRendererGPULinuxMesa: glImportMemoryFdEXT failed");
+                g_logger.error(stdext::format("CefRendererGPULinuxMesa: glImportMemoryFdEXT failed with error 0x%x", err));
             }
             m_glDeleteMemoryObjectsEXT(1, &memoryObject);
         } else {
-            g_logger.error("CefRendererGPULinuxMesa: glCreateMemoryObjectsEXT failed");
+            g_logger.error(stdext::format("CefRendererGPULinuxMesa: glCreateMemoryObjectsEXT failed with error 0x%x", err));
         }
 
         glBindTexture(GL_TEXTURE_2D, 0);
+        
+        // Restore original context if it was different
+        if(currentContext != LinuxGPUContext::mainContext() && currentContext != nullptr) {
+            if(!glXMakeCurrent(x11Display, currentDrawable, currentContext)) {
+                g_logger.warning("CefRendererGPULinuxMesa: Failed to restore original context");
+            }
+        }
+        
         close_fd(memFd);
         if(!done) {
             g_logger.error("CefRendererGPULinuxMesa: GPU import failed");
@@ -115,7 +137,7 @@ bool CefRendererGPULinuxMesa::isSupported() const
     m_checkedSupport = true;
 
     if(g_cefConfig && !g_cefConfig->shouldUseSharedTexture()) {
-        g_logger.info("CefRendererGPULinuxNonMesa: Shared texture disabled by config");
+        g_logger.info("CefRendererGPULinuxMesa: Shared texture disabled by config");
         return m_supported = false;
     }    
 
@@ -125,21 +147,37 @@ bool CefRendererGPULinuxMesa::isSupported() const
         return m_supported = false;
     }
 
-    if(glXGetCurrentContext() != LinuxGPUContext::mainContext())
-        glXMakeCurrent(x11Display, LinuxGPUContext::drawable(), LinuxGPUContext::mainContext());
+    // Save current context for restoration
+    GLXContext currentContext = glXGetCurrentContext();
+    GLXDrawable currentDrawable = glXGetCurrentDrawable();
+    
+    // Make sure we have the main context active for extension checks
+    if(currentContext != LinuxGPUContext::mainContext()) {
+        if(!glXMakeCurrent(x11Display, LinuxGPUContext::drawable(), LinuxGPUContext::mainContext())) {
+            g_logger.info("CefRendererGPULinuxMesa: Failed to make main context current");
+            return m_supported = false;
+        }
+    }
 
     if(!isMesaDriver()) {
         g_logger.info("CefRendererGPULinuxMesa: Not a Mesa driver");
+        // Restore context before returning
+        if(currentContext != LinuxGPUContext::mainContext() && currentContext != nullptr) {
+            glXMakeCurrent(x11Display, currentDrawable, currentContext);
+        }
         return m_supported = false;
     }
 
     const char* exts = (const char*)glGetString(GL_EXTENSIONS);
     if(!exts || !strstr(exts, "GL_EXT_memory_object_fd")){
         g_logger.info("CefRendererGPULinuxMesa: GL_EXT_memory_object_fd not supported");
+        // Restore context before returning
+        if(currentContext != LinuxGPUContext::mainContext() && currentContext != nullptr) {
+            glXMakeCurrent(x11Display, currentDrawable, currentContext);
+        }
         return m_supported = false;
     }
         
-
     m_glCreateMemoryObjectsEXT = (PFNGLCREATEMEMORYOBJECTSEXTPROC)resolveGLProc("glCreateMemoryObjectsEXT");
     m_glImportMemoryFdEXT = (PFNGLIMPORTMEMORYFDEXTPROC)resolveGLProc("glImportMemoryFdEXT");
     m_glTexStorageMem2DEXT = (PFNGLTEXSTORAGEMEM2DEXTPROC)resolveGLProc("glTexStorageMem2DEXT");
@@ -147,8 +185,19 @@ bool CefRendererGPULinuxMesa::isSupported() const
 
     if(!m_glCreateMemoryObjectsEXT || !m_glImportMemoryFdEXT ||
        !m_glTexStorageMem2DEXT || !m_glDeleteMemoryObjectsEXT) {
-        g_logger.info("CefRendererGPULinuxMesa: GL_EXT_memory_object_fd not supported");
+        g_logger.info("CefRendererGPULinuxMesa: GL_EXT_memory_object_fd function pointers not available");
+        // Restore context before returning
+        if(currentContext != LinuxGPUContext::mainContext() && currentContext != nullptr) {
+            glXMakeCurrent(x11Display, currentDrawable, currentContext);
+        }
         return m_supported = false;
+    }
+    
+    // Restore original context
+    if(currentContext != LinuxGPUContext::mainContext() && currentContext != nullptr) {
+        if(!glXMakeCurrent(x11Display, currentDrawable, currentContext)) {
+            g_logger.warning("CefRendererGPULinuxMesa: Failed to restore original context during support check");
+        }
     }
         
     g_logger.info("CefRendererGPULinuxMesa: Supported");

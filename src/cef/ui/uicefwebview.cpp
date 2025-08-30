@@ -35,12 +35,10 @@
 #include <algorithm>
 #include <memory>
 
-#ifdef USE_CEF
 #include "../graphics/cef_renderer.h"
 #include <include/cef_browser.h>
 #include <include/cef_frame.h>
 #include "include/cef_parser.h"
-#endif
 
 std::string GetDataURI(const std::string& data, const std::string& mime_type) {
     return "data:" + mime_type + ";base64," +
@@ -415,6 +413,8 @@ void UICEFWebView::onBrowserCreated(CefRefPtr<CefBrowser> browser)
 {
     g_logger.info("UICEFWebView: Browser created successfully!");
     m_browser = browser;
+    // Sync initial hidden/visible state with CEF
+    visibilityChange(isVisible());
     
     if (!m_pendingHtml.empty()) {
         g_logger.info("UICEFWebView: Loading pending HTML content...");
@@ -437,8 +437,12 @@ void UICEFWebView::onBrowserCreated(CefRefPtr<CefBrowser> browser)
         m_pendingUrl.clear();
     }
     
-    // With multi_threaded_message_loop = true, CEF handles rendering automatically
-    // No manual frame triggering needed
+    // If this widget is already focused in the OT UI, propagate focus to CEF
+    if (isFocused()) {
+        CefRefPtr<CefBrowserHost> host = m_browser->GetHost();
+        if (host)
+            host->SetFocus(true);
+    }
 }
 
 void UICEFWebView::drawSelf(Fw::DrawPane drawPane)
@@ -562,6 +566,43 @@ void UICEFWebView::onGeometryChange(const Rect& oldRect, const Rect& newRect)
     }
 }
 
+void UICEFWebView::onVisibilityChange(bool visible)
+{
+    UIWidget::onVisibilityChange(visible);
+    visibilityChange(visible);
+}
+
+void UICEFWebView::onFocusChange(bool focused, Fw::FocusReason reason)
+{
+    UIWidget::onFocusChange(focused, reason);
+
+    if (!m_browser)
+        return;
+    CefRefPtr<CefBrowserHost> host = m_browser->GetHost();
+    if (!host)
+        return;
+    // Ensure the off-screen CEF browser tracks focus so that input works
+    host->SetFocus(focused);
+}
+
+void UICEFWebView::visibilityChange(bool visible)
+{
+    if (!m_browser)
+        return;
+    CefRefPtr<CefBrowserHost> host = m_browser->GetHost();
+    if (!host)
+        return;
+
+    host->WasHidden(!visible);
+
+    int targetFps = visible ? g_app.getForegroundPaneMaxFps() : 1;
+    if (targetFps <= 0)
+        targetFps = visible ? 60 : 1;
+    host->SetWindowlessFrameRate(targetFps);
+
+    host->SetAudioMuted(!visible);
+}
+
 // Static methods for managing all WebViews
 void UICEFWebView::closeAllWebViews() {
     std::vector<UICEFWebView*> webViewsToClose;
@@ -621,6 +662,3 @@ void UICEFWebView::setAllWindowlessFrameRate(int fps)
             webview->setWindowlessFrameRate(fps);
     }
 }
-
-
-

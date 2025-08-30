@@ -22,6 +22,7 @@ const LoginApp = {
 
     actions: {
         async login() {
+            
             LoginApp.state.isLoading = true;
             LoginApp.state.error = null;
             LoginApp.state.success = null;
@@ -56,9 +57,11 @@ const LoginApp = {
                         localStorage.setItem('saved_email', LoginApp.state.email);
                         localStorage.setItem('saved_password', LoginApp.state.password);
                         localStorage.setItem('session_token', data.session_token);
+                        
                     } else {
                         // If "remember me" not checked, save only temporary token
                         localStorage.setItem('session_token', data.session_token);
+                        
                     }
                 } else {
                     LoginApp.state.error = tr('Email or password incorrect');
@@ -93,7 +96,8 @@ const LoginApp = {
                         email: LoginApp.state.email,
                         password: LoginApp.state.password
                     },
-                    method: 'traditional'
+                    method: 'traditional',
+                    remember: !!LoginApp.state.remember
                 };
 
                 sendToLua('login_complete', result);
@@ -107,14 +111,23 @@ const LoginApp = {
         },
 
         back() {
-            // Clear data and return to login screen
-            LoginApp.actions.clearAllData();
+            // Return to login screen and clear stored credentials
             LoginApp.state.view = 'login';
             LoginApp.state.email = '';
             LoginApp.state.password = '';
             LoginApp.state.remember = false;
             LoginApp.state.selectedCharacter = null;
             LoginApp.state.error = null;
+
+            // Clear any persisted data related to credentials
+            try {
+                LoginApp.actions.clearAllData(); // removes remember_me, saved_email, saved_password
+                // Optionally also clear the temporary session token to avoid confusion
+                localStorage.removeItem('session_token');
+            } catch (e) {
+                console.error('Error clearing localStorage:', e);
+            }
+
             m.redraw();
         },
 
@@ -123,11 +136,13 @@ const LoginApp = {
             localStorage.removeItem('remember_me');
             localStorage.removeItem('saved_email');
             localStorage.removeItem('saved_password');
+            
         },
 
         clearSessionDataOnly() {
             // Clear only session token
             localStorage.removeItem('session_token');
+            
         },
     },
 
@@ -143,7 +158,19 @@ const LoginApp = {
 // Login Component
 const LoginForm = {
     view() {
-        return m('.login-section', [
+        const ensureFocus = () => {
+            try {
+                if (LoginApp.state.isGameOnline || LoginApp.state.isLoading) return;
+                const emailEl = document.getElementById('email');
+                const passwordEl = document.getElementById('password');
+                if (emailEl && !LoginApp.state.email) {
+                    emailEl.focus();
+                } else if (passwordEl && LoginApp.state.email && !LoginApp.state.password) {
+                    passwordEl.focus();
+                }
+            } catch (e) { /* ignore */ }
+        };
+        return m('.login-section', { oncreate: ensureFocus }, [
             m('.header.otc-header', [
                 m('h1.otc-window-title', [
                     m('span.otc-icon', '🔐'),
@@ -280,6 +307,7 @@ const CharacterList = {
 
 // Callbacks for Lua communication
 window.registerLuaCallback('init_config', async (data) => {
+    
     LoginApp.state.config = typeof data === 'string' ? JSON.parse(data) : data;
 
     // Check if "Remember me" is activated
@@ -304,6 +332,7 @@ window.registerLuaCallback('init_config', async (data) => {
 });
 
 window.registerLuaCallback('reset_and_show_login', () => {
+    
     // Reset state
     LoginApp.state.selectedCharacter = null;
     LoginApp.state.error = null;
@@ -360,6 +389,27 @@ window.registerLuaCallback('logout', () => {
 
 // Initialization
 document.addEventListener('DOMContentLoaded', () => {
+    
+    // Prefill UI state from localStorage immediately so the first render reflects saved data
+    try {
+        const rememberMe = localStorage.getItem('remember_me');
+        const savedEmail = localStorage.getItem('saved_email');
+        const savedPassword = localStorage.getItem('saved_password');
+        if (rememberMe === 'true' && savedEmail && savedPassword) {
+            LoginApp.state.email = savedEmail;
+            LoginApp.state.password = savedPassword;
+            LoginApp.state.remember = true;
+            if (!window.__otc_auto_login_started) {
+                window.__otc_auto_login_started = true;
+                
+                // Trigger login immediately; config defaults are used until init_config overrides
+                LoginApp.actions.login();
+            }
+        }
+    } catch (e) {
+        console.error('Error accessing localStorage:', e);
+    }
+
     // Initialize translations module first
     if (typeof WebViewTranslations !== 'undefined') {
         WebViewTranslations.init();
@@ -380,8 +430,54 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
     }
 
-    // Notify that JavaScript is loaded
-    sendToLua('js_loaded', '');
+    // Keyboard handling on character selection view
+    const onGlobalKeyDown = (e) => {
+        // Only handle when on character list view
+        if (LoginApp.state.view !== 'characters')
+            return;
+
+        // Do not interfere if game is online or action in progress
+        if (LoginApp.state.isGameOnline || LoginApp.state.isLoading)
+            return;
+
+        const chars = LoginApp.state.characters || [];
+        if (!Array.isArray(chars) || chars.length === 0)
+            return;
+
+        // Normalize selected index
+        let index = chars.findIndex(c => LoginApp.state.selectedCharacter && c.name === LoginApp.state.selectedCharacter.name);
+
+        if (e.key === 'Enter') {
+            if (LoginApp.state.selectedCharacter) {
+                e.preventDefault();
+                LoginApp.actions.enterGame();
+            }
+            return;
+        }
+
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            if (index < 0) index = 0; else index = Math.min(index + 1, chars.length - 1);
+            if (!LoginApp.state.selectedCharacter || LoginApp.state.selectedCharacter.name !== chars[index].name) {
+                LoginApp.actions.selectCharacter(chars[index]);
+            }
+            return;
+        }
+
+        if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            if (index < 0) index = 0; else index = Math.max(index - 1, 0);
+            if (!LoginApp.state.selectedCharacter || LoginApp.state.selectedCharacter.name !== chars[index].name) {
+                LoginApp.actions.selectCharacter(chars[index]);
+            }
+            return;
+        }
+    };
+
+    window.addEventListener('keydown', onGlobalKeyDown);
+
+    // Re-notify that JavaScript is loaded (safe if sent multiple times)
+    requestConfigIfNeeded();
 
     // Preload module-specific translations
     WebViewTranslations.preloadModuleTranslations([

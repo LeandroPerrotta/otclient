@@ -4,8 +4,10 @@ UIWindow
   width: 600
   height: 900  
   anchors.centerIn: parent
+  auto-focus: first
   @onEnter: HTTPEnterGame.doLogin()
 
   UICEFWebView
     id: loginWebView
     anchors.fill: parent
+    focusable: true
