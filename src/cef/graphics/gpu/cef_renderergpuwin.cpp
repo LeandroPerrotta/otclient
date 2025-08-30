@@ -75,6 +75,19 @@ void CefRendererGPUWin::onAcceleratedPaint(const CefAcceleratedPaintInfo& info, 
         g_dispatcher.addEventFromOtherThread([this, duplicatedHandle, width, height, rectsCopy]() mutable {
         auto closeHandle = [](HANDLE& h) { if (h && h != INVALID_HANDLE_VALUE) { CloseHandle(h); h = nullptr; } };
         
+        // Save current EGL context state for restoration
+        EGLDisplay currentDisplay = eglGetCurrentDisplay();
+        EGLContext currentContext = eglGetCurrentContext();
+        EGLSurface currentDrawSurface = eglGetCurrentSurface(EGL_DRAW);
+        EGLSurface currentReadSurface = eglGetCurrentSurface(EGL_READ);
+        
+        // Verify we have a valid EGL context
+        if (currentDisplay == EGL_NO_DISPLAY || currentContext == EGL_NO_CONTEXT) {
+            g_logger.error("CefRendererGPUWin: No valid EGL context available for accelerated paint");
+            closeHandle(duplicatedHandle);
+            return;
+        }
+        
         // First, ensure we have a D3D11 device by trying to open the CEF texture
         if (!m_d3d11Device) {
             ID3D11Texture2D* tempTexture = nullptr;
@@ -143,6 +156,17 @@ void CefRendererGPUWin::onAcceleratedPaint(const CefAcceleratedPaintInfo& info, 
             // Texture refresh completed (removed success log)
         }
 
+        // Restore original EGL context if it was different
+        EGLDisplay finalDisplay = eglGetCurrentDisplay();
+        EGLContext finalContext = eglGetCurrentContext();
+        
+        if (finalDisplay != currentDisplay || finalContext != currentContext) {
+            if (!eglMakeCurrent(currentDisplay, currentDrawSurface, currentReadSurface, currentContext)) {
+                EGLint eglError = eglGetError();
+                g_logger.warning(stdext::format("CefRendererGPUWin: Failed to restore original EGL context, error: 0x%x", eglError));
+            }
+        }
+        
         // Clean up the duplicated handle
         closeHandle(duplicatedHandle);
         // Frame processed successfully (removed per-frame log)
@@ -331,9 +355,15 @@ bool CefRendererGPUWin::createDestinationTexture(int width, int height)
 
 bool CefRendererGPUWin::setupEGLPbuffer()
 {
-    EGLDisplay display = eglGetCurrentDisplay();
-    EGLContext context = eglGetCurrentContext();
-    EGLSurface currentSurface = eglGetCurrentSurface(EGL_DRAW);
+    // Save current EGL context state for restoration
+    EGLDisplay originalDisplay = eglGetCurrentDisplay();
+    EGLContext originalContext = eglGetCurrentContext();
+    EGLSurface originalDrawSurface = eglGetCurrentSurface(EGL_DRAW);
+    EGLSurface originalReadSurface = eglGetCurrentSurface(EGL_READ);
+    
+    EGLDisplay display = originalDisplay;
+    EGLContext context = originalContext;
+    EGLSurface currentSurface = originalDrawSurface;
     
     g_logger.info(stdext::format("CefRendererGPUWin: EGL state - Display: %p, Context: %p, Surface: %p", 
                                  display, context, currentSurface));
@@ -451,6 +481,17 @@ bool CefRendererGPUWin::setupEGLPbuffer()
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
             
+            // Restore original EGL context before success return
+            EGLDisplay finalDisplay = eglGetCurrentDisplay();
+            EGLContext finalContext = eglGetCurrentContext();
+            
+            if (finalDisplay != originalDisplay || finalContext != originalContext) {
+                if (!eglMakeCurrent(originalDisplay, originalDrawSurface, originalReadSurface, originalContext)) {
+                    EGLint eglError = eglGetError();
+                    g_logger.warning(stdext::format("CefRendererGPUWin: Failed to restore original EGL context after successful binding, error: 0x%x", eglError));
+                }
+            }
+            
             g_logger.info("CefRendererGPUWin: Direct texture binding successful!");
             return true;
         } else {
@@ -463,6 +504,17 @@ bool CefRendererGPUWin::setupEGLPbuffer()
     // We'll implement the copy in the frame update logic
     // For now, just mark that we have a working pbuffer but no direct binding
     m_pbufferBound = false;  // Not directly bound, but available for copying
+    
+    // Restore original EGL context
+    EGLDisplay finalDisplay = eglGetCurrentDisplay();
+    EGLContext finalContext = eglGetCurrentContext();
+    
+    if (finalDisplay != originalDisplay || finalContext != originalContext) {
+        if (!eglMakeCurrent(originalDisplay, originalDrawSurface, originalReadSurface, originalContext)) {
+            EGLint eglError = eglGetError();
+            g_logger.warning(stdext::format("CefRendererGPUWin: Failed to restore original EGL context after pbuffer setup, error: 0x%x", eglError));
+        }
+    }
     
     g_logger.info("CefRendererGPUWin: Pbuffer setup completed with copy-based approach");
     return true;
