@@ -20,25 +20,46 @@ CefPhysFsResourceHandler::CefPhysFsResourceHandler(const std::string& path)
     }
 }
 
-bool CefPhysFsResourceHandler::ProcessRequest(CefRefPtr<CefRequest> /*request*/, CefRefPtr<CefCallback> callback) {
+bool CefPhysFsResourceHandler::ProcessRequest(CefRefPtr<CefRequest> request, CefRefPtr<CefCallback> callback) {
+    m_isOptionsRequest = false;
+    m_status = 200;
+    if (request) {
+        std::string method = request->GetMethod();
+        if (!method.empty()) {
+            std::transform(method.begin(), method.end(), method.begin(), ::toupper);
+            if (method == "OPTIONS") {
+                m_isOptionsRequest = true;
+                m_status = 204; // No Content for preflight
+            }
+        }
+    }
     callback->Continue();
     return true;
 }
 
 void CefPhysFsResourceHandler::GetResponseHeaders(CefRefPtr<CefResponse> response, int64_t& response_length, CefString& /*redirectUrl*/) {
-    if (!m_data.empty()) {
+    if (!m_data.empty() && !m_isOptionsRequest) {
         response->SetMimeType(m_mimeType);
-        response->SetStatus(200);
+        response->SetStatus(m_status);
         response_length = m_data.size();
     } else {
-        response->SetStatus(404);
+        response->SetStatus(m_isOptionsRequest ? m_status : 404);
         response_length = 0;
     }
+
+    // Add permissive CORS headers so fetch/XHR works from the webview
+    CefResponse::HeaderMap headers;
+    response->GetHeaderMap(headers);
+    headers.insert({"Access-Control-Allow-Origin", "*"});
+    headers.insert({"Access-Control-Allow-Methods", "GET, OPTIONS"});
+    headers.insert({"Access-Control-Allow-Headers", "Content-Type"});
+    headers.insert({"Access-Control-Expose-Headers", "Content-Type"});
+    response->SetHeaderMap(headers);
 }
 
 bool CefPhysFsResourceHandler::Read(void* data_out, int bytes_to_read, int& bytes_read, CefRefPtr<CefResourceReadCallback> /*callback*/) {
     bytes_read = 0;
-    if (m_offset >= m_data.size())
+    if (m_isOptionsRequest || m_offset >= m_data.size())
         return false;
 
     int transfer = (bytes_to_read < static_cast<int>(m_data.size() - m_offset)) ? bytes_to_read : static_cast<int>(m_data.size() - m_offset);

@@ -24,6 +24,8 @@ private:
     std::string m_data;
     std::string m_mimeType;
     size_t m_offset;
+    bool m_isOptionsRequest = false;
+    int m_status = 200;
     IMPLEMENT_REFCOUNTING(CefPhysFsResourceHandler);
 };
 

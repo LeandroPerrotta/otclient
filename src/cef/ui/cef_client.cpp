@@ -6,6 +6,7 @@
 #include <vector>
 #include <cstring>
 #include "cef_luahandler.h"
+#include "include/base/cef_logging.h"
 
 SimpleCEFClient::SimpleCEFClient(UICEFWebView* webview) : m_webview(webview)
 {
@@ -149,4 +150,28 @@ void SimpleCEFClient::OnAcceleratedPaint(CefRefPtr<CefBrowser> browser,
     }
 }
 
+
+bool SimpleCEFClient::OnConsoleMessage(CefRefPtr<CefBrowser> browser,
+                                       cef_log_severity_t level,
+                                       const CefString& message,
+                                       const CefString& source,
+                                       int line)
+{
+    std::string msg = message.ToString();
+    std::string src = source.ToString();
+    std::string composed = stdext::format("[CEF Console] %s (%s:%d)", msg, src, line);
+    switch(level) {
+    case LOGSEVERITY_ERROR:
+    case LOGSEVERITY_FATAL:
+        g_logger.error(composed);
+        break;
+    case LOGSEVERITY_WARNING:
+        g_logger.warning(composed);
+        break;
+    default:
+        g_logger.info(composed);
+        break;
+    }
+    return false; // allow default handling
+}
 

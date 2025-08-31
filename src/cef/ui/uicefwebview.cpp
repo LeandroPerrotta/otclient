@@ -39,6 +39,7 @@
 #include <include/cef_browser.h>
 #include <include/cef_frame.h>
 #include "include/cef_parser.h"
+#include "include/cef_values.h"
 
 std::string GetDataURI(const std::string& data, const std::string& mime_type) {
     return "data:" + mime_type + ";base64," +
@@ -46,24 +47,9 @@ std::string GetDataURI(const std::string& data, const std::string& mime_type) {
                .ToString();
 }
 
-static std::string escape(const std::string& str) {
-    std::string result;
-    result.reserve(str.size());
-    for(char c : str) {
-        if(c == '\\' || c == '"')
-            result.push_back('\\');
-        result.push_back(c);
-    }
-    return result;
-}
-
-
 // Static member initialization
 std::vector<UICEFWebView*> UICEFWebView::s_activeWebViews;
 std::mutex UICEFWebView::s_activeWebViewsMutex;
-
-
-
 
 UICEFWebView::UICEFWebView()
     : UIWidget()
@@ -285,8 +271,16 @@ void UICEFWebView::unregisterJavaScriptCallback(const std::string& name)
 
 void UICEFWebView::sendToJavaScript(const std::string& name, const std::string& data)
 {
-    std::string script = std::string("if(window.receiveFromLua){window.receiveFromLua({\\\"name\\\":\\\"") +
-        escape(name) + "\\\",\\\"data\\\":\\\"" + escape(data) + "\\\"});}";
+    // Build a proper JSON object to avoid string concatenation/escaping pitfalls
+    CefRefPtr<CefDictionaryValue> dict = CefDictionaryValue::Create();
+    dict->SetString("name", name);
+    dict->SetString("data", data);
+
+    CefRefPtr<CefValue> value = CefValue::Create();
+    value->SetDictionary(dict);
+
+    std::string json = CefWriteJSON(value, JSON_WRITER_DEFAULT).ToString();
+    std::string script = std::string("if(window.receiveFromLua){window.receiveFromLua(") + json + ");}";
     executeJavaScriptInternal(script);
 }
 

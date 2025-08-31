@@ -6,16 +6,20 @@
 #include "cef_config.h"
 #include <framework/stdext/format.h>
 #include "include/wrapper/cef_helpers.h"
+#include "include/cef_scheme.h"
 
 // ============================================================================
 // OTClientAppBase Implementation (Shared functionality)
 // ============================================================================
 
 void OTClientAppBase::OnRegisterCustomSchemes(CefRawPtr<CefSchemeRegistrar> registrar) {
+    // Enable Fetch/XHR and CORS for custom scheme so JS fetch can load otclient:// resources
     registrar->AddCustomScheme("otclient",
                                CEF_SCHEME_OPTION_STANDARD |
                                CEF_SCHEME_OPTION_LOCAL |
-                               CEF_SCHEME_OPTION_DISPLAY_ISOLATED);
+                               CEF_SCHEME_OPTION_DISPLAY_ISOLATED |
+                               CEF_SCHEME_OPTION_CORS_ENABLED |
+                               CEF_SCHEME_OPTION_FETCH_ENABLED);
 }
 
 void OTClientAppBase::OnBeforeCommandLineProcessing(const CefString& process_type,
