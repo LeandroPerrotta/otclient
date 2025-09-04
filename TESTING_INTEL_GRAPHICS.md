@@ -1,8 +1,21 @@
 # Testing Intel Graphics Compatibility
 
-Este documento explica como testar as correções para placas Intel sem ter hardware Intel.
+⚠️ **IMPORTANTE:** Esta simulação NÃO reproduz o crash real do Intel. Ela apenas testa se o código de detecção e aplicação de flags funciona.
 
-## Métodos de Teste
+## Limitações dos Testes
+
+### O Que NÃO Podemos Testar:
+- ❌ Crash real do subprocess GPU Intel
+- ❌ Problemas específicos dos drivers Intel
+- ❌ Incompatibilidades ANGLE + D3D11 + Intel hardware
+
+### O Que PODEMOS Testar:
+- ✅ Detecção de placas Intel funciona
+- ✅ Flags corretas são aplicadas quando Intel detectada
+- ✅ Código de correção é executado
+- ✅ Logs aparecem corretamente
+
+## Métodos de Teste (Limitados)
 
 ### 1. **Variáveis de Ambiente (Mais Fácil)**
 
