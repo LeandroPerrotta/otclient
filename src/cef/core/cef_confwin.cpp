@@ -69,6 +69,13 @@ void CefConfigWindows::applySettings(CefSettings& settings) {
 
 void CefConfigWindows::applyCommandLineFlags(CefRefPtr<CefCommandLine> command_line) {
     applyGenericCommandLineFlags(command_line);
+    
+    // Add Intel graphics specific workarounds to prevent GPU process crashes
+    // These flags help stabilize CEF with Intel graphics drivers
+    command_line->AppendSwitch("disable-gpu-process-crash-limit");
+    command_line->AppendSwitch("disable-features=VizDisplayCompositor");
+    command_line->AppendSwitch("enable-features=UseSkiaRenderer");
+    command_line->AppendSwitch("disable-gpu-driver-bug-workarounds");
 
     logMessage("Windows", stdext::format("Command line flags: %s",
         command_line->GetCommandLineString().ToString()).c_str());
