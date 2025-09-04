@@ -188,6 +188,22 @@ bool CefRendererGPUWin::isSupported() const
     const char* renderer = reinterpret_cast<const char*>(glGetString(GL_RENDERER));
     g_logger.info(stdext::format("GL_RENDERER: %s", renderer ? renderer : "null"));    
     
+    // Check for problematic Intel graphics that are known to cause CEF GPU process crashes
+    if (renderer && strstr(renderer, "Intel")) {
+        // Check for specific Intel graphics models that have issues with CEF GPU acceleration
+        if (strstr(renderer, "Intel(R) UHD Graphics") || 
+            strstr(renderer, "Intel(R) HD Graphics") ||
+            strstr(renderer, "Intel(R) Iris")) {
+            
+            g_logger.warning(stdext::format("CefRendererGPUWin: Detected Intel graphics (%s) - these may have compatibility issues with CEF GPU acceleration", renderer));
+            
+            // For now, disable GPU acceleration for Intel graphics to prevent crashes
+            // This can be made configurable in the future
+            g_logger.info("CefRendererGPUWin: Disabling GPU acceleration for Intel graphics to prevent CEF process crashes");
+            return false;
+        }
+    }
+    
     EGLDisplay display = eglGetCurrentDisplay();
     if (display == EGL_NO_DISPLAY) {
         g_logger.error("CefRendererGPUWin: No current EGL display - GPU acceleration not supported");

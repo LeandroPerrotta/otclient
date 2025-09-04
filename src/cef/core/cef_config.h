@@ -70,6 +70,10 @@ public:
 
     // Shared texture usage (GPU-only features)
     virtual bool shouldUseSharedTexture() const { return false; }
+    
+    // Intel graphics compatibility settings
+    virtual bool shouldDisableGPUForIntelGraphics() const { return true; }
+    virtual bool shouldAllowIntelGraphicsOverride() const { return false; }
 
     // Create browser settings with platform-specific defaults
     CefBrowserSettings createBrowserSettings();

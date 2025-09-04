@@ -111,6 +111,22 @@ bool CefConfigWindows::shouldUseSharedTexture() const {
 #endif
 }
 
+bool CefConfigWindows::shouldDisableGPUForIntelGraphics() const {
+    // By default, disable GPU acceleration for Intel graphics to prevent CEF crashes
+    // This can be overridden by setting allow_intel_graphics_override to true
+    std::string override_setting = getUserPreference("allow_intel_graphics_override");
+    if (override_setting == "true" || override_setting == "1") {
+        return false; // User explicitly wants to enable Intel GPU acceleration
+    }
+    return true; // Default: disable for Intel graphics
+}
+
+bool CefConfigWindows::shouldAllowIntelGraphicsOverride() const {
+    // Check if user has explicitly enabled Intel graphics override
+    std::string override_setting = getUserPreference("allow_intel_graphics_override");
+    return (override_setting == "true" || override_setting == "1");
+}
+
 } // namespace cef
 
 #endif // _WIN32
