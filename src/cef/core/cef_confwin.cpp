@@ -11,6 +11,7 @@
 #endif
 #include <windows.h>
 #include <libloaderapi.h>
+#include <dxgi1_2.h>
 
 // Only include scheme handler in main process, not subprocess
 #ifndef CEF_SUBPROCESS_BUILD
@@ -69,6 +70,39 @@ void CefConfigWindows::applySettings(CefSettings& settings) {
 
 void CefConfigWindows::applyCommandLineFlags(CefRefPtr<CefCommandLine> command_line) {
     applyGenericCommandLineFlags(command_line);
+    
+    // Apply Intel-specific workarounds only if Intel graphics detected
+    if (isIntelGraphicsSystem()) {
+        logMessage("Windows", "Intel graphics detected - applying compatibility workarounds");
+        
+        // Critical Intel graphics workarounds to prevent GPU subprocess crashes
+        // These flags specifically target the initialization crash in Intel graphics
+        
+        // Disable D3D11 which is problematic with Intel drivers during CEF subprocess init
+        command_line->AppendSwitch("disable-d3d11");
+        
+        // Force software compositing for Intel to prevent GPU process crash
+        command_line->AppendSwitch("disable-gpu-compositing");
+        
+        // Disable ANGLE backend that causes Intel crashes during initialization
+        command_line->AppendSwitch("use-gl=desktop");
+        
+        // Disable specific Intel problematic features that crash during subprocess init
+        command_line->AppendSwitch("disable-features=VizDisplayCompositor,D3D11VideoDecoder");
+        
+        // Enable safer rendering path
+        command_line->AppendSwitch("enable-features=UseSkiaRenderer");
+        
+        // Prevent GPU process restart loops
+        command_line->AppendSwitch("disable-gpu-process-crash-limit");
+        
+        // Additional Intel-specific stability flags
+        command_line->AppendSwitch("disable-gpu-driver-bug-workarounds");
+        command_line->AppendSwitch("disable-accelerated-2d-canvas");
+        command_line->AppendSwitch("disable-accelerated-video-decode");
+        
+        logMessage("Windows", "Intel compatibility flags applied");
+    }
 
     logMessage("Windows", stdext::format("Command line flags: %s",
         command_line->GetCommandLineString().ToString()).c_str());
@@ -109,6 +143,62 @@ bool CefConfigWindows::shouldUseSharedTexture() const {
 #else
     return false;
 #endif
+}
+
+bool CefConfigWindows::shouldDisableGPUForIntelGraphics() const {
+    // By default, disable GPU acceleration for Intel graphics to prevent CEF crashes
+    // This can be overridden by setting allow_intel_graphics_override to true
+    std::string override_setting = getUserPreference("allow_intel_graphics_override");
+    if (override_setting == "true" || override_setting == "1") {
+        return false; // User explicitly wants to enable Intel GPU acceleration
+    }
+    return true; // Default: disable for Intel graphics
+}
+
+bool CefConfigWindows::shouldAllowIntelGraphicsOverride() const {
+    // Check if user has explicitly enabled Intel graphics override
+    std::string override_setting = getUserPreference("allow_intel_graphics_override");
+    return (override_setting == "true" || override_setting == "1");
+}
+
+bool CefConfigWindows::isIntelGraphicsSystem() const {
+    // Check for test override first (for testing without Intel hardware)
+    std::string test_intel = getUserPreference("test_intel_graphics");
+    if (test_intel == "true" || test_intel == "1") {
+        logMessage("Windows", "TEST MODE: Simulating Intel graphics behavior");
+        return true;
+    }
+    
+    // Check Windows registry and system info for Intel graphics
+    // This needs to be done before OpenGL context creation
+    
+    // Method 1: Check DXGI adapters
+    IDXGIFactory1* factory = nullptr;
+    HRESULT hr = CreateDXGIFactory1(__uuidof(IDXGIFactory1), (void**)&factory);
+    if (SUCCEEDED(hr)) {
+        IDXGIAdapter1* adapter = nullptr;
+        for (UINT i = 0; factory->EnumAdapters1(i, &adapter) != DXGI_ERROR_NOT_FOUND; ++i) {
+            DXGI_ADAPTER_DESC1 desc;
+            if (SUCCEEDED(adapter->GetDesc1(&desc))) {
+                // Check if vendor is Intel (VendorId = 0x8086)
+                if (desc.VendorId == 0x8086) {
+                    std::wstring description(desc.Description);
+                    std::string descStr(description.begin(), description.end());
+                    logMessage("Windows", stdext::format("Intel graphics adapter detected: %s", descStr.c_str()).c_str());
+                    adapter->Release();
+                    factory->Release();
+                    return true;
+                }
+            }
+            adapter->Release();
+        }
+        factory->Release();
+    }
+    
+    // Method 2: Check via WMI (fallback)
+    // This is more complex but could be added if needed
+    
+    return false;
 }
 
 } // namespace cef

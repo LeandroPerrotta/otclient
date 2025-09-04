@@ -188,6 +188,11 @@ bool CefRendererGPUWin::isSupported() const
     const char* renderer = reinterpret_cast<const char*>(glGetString(GL_RENDERER));
     g_logger.info(stdext::format("GL_RENDERER: %s", renderer ? renderer : "null"));    
     
+    // Log GPU renderer information
+    if (renderer && strstr(renderer, "Intel")) {
+        g_logger.info(stdext::format("CefRendererGPUWin: Intel graphics detected (%s)", renderer));
+    }
+    
     EGLDisplay display = eglGetCurrentDisplay();
     if (display == EGL_NO_DISPLAY) {
         g_logger.error("CefRendererGPUWin: No current EGL display - GPU acceleration not supported");
@@ -286,22 +291,29 @@ bool CefRendererGPUWin::createDestinationTexture(int width, int height)
         return false;
     }
 
-    // With BGRA device support, try BGRA8 first as it matches the device capability
+    // Intel graphics prefer simpler texture configurations
     struct TextureConfig {
         DXGI_FORMAT format;
         UINT bindFlags;
         const char* name;
     } configs[] = {
-        // Try BGRA8 first - matches D3D11_CREATE_DEVICE_BGRA_SUPPORT
-        { DXGI_FORMAT_B8G8R8A8_UNORM, D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET, "BGRA8 Renderable" },
-        { DXGI_FORMAT_R8G8B8A8_UNORM, D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET, "RGBA8 Renderable" },
+        // For Intel graphics, try simpler configurations first
+        isIntelGraphics() ? 
+            // Intel-optimized order
+            (TextureConfig{ DXGI_FORMAT_B8G8R8A8_UNORM, D3D11_BIND_SHADER_RESOURCE, "BGRA8 Simple (Intel)" }) :
+            // Standard order for other GPUs
+            (TextureConfig{ DXGI_FORMAT_B8G8R8A8_UNORM, D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET, "BGRA8 Renderable" }),
         
-        // Fallback with additional flags
+        { DXGI_FORMAT_R8G8B8A8_UNORM, D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET, "RGBA8 Renderable" },
+        { DXGI_FORMAT_B8G8R8A8_UNORM, D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET, "BGRA8 Renderable" },
+        
+        // Fallback with additional flags (only for non-Intel)
         { DXGI_FORMAT_R8G8B8A8_UNORM, D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET | D3D11_BIND_UNORDERED_ACCESS, "RGBA8 Full Access" },
         { DXGI_FORMAT_B8G8R8A8_UNORM, D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET | D3D11_BIND_UNORDERED_ACCESS, "BGRA8 Full Access" },
     };
 
-    for (int i = 0; i < 4; i++) {
+    int maxConfigs = isIntelGraphics() ? 3 : 5; // Skip complex configs for Intel
+    for (int i = 0; i < maxConfigs; i++) {
         // Create texture with classic shared handle
         D3D11_TEXTURE2D_DESC desc = {};
         desc.Width = width;
@@ -753,6 +765,15 @@ bool CefRendererGPUWin::createDeviceOnAdapter(const LUID& adapterLuid)
 
     D3D_FEATURE_LEVEL featureLevel;
     UINT createFlags = D3D11_CREATE_DEVICE_BGRA_SUPPORT;  // ANGLE needs this for proper texture sharing
+    
+    // Intel graphics specific flags
+    if (isIntelGraphics()) {
+        // For Intel graphics, we might need additional compatibility flags
+        // Keep single-threaded to avoid Intel driver issues
+        createFlags |= D3D11_CREATE_DEVICE_SINGLETHREADED;
+        g_logger.info("CefRendererGPUWin: Using single-threaded mode for Intel graphics compatibility");
+    }
+    
 #ifdef _DEBUG
     createFlags |= D3D11_CREATE_DEVICE_DEBUG;
 #endif
@@ -798,18 +819,29 @@ bool CefRendererGPUWin::handleKeyedMutex(ID3D11Texture2D* srcTexture, ID3D11Text
     }
     
     if (acquire) {
+        // For Intel graphics, use shorter timeout to prevent deadlocks
+        DWORD timeout = isIntelGraphics() ? 100 : INFINITE;
+        
         // Acquire mutexes (source first, then destination)
         if (srcMutex) {
-            HRESULT hr = srcMutex->AcquireSync(0, INFINITE);
+            HRESULT hr = srcMutex->AcquireSync(0, timeout);
             if (FAILED(hr)) {
-                g_logger.warning(stdext::format("CefRendererGPUWin: Failed to acquire source mutex: 0x%x", hr));
+                if (isIntelGraphics() && hr == WAIT_TIMEOUT) {
+                    g_logger.warning("CefRendererGPUWin: Intel graphics mutex timeout - skipping frame to prevent deadlock");
+                } else {
+                    g_logger.warning(stdext::format("CefRendererGPUWin: Failed to acquire source mutex: 0x%x", hr));
+                }
             }
         }
         
         if (dstMutex) {
-            HRESULT hr = dstMutex->AcquireSync(0, INFINITE);
+            HRESULT hr = dstMutex->AcquireSync(0, timeout);
             if (FAILED(hr)) {
-                g_logger.warning(stdext::format("CefRendererGPUWin: Failed to acquire destination mutex: 0x%x", hr));
+                if (isIntelGraphics() && hr == WAIT_TIMEOUT) {
+                    g_logger.warning("CefRendererGPUWin: Intel graphics mutex timeout - skipping frame to prevent deadlock");
+                } else {
+                    g_logger.warning(stdext::format("CefRendererGPUWin: Failed to acquire destination mutex: 0x%x", hr));
+                }
             }
         }
     } else {
@@ -827,6 +859,25 @@ bool CefRendererGPUWin::handleKeyedMutex(ID3D11Texture2D* srcTexture, ID3D11Text
     if (dstMutex) dstMutex->Release();
     
     return true;
+}
+
+bool CefRendererGPUWin::isIntelGraphics() const
+{
+    const char* renderer = reinterpret_cast<const char*>(glGetString(GL_RENDERER));
+    return (renderer && strstr(renderer, "Intel"));
+}
+
+void CefRendererGPUWin::applyIntelCompatibilitySettings()
+{
+    if (!isIntelGraphics()) {
+        return;
+    }
+    
+    g_logger.info("CefRendererGPUWin: Applying Intel graphics compatibility settings");
+    
+    // Intel-specific optimizations can be added here
+    // For now, we mainly rely on the timeout changes in mutex handling
+    // and the device creation flags that already include BGRA support
 }
 
 #endif

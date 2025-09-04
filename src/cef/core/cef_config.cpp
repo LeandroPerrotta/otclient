@@ -41,6 +41,31 @@ void CefConfig::applyGenericCommandLineFlags(CefRefPtr<CefCommandLine> command_l
     command_line->AppendSwitch("disable-features=PushMessaging,BackgroundSync,GCM");
 }
 
+std::string CefConfig::getUserPreference(const std::string& key) const {
+    // Check for environment variables first (for easy testing)
+    if (key == "test_intel_graphics") {
+        const char* env_val = getenv("CEF_TEST_INTEL_GRAPHICS");
+        if (env_val) {
+            return std::string(env_val);
+        }
+    }
+    
+    if (key == "allow_intel_graphics_override") {
+        const char* env_val = getenv("CEF_ALLOW_INTEL_OVERRIDE");
+        if (env_val) {
+            return std::string(env_val);
+        }
+    }
+    
+    // Check internal preferences map
+    auto it = m_preferences.find(key);
+    if (it != m_preferences.end()) {
+        return it->second;
+    }
+    
+    return "";
+}
+
 CefBrowserSettings CefConfig::createBrowserSettings() {
     CefBrowserSettings settings;
     applyBrowserSettings(settings);

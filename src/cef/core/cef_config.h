@@ -8,6 +8,7 @@
 #include "include/cef_browser.h"
 #include <memory>
 #include <string>
+#include <map>
 
 namespace cef {
 
@@ -66,10 +67,18 @@ public:
     
     // Future: Allow user customization (for Lua integration)
     virtual void setUserPreference(const std::string& key, const std::string& value) {}
-    virtual std::string getUserPreference(const std::string& key) const { return ""; }
+    virtual std::string getUserPreference(const std::string& key) const;
+    
+protected:
+    // Simple preference storage for testing
+    mutable std::map<std::string, std::string> m_preferences;
 
     // Shared texture usage (GPU-only features)
     virtual bool shouldUseSharedTexture() const { return false; }
+    
+    // Intel graphics compatibility settings
+    virtual bool shouldDisableGPUForIntelGraphics() const { return true; }
+    virtual bool shouldAllowIntelGraphicsOverride() const { return false; }
 
     // Create browser settings with platform-specific defaults
     CefBrowserSettings createBrowserSettings();

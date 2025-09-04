@@ -19,11 +19,14 @@ public:
     bool handleSubprocessExecution(const CefMainArgs& args, CefRefPtr<CefApp> app) override;
     void registerSchemeHandlers() override;
     bool shouldUseSharedTexture() const override;
+    bool shouldDisableGPUForIntelGraphics() const override;
+    bool shouldAllowIntelGraphicsOverride() const override;
     std::string getPlatformName() const override { return "Windows"; }
 
 private:
     std::wstring getExecutableDirectory() const;
     void setupDllDirectories() const;
+    bool isIntelGraphicsSystem() const;
 };
 
 } // namespace cef

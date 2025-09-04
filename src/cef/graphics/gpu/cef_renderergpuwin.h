@@ -53,6 +53,10 @@ private:
             bool openSharedResourceSafely(HANDLE handle, ID3D11Texture2D** outTexture, LUID* adapterLuid = nullptr);
     bool createDeviceOnAdapter(const LUID& adapterLuid);
     bool handleKeyedMutex(ID3D11Texture2D* srcTexture, ID3D11Texture2D* dstTexture, bool acquire);
+    
+    // Intel graphics compatibility helpers
+    bool isIntelGraphics() const;
+    void applyIntelCompatibilitySettings();
 #endif
 };
 
