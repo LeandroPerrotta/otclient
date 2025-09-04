@@ -26,6 +26,7 @@ public:
 private:
     std::wstring getExecutableDirectory() const;
     void setupDllDirectories() const;
+    bool isIntelGraphicsSystem() const;
 };
 
 } // namespace cef

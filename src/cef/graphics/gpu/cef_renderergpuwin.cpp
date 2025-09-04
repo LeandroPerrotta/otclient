@@ -188,12 +188,9 @@ bool CefRendererGPUWin::isSupported() const
     const char* renderer = reinterpret_cast<const char*>(glGetString(GL_RENDERER));
     g_logger.info(stdext::format("GL_RENDERER: %s", renderer ? renderer : "null"));    
     
-    // Check for Intel graphics and apply specific compatibility settings
+    // Log GPU renderer information
     if (renderer && strstr(renderer, "Intel")) {
-        g_logger.info(stdext::format("CefRendererGPUWin: Detected Intel graphics (%s) - applying Intel-specific compatibility settings", renderer));
-        
-        // Intel graphics detected - we'll continue with GPU acceleration but with specific settings
-        // The actual compatibility fixes will be applied in the renderer setup
+        g_logger.info(stdext::format("CefRendererGPUWin: Intel graphics detected (%s)", renderer));
     }
     
     EGLDisplay display = eglGetCurrentDisplay();
