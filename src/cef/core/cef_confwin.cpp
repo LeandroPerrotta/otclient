@@ -162,6 +162,13 @@ bool CefConfigWindows::shouldAllowIntelGraphicsOverride() const {
 }
 
 bool CefConfigWindows::isIntelGraphicsSystem() const {
+    // Check for test override first (for testing without Intel hardware)
+    std::string test_intel = getUserPreference("test_intel_graphics");
+    if (test_intel == "true" || test_intel == "1") {
+        logMessage("Windows", "TEST MODE: Simulating Intel graphics behavior");
+        return true;
+    }
+    
     // Check Windows registry and system info for Intel graphics
     // This needs to be done before OpenGL context creation
     
