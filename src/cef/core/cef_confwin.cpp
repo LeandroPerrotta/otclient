@@ -53,6 +53,16 @@ void CefConfigWindows::configurePaths(CefSettings& settings) {
     const std::wstring cacheDir = cefDir + L"\\cache";
     const std::wstring subprocessPath = cefDir + L"\\otclient_cef_subproc.exe";
 
+    // Verify CEF directory exists and contains required files
+    std::wstring libcefPath = cefDir + L"\\libcef.dll";
+    DWORD fileAttrib = GetFileAttributesW(libcefPath.c_str());
+    if (fileAttrib == INVALID_FILE_ATTRIBUTES) {
+        logMessage("Windows", stdext::format("ERROR: libcef.dll not found at %s", 
+            std::string(libcefPath.begin(), libcefPath.end())).c_str());
+        logMessage("Windows", "Make sure to copy the CEF runtime files to the ./cef/ directory");
+        return;
+    }
+
     CefString(&settings.resources_dir_path) = cefDir;
     CefString(&settings.locales_dir_path) = localesDir;
     CefString(&settings.cache_path) = cacheDir;
@@ -60,6 +70,7 @@ void CefConfigWindows::configurePaths(CefSettings& settings) {
     CefString(&settings.browser_subprocess_path) = subprocessPath;
 
     logMessage("Windows", stdext::format("CEF directory: %s", std::string(cefDir.begin(), cefDir.end())).c_str());
+    logMessage("Windows", "CEF configured for portable operation");
 }
 
 void CefConfigWindows::applySettings(CefSettings& settings) {

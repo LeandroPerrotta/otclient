@@ -21,24 +21,38 @@
 namespace cef {
 
 std::string CefConfigLinux::findCefDirectory() const {
-    std::string work_dir;
+    std::string exe_dir;
     
-    // Get current working directory (works in both main process and subprocess)
-    char cwd[PATH_MAX];
-    if (getcwd(cwd, sizeof(cwd)) != nullptr) {
-        work_dir = cwd;
+    // Get executable directory (more reliable than working directory)
+    char exe_path[PATH_MAX];
+    ssize_t len = readlink("/proc/self/exe", exe_path, sizeof(exe_path) - 1);
+    if (len != -1) {
+        exe_path[len] = '\0';
+        std::string exe_full_path = exe_path;
+        size_t pos = exe_full_path.find_last_of('/');
+        if (pos != std::string::npos) {
+            exe_dir = exe_full_path.substr(0, pos);
+        } else {
+            exe_dir = ".";
+        }
     } else {
-        work_dir = ".";
+        // Fallback to current working directory
+        char cwd[PATH_MAX];
+        if (getcwd(cwd, sizeof(cwd)) != nullptr) {
+            exe_dir = cwd;
+        } else {
+            exe_dir = ".";
+        }
     }
     
-    logMessage("Linux", stdext::format("Work directory: %s", work_dir).c_str());
+    logMessage("Linux", stdext::format("Executable directory: %s", exe_dir).c_str());
 
     // Look for CEF in the local runtime directory (where setup_cef.sh copies everything)
     std::vector<std::string> search_paths = {
-        work_dir + "/cef",                      // Local runtime directory
+        exe_dir + "/cef",                       // Local runtime directory (relative to executable)
         "./cef",                                // Current directory fallback
-        work_dir + "/cef_binary_*",             // Legacy locations (fallback)
-        work_dir + "/../cef_binary_*",
+        exe_dir + "/cef_binary_*",              // Legacy locations (fallback)
+        exe_dir + "/../cef_binary_*",
         "./cef_binary_*",
         "/usr/local/cef",
         "/opt/cef"
