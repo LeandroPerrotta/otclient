@@ -150,7 +150,8 @@ if(USE_CEF)
     
     # Include CEF directories as SYSTEM to suppress warnings from external library
     include_directories(SYSTEM ${CEF_INCLUDE_DIRS})
-    link_directories(${CEF_LIBRARY_DIRS})
+    # NOTE: Removed link_directories to avoid hardcoding paths in the executable
+    # CEF libraries will be found at runtime relative to the executable
     
     # Windows-specific: Configure runtime library search
     if(WIN32)

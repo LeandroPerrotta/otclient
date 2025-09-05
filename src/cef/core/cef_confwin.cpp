@@ -41,8 +41,26 @@ std::wstring CefConfigWindows::getExecutableDirectory() const {
 
 void CefConfigWindows::setupDllDirectories() const {
     const std::wstring cefDir = getExecutableDirectory() + L"\\cef";
+    
+    // Verify CEF directory exists before adding it
+    DWORD fileAttrib = GetFileAttributesW(cefDir.c_str());
+    if (fileAttrib == INVALID_FILE_ATTRIBUTES || !(fileAttrib & FILE_ATTRIBUTE_DIRECTORY)) {
+        logMessage("Windows", stdext::format("WARNING: CEF directory not found at %s", 
+            std::string(cefDir.begin(), cefDir.end())).c_str());
+        return;
+    }
+    
+    // Configure DLL search paths to prioritize the CEF directory
     SetDefaultDllDirectories(LOAD_LIBRARY_SEARCH_DEFAULT_DIRS | LOAD_LIBRARY_SEARCH_USER_DIRS);
-    AddDllDirectory(cefDir.c_str());
+    
+    // Add CEF directory to DLL search path
+    DLL_DIRECTORY_COOKIE cookie = AddDllDirectory(cefDir.c_str());
+    if (cookie == NULL) {
+        logMessage("Windows", "WARNING: Failed to add CEF directory to DLL search path");
+    } else {
+        logMessage("Windows", stdext::format("CEF DLL directory added: %s", 
+            std::string(cefDir.begin(), cefDir.end())).c_str());
+    }
 }
 
 void CefConfigWindows::configurePaths(CefSettings& settings) {
