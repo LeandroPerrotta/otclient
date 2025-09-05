@@ -45,8 +45,9 @@ void ResourceManager::terminate()
 bool ResourceManager::discoverWorkDir(const std::string& existentFile)
 {
     // search for modules directory
-    std::string possiblePaths[] = { g_platform.getCurrentDir(),
-                                    g_resources.getBaseDir(),
+    // NOTE: Prioritize executable directory over current working directory for portable builds
+    std::string possiblePaths[] = { g_resources.getBaseDir(),                                    // Executable directory (highest priority)
+                                    g_platform.getCurrentDir(),                                  // Current working directory (fallback)
                                     g_resources.getBaseDir() + "../",
                                     g_resources.getBaseDir() + "../share/" + g_app.getCompactName() + "/" };
 

@@ -56,6 +56,33 @@ link_directories(${CEF_LIBRARY_DIRS})
 # CEF libraries will be found at runtime relative to the executable
 ```
 
+### 2. **PROBLEMA ADICIONAL DESCOBERTO: ResourceManager (PhysFS)**
+
+O CEF estava inicializando mas `OnPaint` não era chamado porque o **ResourceManager não encontrava os arquivos webview**!
+
+#### **Root Cause Adicional: `discoverWorkDir()`**
+```cpp
+// ANTES (problemático)
+std::string possiblePaths[] = { 
+    g_platform.getCurrentDir(),     // ❌ Working directory primeiro
+    g_resources.getBaseDir(),       // ✅ Executable directory segundo
+    // ...
+};
+
+// DEPOIS (corrigido)
+std::string possiblePaths[] = { 
+    g_resources.getBaseDir(),       // ✅ Executable directory PRIMEIRO
+    g_platform.getCurrentDir(),     // ❌ Working directory como fallback
+    // ...
+};
+```
+
+#### **Por Que Isso Afetava o OnPaint**
+1. `otclient://webviews/talentpoints/talentpoints.html` → `CefPhysFsResourceHandler`
+2. `CefPhysFsResourceHandler` → `g_resources.fileExists(path)`
+3. `g_resources` procurava em working directory (`%HOME%/Downloads/`) ❌
+4. Arquivo não encontrado → CEF não renderiza → `OnPaint` nunca é chamado
+
 ### 2. **Melhorado `setupDllDirectories()`**
 ```cpp
 void CefConfigWindows::setupDllDirectories() const {
