@@ -131,59 +131,11 @@ void CefConfigWindows::applySettings(CefSettings& settings) {
 void CefConfigWindows::applyCommandLineFlags(CefRefPtr<CefCommandLine> command_line) {
     applyGenericCommandLineFlags(command_line);
     
-    // Check if we're in a long path and apply specific workarounds
-    std::string exeDir = std::string(getExecutableDirectory().begin(), getExecutableDirectory().end());
+    // Use fixed cache directory to avoid path length issues
+    CreateDirectoryA("C:\\cef_temp", nullptr);
+    command_line->AppendSwitchWithValue("disk-cache-dir", "C:\\cef_temp");
     
-    // Log exact path length for debugging
-    logMessage("=== PATH LENGTH DEBUG ===");
-    logMessage("Windows", stdext::format("Executable directory: %s", exeDir.c_str()).c_str());
-    logMessage("Windows", stdext::format("Path length: %zu characters", exeDir.length()).c_str());
-    
-    // Count directory depth
-    size_t depth = std::count(exeDir.begin(), exeDir.end(), '\\');
-    logMessage("Windows", stdext::format("Directory depth: %zu levels", depth).c_str());
-    
-    // The threshold appears to be much lower than MAX_PATH
-    // Based on user testing: works at ~30 chars, fails at ~50+ chars
-    // Even with compressed packages, CEF still fails in long paths!
-    bool isLongPath = exeDir.length() > 30; // VERY conservative threshold
-    
-    // Force CEF to use TEMP directory using environment variable (shortest possible path)
-    command_line->AppendSwitchWithValue("disk-cache-dir", "%TEMP%\\otc_cache");
-    command_line->AppendSwitchWithValue("user-data-dir", "%TEMP%\\otc_data");
-    command_line->AppendSwitch("disable-dev-shm-usage"); // Don't use /dev/shm (Linux) or equivalent
-    
-    logMessage("Windows", "Forcing all temp files to: %TEMP%");
-    
-    if (isLongPath) {
-        logMessage("Windows", stdext::format("Long path detected (%zu chars), applying CEF workarounds", exeDir.length()).c_str());
-        
-        // Critical flags for long paths - based on Chromium bug reports
-        command_line->AppendSwitch("disable-gpu-process-crash-limit");
-        command_line->AppendSwitch("disable-gpu-process-prelaunch");  
-        command_line->AppendSwitch("disable-gpu-early-init");
-        command_line->AppendSwitch("no-zygote");
-        
-        // For paths > 30 chars, immediately disable GPU process
-        logMessage("Windows", "Long path detected - disabling GPU process to avoid named pipe issues");
-        command_line->AppendSwitch("disable-gpu");
-        command_line->AppendSwitch("disable-software-rasterizer");
-        
-        // For paths > 50 chars, force single process mode immediately
-        if (exeDir.length() > 50) {
-            logMessage("Windows", "Very long path detected, enabling single-process mode");
-            command_line->AppendSwitch("single-process");
-        }
-        
-        logMessage("Windows", "Applied long path workaround flags");
-    } else {
-        logMessage("Windows", stdext::format("Normal path length (%zu chars), using standard flags", exeDir.length()).c_str());
-    }
-    
-    // Always add these for debugging
-    command_line->AppendSwitch("enable-logging");
-    command_line->AppendSwitchWithValue("log-level", "0");
-    
+    logMessage("Windows", "Using fixed cache directory: C:\\cef_temp");
     logMessage("Windows", stdext::format("Command line flags: %s",
         command_line->GetCommandLineString().ToString()).c_str());
 }
