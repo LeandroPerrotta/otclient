@@ -147,10 +147,7 @@ bool ResourceManager::removeSearchPath(const std::string& path)
 
 void ResourceManager::searchAndAddPackages(const std::string& packagesDir, const std::string& packageExt)
 {
-    g_logger.debug(stdext::format("Searching for packages in '%s' with extension '%s'", packagesDir, packageExt));
-    
     auto files = listDirectoryFiles(packagesDir);
-    g_logger.debug(stdext::format("Found %zu files in directory", files.size()));
     
     for(auto it = files.rbegin(); it != files.rend(); ++it) {
         const std::string& file = *it;
@@ -160,21 +157,9 @@ void ResourceManager::searchAndAddPackages(const std::string& packagesDir, const
         std::string realDir = getRealDir(packagesDir);
         std::string package = realDir + "/" + file;
         
-        g_logger.debug(stdext::format("Attempting to mount package: '%s'", package));
-        g_logger.debug(stdext::format("  Real dir: '%s'", realDir));
-        g_logger.debug(stdext::format("  File: '%s'", file));
-        
-        // Verificar se o arquivo realmente existe antes de tentar montar
-        if(access(package.c_str(), F_OK) != 0) {
-            g_logger.error(stdext::format("Package file does not exist: '%s'", package));
-            continue;
-        }
-        
         if(!addSearchPath(package, true)) {
             const char* error = PHYSFS_getErrorByCode(PHYSFS_getLastErrorCode());
             g_logger.error(stdext::format("Unable to read package '%s': %s", package, error ? error : "Unknown error"));
-        } else {
-            g_logger.info(stdext::format("Successfully mounted package: '%s'", package));
         }
     }
 }
