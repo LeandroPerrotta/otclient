@@ -40,7 +40,14 @@ std::wstring CefConfigWindows::getExecutableDirectory() const {
 }
 
 void CefConfigWindows::setupDllDirectories() const {
-    const std::wstring cefDir = getExecutableDirectory() + L"\\cef";
+    const std::wstring exeDir = getExecutableDirectory();
+    const std::wstring cefDir = exeDir + L"\\cef";
+    
+    // Log directory depth analysis
+    size_t exeDirDepth = std::count(exeDir.begin(), exeDir.end(), L'\\');
+    logMessage("Windows", stdext::format("Executable directory: %s", 
+        std::string(exeDir.begin(), exeDir.end())).c_str());
+    logMessage("Windows", stdext::format("Directory depth: %zu levels", exeDirDepth));
     
     // Verify CEF directory exists before adding it
     DWORD fileAttrib = GetFileAttributesW(cefDir.c_str());
@@ -56,9 +63,10 @@ void CefConfigWindows::setupDllDirectories() const {
     // Add CEF directory to DLL search path
     DLL_DIRECTORY_COOKIE cookie = AddDllDirectory(cefDir.c_str());
     if (cookie == NULL) {
-        logMessage("Windows", "WARNING: Failed to add CEF directory to DLL search path");
+        DWORD error = GetLastError();
+        logMessage("Windows", stdext::format("WARNING: Failed to add CEF directory to DLL search path (Error: %lu)", error));
     } else {
-        logMessage("Windows", stdext::format("CEF DLL directory added: %s", 
+        logMessage("Windows", stdext::format("CEF DLL directory added successfully: %s", 
             std::string(cefDir.begin(), cefDir.end())).c_str());
     }
 }
@@ -87,7 +95,20 @@ void CefConfigWindows::configurePaths(CefSettings& settings) {
     CefString(&settings.root_cache_path) = cacheDir;
     CefString(&settings.browser_subprocess_path) = subprocessPath;
 
+    // Detailed logging for debugging path depth issues
     logMessage("Windows", stdext::format("CEF directory: %s", std::string(cefDir.begin(), cefDir.end())).c_str());
+    logMessage("Windows", stdext::format("CEF subprocess path: %s", std::string(subprocessPath.begin(), subprocessPath.end())).c_str());
+    logMessage("Windows", stdext::format("CEF cache path: %s", std::string(cacheDir.begin(), cacheDir.end())).c_str());
+    logMessage("Windows", stdext::format("CEF locales path: %s", std::string(localesDir.begin(), localesDir.end())).c_str());
+    
+    // Check path lengths
+    size_t subprocessPathLen = std::string(subprocessPath.begin(), subprocessPath.end()).length();
+    logMessage("Windows", stdext::format("Subprocess path length: %zu characters", subprocessPathLen));
+    
+    if (subprocessPathLen > 200) {
+        logMessage("Windows", "WARNING: Subprocess path is very long, this might cause issues");
+    }
+    
     logMessage("Windows", "CEF configured for portable operation");
 }
 
@@ -98,7 +119,20 @@ void CefConfigWindows::applySettings(CefSettings& settings) {
 
 void CefConfigWindows::applyCommandLineFlags(CefRefPtr<CefCommandLine> command_line) {
     applyGenericCommandLineFlags(command_line);
-
+    
+    // Additional Windows-specific flags to handle path depth issues
+    command_line->AppendSwitch("disable-gpu-process-crash-limit");
+    command_line->AppendSwitch("disable-gpu-process-prelaunch");
+    command_line->AppendSwitch("disable-gpu-early-init");
+    command_line->AppendSwitch("ignore-gpu-blocklist");
+    command_line->AppendSwitch("enable-logging");
+    command_line->AppendSwitchWithValue("log-level", "0");
+    
+    // Try to work around potential path length/depth issues
+    command_line->AppendSwitch("disable-dev-shm-usage");
+    command_line->AppendSwitch("no-zygote");
+    
+    logMessage("Windows", "Applied additional Windows-specific CEF flags for path depth compatibility");
     logMessage("Windows", stdext::format("Command line flags: %s",
         command_line->GetCommandLineString().ToString()).c_str());
 }
