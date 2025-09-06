@@ -5,6 +5,7 @@
 
 #include "cef_helper.h"
 #include <framework/stdext/format.h>
+#include <framework/core/logger.h>
 
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
@@ -159,13 +160,13 @@ void CefConfigWindows::applyCommandLineFlags(CefRefPtr<CefCommandLine> command_l
     std::string exeDir = std::string(getExecutableDirectory().begin(), getExecutableDirectory().end());
     
     // Log exact path length for debugging
-    logMessage("Windows", stdext::format("=== PATH LENGTH DEBUG ==="));
-    logMessage("Windows", stdext::format("Executable directory: %s", exeDir.c_str()));
-    logMessage("Windows", stdext::format("Path length: %zu characters", exeDir.length()));
+    g_logger.info("=== PATH LENGTH DEBUG ===");
+    g_logger.info(stdext::format("Executable directory: %s", exeDir.c_str()));
+    g_logger.info(stdext::format("Path length: %zu characters", exeDir.length()));
     
     // Count directory depth
     size_t depth = std::count(exeDir.begin(), exeDir.end(), '\\');
-    logMessage("Windows", stdext::format("Directory depth: %zu levels", depth));
+    g_logger.info(stdext::format("Directory depth: %zu levels", depth));
     
     // The threshold appears to be much lower than MAX_PATH
     // Based on user testing: works at ~30 chars, fails at ~50+ chars
@@ -182,10 +183,10 @@ void CefConfigWindows::applyCommandLineFlags(CefRefPtr<CefCommandLine> command_l
     command_line->AppendSwitchWithValue("user-data-dir", tempDir + "otclient_cef_user_data");
     command_line->AppendSwitch("disable-dev-shm-usage"); // Don't use /dev/shm (Linux) or equivalent
     
-    logMessage("Windows", stdext::format("Forcing all temp files to: %s", tempDir.c_str()).c_str());
+    g_logger.info(stdext::format("Forcing all temp files to: %s", tempDir.c_str()));
     
     if (isLongPath) {
-        logMessage("Windows", stdext::format("Long path detected (%zu chars), applying CEF workarounds", exeDir.length()).c_str());
+        g_logger.info(stdext::format("Long path detected (%zu chars), applying CEF workarounds", exeDir.length()));
         
         // Critical flags for long paths - based on Chromium bug reports
         command_line->AppendSwitch("disable-gpu-process-crash-limit");
@@ -194,19 +195,19 @@ void CefConfigWindows::applyCommandLineFlags(CefRefPtr<CefCommandLine> command_l
         command_line->AppendSwitch("no-zygote");
         
         // For paths > 30 chars, immediately disable GPU process
-        logMessage("Windows", "Long path detected - disabling GPU process to avoid named pipe issues");
+        g_logger.info("Long path detected - disabling GPU process to avoid named pipe issues");
         command_line->AppendSwitch("disable-gpu");
         command_line->AppendSwitch("disable-software-rasterizer");
         
         // For paths > 50 chars, force single process mode immediately
         if (exeDir.length() > 50) {
-            logMessage("Windows", "Very long path detected, enabling single-process mode");
+            g_logger.info("Very long path detected, enabling single-process mode");
             command_line->AppendSwitch("single-process");
         }
         
-        logMessage("Windows", "Applied long path workaround flags");
+        g_logger.info("Applied long path workaround flags");
     } else {
-        logMessage("Windows", stdext::format("Normal path length (%zu chars), using standard flags", exeDir.length()).c_str());
+        g_logger.info(stdext::format("Normal path length (%zu chars), using standard flags", exeDir.length()));
     }
     
     // Always add these for debugging
