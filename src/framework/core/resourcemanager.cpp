@@ -29,6 +29,10 @@
 
 #include <physfs.h>
 
+#ifdef WIN32
+#include <windows.h>
+#endif
+
 ResourceManager g_resources;
 
 void ResourceManager::init(const char *argv0)
@@ -47,18 +51,66 @@ bool ResourceManager::discoverWorkDir(const std::string& existentFile)
     // For portable builds: webviews, modules, and data should ALWAYS be in the same directory as the executable
     std::string executableDir = g_resources.getBaseDir();
     
+    g_logger.info(stdext::format("=== PHYSFS MOUNT DEBUG ==="));
+    g_logger.info(stdext::format("Attempting to mount: '%s'", executableDir));
+    g_logger.info(stdext::format("Path length: %zu characters", executableDir.length()));
+    g_logger.info(stdext::format("Looking for file: '%s'", existentFile));
+    
     if(!PHYSFS_mount(executableDir.c_str(), nullptr, 0)) {
-        g_logger.error(stdext::format("Failed to mount executable directory: '%s'", executableDir));
+        const char* physfsError = PHYSFS_getErrorByCode(PHYSFS_getLastErrorCode());
+        g_logger.error(stdext::format("PHYSFS_mount FAILED for: '%s'", executableDir));
+        g_logger.error(stdext::format("PhysFS Error: %s", physfsError ? physfsError : "Unknown error"));
+        g_logger.error(stdext::format("This is likely a PhysFS limitation with long paths!"));
+        
+        // WORKAROUND: Try using Windows short path (8.3 format)
+#ifdef WIN32
+        g_logger.info("Attempting Windows short path workaround...");
+        char shortPath[MAX_PATH];
+        DWORD result = GetShortPathNameA(executableDir.c_str(), shortPath, MAX_PATH);
+        if (result > 0 && result < MAX_PATH) {
+            std::string shortPathStr = shortPath;
+            g_logger.info(stdext::format("Short path: '%s' (%zu chars)", shortPathStr.c_str(), shortPathStr.length()));
+            
+            if(PHYSFS_mount(shortPathStr.c_str(), nullptr, 0)) {
+                g_logger.info("SUCCESS: PhysFS mounted using short path!");
+                executableDir = shortPathStr; // Use short path for the rest of the function
+            } else {
+                const char* physfsError2 = PHYSFS_getErrorByCode(PHYSFS_getLastErrorCode());
+                g_logger.error(stdext::format("Short path mount also failed: %s", physfsError2 ? physfsError2 : "Unknown"));
+                return false;
+            }
+        } else {
+            g_logger.error("Failed to get Windows short path");
+            return false;
+        }
+#else
         return false;
+#endif
+    }
+
+    g_logger.info(stdext::format("PHYSFS_mount SUCCESS for: '%s'", executableDir));
+    
+    // List what PhysFS can see
+    char** files = PHYSFS_enumerateFiles("/");
+    if (files) {
+        g_logger.info("Files/directories visible to PhysFS:");
+        for (char** file = files; *file != nullptr; file++) {
+            g_logger.info(stdext::format("  - %s", *file));
+        }
+        PHYSFS_freeList(files);
+    } else {
+        g_logger.error("PhysFS cannot enumerate root directory!");
     }
 
     if(PHYSFS_exists(existentFile.c_str())) {
         g_logger.debug(stdext::format("Found work dir at executable directory: '%s'", executableDir));
         m_workDir = executableDir;
+        g_logger.info(stdext::format("=== PHYSFS MOUNT SUCCESS ==="));
         return true;
     }
 
     g_logger.error(stdext::format("File '%s' not found in executable directory: '%s'", existentFile, executableDir));
+    g_logger.error(stdext::format("=== PHYSFS MOUNT FAILED - FILE NOT FOUND ==="));
     PHYSFS_unmount(executableDir.c_str());
     return false;
 }
