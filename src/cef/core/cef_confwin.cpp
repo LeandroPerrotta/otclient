@@ -172,7 +172,19 @@ void CefConfigWindows::applyCommandLineFlags(CefRefPtr<CefCommandLine> command_l
     
     // Check if we're in a long path and apply specific workarounds
     std::string exeDir = std::string(getExecutableDirectory().begin(), getExecutableDirectory().end());
-    bool isLongPath = exeDir.length() > 50; // Conservative threshold
+    
+    // Log exact path length for debugging
+    logMessage("Windows", stdext::format("=== PATH LENGTH DEBUG ==="));
+    logMessage("Windows", stdext::format("Executable directory: %s", exeDir.c_str()));
+    logMessage("Windows", stdext::format("Path length: %zu characters", exeDir.length()));
+    
+    // Count directory depth
+    size_t depth = std::count(exeDir.begin(), exeDir.end(), '\\');
+    logMessage("Windows", stdext::format("Directory depth: %zu levels", depth));
+    
+    // The threshold appears to be much lower than MAX_PATH
+    // Based on user testing: works at ~30 chars, fails at ~50+ chars
+    bool isLongPath = exeDir.length() > 35; // Very conservative threshold
     
     if (isLongPath) {
         logMessage("Windows", stdext::format("Long path detected (%zu chars), applying CEF workarounds", exeDir.length()));
@@ -184,15 +196,18 @@ void CefConfigWindows::applyCommandLineFlags(CefRefPtr<CefCommandLine> command_l
         command_line->AppendSwitch("disable-dev-shm-usage");
         command_line->AppendSwitch("no-zygote");
         
-        // Force single process mode as last resort for very long paths
-        if (exeDir.length() > 80) {
+        // For moderately long paths, try to avoid GPU process issues
+        if (exeDir.length() > 40) {
+            logMessage("Windows", "Moderately long path - disabling GPU process to avoid named pipe issues");
+            command_line->AppendSwitch("disable-gpu");
+            command_line->AppendSwitch("disable-software-rasterizer");
+        }
+        
+        // For very long paths, force single process mode as last resort
+        if (exeDir.length() > 60) {
             logMessage("Windows", "Very long path detected, enabling single-process mode");
             command_line->AppendSwitch("single-process");
         }
-        
-        // Use software rendering if GPU process keeps crashing
-        command_line->AppendSwitch("disable-gpu");
-        command_line->AppendSwitch("disable-software-rasterizer");
         
         logMessage("Windows", "Applied long path workaround flags");
     } else {
