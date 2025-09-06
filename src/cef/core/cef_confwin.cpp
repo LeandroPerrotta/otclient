@@ -75,42 +75,27 @@ void CefConfigWindows::configurePaths(CefSettings& settings) {
     setupDllDirectories();
     const std::wstring exeDir = getExecutableDirectory();
     
-    // Check if path is too long and implement workaround
-    std::string exeDirStr = std::string(exeDir.begin(), exeDir.end());
-    bool usePathWorkaround = exeDirStr.length() > 80; // Conservative threshold
+    // Always use Windows TEMP directory for cache to avoid path length issues
+    wchar_t tempPath[MAX_PATH];
+    GetTempPathW(MAX_PATH, tempPath);
+    std::wstring tempDir = tempPath;
     
-    std::wstring cefDir, localesDir, cacheDir, subprocessPath;
+    // Create unique temp directory for this process
+    DWORD processId = GetCurrentProcessId();
+    std::wstring tempCefDir = tempDir + L"otclient_cef_" + std::to_wstring(processId);
     
-    if (usePathWorkaround) {
-        logMessage("Windows", stdext::format("Path too long (%zu chars), implementing workaround", exeDirStr.length()));
-        
-        // Use shorter cache path in TEMP directory
-        wchar_t tempPath[MAX_PATH];
-        GetTempPathW(MAX_PATH, tempPath);
-        std::wstring tempDir = tempPath;
-        
-        // Create unique temp directory for this instance
-        DWORD processId = GetCurrentProcessId();
-        std::wstring tempCefDir = tempDir + L"otclient_cef_" + std::to_wstring(processId);
-        
-        cefDir = exeDir + L"\\cef";  // DLLs still need to be in original location
-        localesDir = cefDir + L"\\locales";
-        cacheDir = tempCefDir + L"\\cache";  // Cache in temp directory
-        subprocessPath = cefDir + L"\\otclient_cef_subproc.exe";  // Subprocess in original location
-        
-        // Create temp cache directory
-        CreateDirectoryW(tempCefDir.c_str(), nullptr);
-        CreateDirectoryW(cacheDir.c_str(), nullptr);
-        
-        logMessage("Windows", stdext::format("Using temp cache directory: %s", 
-            std::string(cacheDir.begin(), cacheDir.end()).c_str()));
-    } else {
-        // Normal paths when length is acceptable
-        cefDir = exeDir + L"\\cef";
-        localesDir = cefDir + L"\\locales";
-        cacheDir = cefDir + L"\\cache";
-        subprocessPath = cefDir + L"\\otclient_cef_subproc.exe";
-    }
+    // Configure paths
+    std::wstring cefDir = exeDir + L"\\cef";  // DLLs must be in original location
+    std::wstring localesDir = cefDir + L"\\locales";
+    std::wstring cacheDir = tempCefDir + L"\\cache";  // Cache always in TEMP
+    std::wstring subprocessPath = cefDir + L"\\otclient_cef_subproc.exe";
+    
+    // Create temp cache directory
+    CreateDirectoryW(tempCefDir.c_str(), nullptr);
+    CreateDirectoryW(cacheDir.c_str(), nullptr);
+    
+    logMessage("Windows", stdext::format("Using TEMP cache directory: %s", 
+        std::string(cacheDir.begin(), cacheDir.end()).c_str()));
 
     // Verify CEF directory exists and contains required files
     std::wstring libcefPath = cefDir + L"\\libcef.dll";
@@ -187,6 +172,18 @@ void CefConfigWindows::applyCommandLineFlags(CefRefPtr<CefCommandLine> command_l
     // Even with compressed packages, CEF still fails in long paths!
     bool isLongPath = exeDir.length() > 30; // VERY conservative threshold
     
+    // Always add flags to force temporary files to Windows TEMP directory
+    wchar_t tempPath[MAX_PATH];
+    GetTempPathW(MAX_PATH, tempPath);
+    std::string tempDir = std::string(tempPath, tempPath + wcslen(tempPath));
+    
+    // Force CEF to use TEMP directory for all temporary files
+    command_line->AppendSwitchWithValue("disk-cache-dir", tempDir + "otclient_cef_disk_cache");
+    command_line->AppendSwitchWithValue("user-data-dir", tempDir + "otclient_cef_user_data");
+    command_line->AppendSwitch("disable-dev-shm-usage"); // Don't use /dev/shm (Linux) or equivalent
+    
+    logMessage("Windows", stdext::format("Forcing all temp files to: %s", tempDir.c_str()));
+    
     if (isLongPath) {
         logMessage("Windows", stdext::format("Long path detected (%zu chars), applying CEF workarounds", exeDir.length()));
         
@@ -194,7 +191,6 @@ void CefConfigWindows::applyCommandLineFlags(CefRefPtr<CefCommandLine> command_l
         command_line->AppendSwitch("disable-gpu-process-crash-limit");
         command_line->AppendSwitch("disable-gpu-process-prelaunch");  
         command_line->AppendSwitch("disable-gpu-early-init");
-        command_line->AppendSwitch("disable-dev-shm-usage");
         command_line->AppendSwitch("no-zygote");
         
         // For paths > 30 chars, immediately disable GPU process
