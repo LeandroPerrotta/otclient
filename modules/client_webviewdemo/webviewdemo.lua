@@ -15,7 +15,7 @@ function init()
   local demoPanel = g_ui.loadUI('demo')
   webView = demoPanel:getChildById('demoWebView')
   if webView then
-    local path = g_resources.guessFilePath('client_webviewdemo/demo/demo', 'html')
+    local path = g_resources.guessFilePath('webviews/demo/demo', 'html')
     local resolvePath = g_resources.resolvePath('demo')
     local realPath = g_resources.getRealPath(resolvePath)
     print('path: ' .. path, 'real path: ' .. realPath, 'resolve path: ' .. resolvePath)
