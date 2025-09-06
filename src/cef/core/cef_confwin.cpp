@@ -46,15 +46,15 @@ void CefConfigWindows::setupDllDirectories() const {
     
     // Log directory depth analysis
     size_t exeDirDepth = std::count(exeDir.begin(), exeDir.end(), L'\\');
-    g_logger.info(stdext::format("CEF: Executable directory: %s", 
-        std::string(exeDir.begin(), exeDir.end())));
-    g_logger.info(stdext::format("CEF: Directory depth: %zu levels", exeDirDepth));
+    logMessage("Windows", stdext::format("Executable directory: %s", 
+        std::string(exeDir.begin(), exeDir.end())).c_str());
+    logMessage("Windows", stdext::format("Directory depth: %zu levels", exeDirDepth).c_str());
     
     // Verify CEF directory exists before adding it
     DWORD fileAttrib = GetFileAttributesW(cefDir.c_str());
     if (fileAttrib == INVALID_FILE_ATTRIBUTES || !(fileAttrib & FILE_ATTRIBUTE_DIRECTORY)) {
-        g_logger.error(stdext::format("CEF: WARNING: CEF directory not found at %s", 
-            std::string(cefDir.begin(), cefDir.end())));
+        logMessage("Windows", stdext::format("WARNING: CEF directory not found at %s", 
+            std::string(cefDir.begin(), cefDir.end())).c_str());
         return;
     }
     
@@ -65,10 +65,10 @@ void CefConfigWindows::setupDllDirectories() const {
     DLL_DIRECTORY_COOKIE cookie = AddDllDirectory(cefDir.c_str());
     if (cookie == NULL) {
         DWORD error = GetLastError();
-        g_logger.error(stdext::format("CEF: WARNING: Failed to add CEF directory to DLL search path (Error: %lu)", error));
+        logMessage("Windows", stdext::format("WARNING: Failed to add CEF directory to DLL search path (Error: %lu)", error).c_str());
     } else {
-        g_logger.info(stdext::format("CEF: DLL directory added successfully: %s", 
-            std::string(cefDir.begin(), cefDir.end())));
+        logMessage("Windows", stdext::format("CEF DLL directory added successfully: %s", 
+            std::string(cefDir.begin(), cefDir.end())).c_str());
     }
 }
 
@@ -95,8 +95,8 @@ void CefConfigWindows::configurePaths(CefSettings& settings) {
     CreateDirectoryW(tempCefDir.c_str(), nullptr);
     CreateDirectoryW(cacheDir.c_str(), nullptr);
     
-    g_logger.info(stdext::format("CEF: Using TEMP cache directory: %s", 
-        std::string(cacheDir.begin(), cacheDir.end())));
+    logMessage("Windows", stdext::format("Using TEMP cache directory: %s", 
+        std::string(cacheDir.begin(), cacheDir.end())).c_str());
 
     // Verify CEF directory exists and contains required files
     std::wstring libcefPath = cefDir + L"\\libcef.dll";
