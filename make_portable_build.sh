@@ -50,8 +50,8 @@ else
     echo "WARNING: CEF subprocess executable not found at $SUBPROC_EXE"
 fi
 
-# Copiar arquivos de dados do projeto
-DATA_DIRS=("data" "modules" "mods")
+# Copiar arquivos de dados do projeto (SEMPRE no mesmo diretório do executável)
+DATA_DIRS=("data" "modules" "mods" "webviews")
 for dir in "${DATA_DIRS[@]}"; do
     if [ -d "$dir" ]; then
         cp -r "$dir" "$OUTPUT_DIR/"
@@ -151,6 +151,7 @@ Files and Directories:
 - data/: Game data files
 - modules/: Game modules
 - mods/: Game modifications
+- webviews/: CEF webview HTML/JS/CSS files
 - init.lua, otclientrc.lua: Configuration files
 
 Usage:

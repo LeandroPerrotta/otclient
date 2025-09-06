@@ -48,8 +48,8 @@ if (Test-Path $SubprocExe) {
     Write-Warning "CEF subprocess executable not found at $SubprocExe"
 }
 
-# Copiar arquivos de dados do projeto
-$DataDirs = @("data", "modules", "mods")
+# Copiar arquivos de dados do projeto (SEMPRE no mesmo diretório do executável)
+$DataDirs = @("data", "modules", "mods", "webviews")
 foreach ($dir in $DataDirs) {
     if (Test-Path $dir) {
         Copy-Item -Recurse $dir $OutputDir
@@ -146,6 +146,7 @@ Files and Directories:
 - data/: Game data files
 - modules/: Game modules
 - mods/: Game modifications
+- webviews/: CEF webview HTML/JS/CSS files
 - init.lua, otclientrc.lua: Configuration files
 
 Usage:

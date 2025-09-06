@@ -44,28 +44,23 @@ void ResourceManager::terminate()
 
 bool ResourceManager::discoverWorkDir(const std::string& existentFile)
 {
-    // search for modules directory
-    // NOTE: Prioritize executable directory over current working directory for portable builds
-    std::string possiblePaths[] = { g_resources.getBaseDir(),                                    // Executable directory (highest priority)
-                                    g_platform.getCurrentDir(),                                  // Current working directory (fallback)
-                                    g_resources.getBaseDir() + "../",
-                                    g_resources.getBaseDir() + "../share/" + g_app.getCompactName() + "/" };
-
-    bool found = false;
-    for(const std::string& dir : possiblePaths) {
-        if(!PHYSFS_mount(dir.c_str(), nullptr, 0))
-            continue;
-
-        if(PHYSFS_exists(existentFile.c_str())) {
-            g_logger.debug(stdext::format("Found work dir at '%s'", dir));
-            m_workDir = dir;
-            found = true;
-            break;
-        }
-        PHYSFS_unmount(dir.c_str());
+    // For portable builds: webviews, modules, and data should ALWAYS be in the same directory as the executable
+    std::string executableDir = g_resources.getBaseDir();
+    
+    if(!PHYSFS_mount(executableDir.c_str(), nullptr, 0)) {
+        g_logger.error(stdext::format("Failed to mount executable directory: '%s'", executableDir));
+        return false;
     }
 
-    return found;
+    if(PHYSFS_exists(existentFile.c_str())) {
+        g_logger.debug(stdext::format("Found work dir at executable directory: '%s'", executableDir));
+        m_workDir = executableDir;
+        return true;
+    }
+
+    g_logger.error(stdext::format("File '%s' not found in executable directory: '%s'", existentFile, executableDir));
+    PHYSFS_unmount(executableDir.c_str());
+    return false;
 }
 
 bool ResourceManager::setupUserWriteDir(const std::string& appWriteDirName)
