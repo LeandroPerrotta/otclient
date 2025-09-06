@@ -76,8 +76,8 @@ foreach ($dir in $DataDirs) {
     }
 }
 
-# Criar arquivo .otpkg (ZIP)
-$PackageFile = "$OutputDir\otclient-gamedata.otpkg"
+# Criar arquivo .otpkg (ZIP) - ÚNICO arquivo para evitar conflitos
+$PackageFile = "$OutputDir\gamedata.otpkg"
 try {
     # Usar PowerShell Compress-Archive
     $FullTempPath = (Resolve-Path $TempDir).Path + "\*"
@@ -104,7 +104,7 @@ empacotando todos os dados do jogo em arquivos comprimidos.
 Estrutura:
 - otclient.exe                    ← Executável principal
 - otclient_cef_subproc.exe       ← Subprocess CEF
-- otclient-gamedata.otpkg        ← TODOS os dados do jogo (comprimido)
+- gamedata.otpkg                 ← TODOS os dados do jogo (comprimido)
 - init.lua, otclientrc.lua       ← Configurações
 - cef/                           ← Arquivos CEF (DLLs)
 
