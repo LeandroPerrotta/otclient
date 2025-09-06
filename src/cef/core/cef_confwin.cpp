@@ -158,8 +158,8 @@ void CefConfigWindows::applyCommandLineFlags(CefRefPtr<CefCommandLine> command_l
     std::string tempDir = tempPathA;
     
     // Force CEF to use TEMP directory for all temporary files
-    command_line->AppendSwitchWithValue("disk-cache-dir", tempDir + "otclient_cef_disk_cache");
-    command_line->AppendSwitchWithValue("user-data-dir", tempDir + "otclient_cef_user_data");
+    command_line->AppendSwitchWithValue("disk-cache-dir", tempDir + "otc_cache");
+    command_line->AppendSwitchWithValue("user-data-dir", tempDir + "otc_data");
     command_line->AppendSwitch("disable-dev-shm-usage"); // Don't use /dev/shm (Linux) or equivalent
     
     logMessage("Windows", stdext::format("Forcing all temp files to: %s", tempDir.c_str()).c_str());

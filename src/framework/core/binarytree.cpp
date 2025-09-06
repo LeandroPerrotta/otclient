@@ -22,7 +22,6 @@
 
 #include "binarytree.h"
 #include "filestream.h"
-#include "logger.h"
 
 BinaryTree::BinaryTree(const FileStreamPtr& fin) :
     m_fin(fin), m_pos(0xFFFFFFFF)
@@ -207,16 +206,11 @@ void OutputBinaryTree::addU32(uint32 v)
 
 void OutputBinaryTree::addString(const std::string& v)
 {
-    // Note: Removed artificial string length limit to support long paths
-    // If string is too long, truncate it to avoid breaking compatibility
-    size_t len = v.length();
-    if(len > 0xFFFF) {
-        len = 0xFFFF;
-        g_logger.warning(stdext::format("BinaryTree: String truncated from %zu to %zu characters", v.length(), len));
-    }
+    if(v.size() > 0xFFFF)
+        stdext::throw_exception("too long string");
 
-    addU16(len);
-    write((const uint8*)v.c_str(), len);
+    addU16(v.length());
+    write((const uint8*)v.c_str(), v.length());
 }
 
 void OutputBinaryTree::addPos(uint16 x, uint16 y, uint8 z)
