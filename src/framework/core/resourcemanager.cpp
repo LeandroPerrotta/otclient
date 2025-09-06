@@ -29,6 +29,14 @@
 
 #include <physfs.h>
 
+#ifdef WIN32
+#include <windows.h>
+#include <io.h>  // for access()
+#define F_OK 0
+#else
+#include <unistd.h>  // for access()
+#endif
+
 ResourceManager g_resources;
 
 void ResourceManager::init(const char *argv0)
@@ -44,27 +52,23 @@ void ResourceManager::terminate()
 
 bool ResourceManager::discoverWorkDir(const std::string& existentFile)
 {
-    // search for modules directory
-    std::string possiblePaths[] = { g_platform.getCurrentDir(),
-                                    g_resources.getBaseDir(),
-                                    g_resources.getBaseDir() + "../",
-                                    g_resources.getBaseDir() + "../share/" + g_app.getCompactName() + "/" };
-
-    bool found = false;
-    for(const std::string& dir : possiblePaths) {
-        if(!PHYSFS_mount(dir.c_str(), nullptr, 0))
-            continue;
-
-        if(PHYSFS_exists(existentFile.c_str())) {
-            g_logger.debug(stdext::format("Found work dir at '%s'", dir));
-            m_workDir = dir;
-            found = true;
-            break;
-        }
-        PHYSFS_unmount(dir.c_str());
+    // For portable builds: webviews, modules, and data should ALWAYS be in the same directory as the executable
+    std::string executableDir = g_resources.getBaseDir();
+    
+    if(!PHYSFS_mount(executableDir.c_str(), nullptr, 0)) {
+        g_logger.error(stdext::format("Failed to mount executable directory: '%s'", executableDir));
+        return false;
     }
 
-    return found;
+    if(PHYSFS_exists(existentFile.c_str())) {
+        g_logger.debug(stdext::format("Found work dir at executable directory: '%s'", executableDir));
+        m_workDir = executableDir;
+        return true;
+    }
+
+    g_logger.error(stdext::format("File '%s' not found in executable directory: '%s'", existentFile, executableDir));
+    PHYSFS_unmount(executableDir.c_str());
+    return false;
 }
 
 bool ResourceManager::setupUserWriteDir(const std::string& appWriteDirName)
@@ -144,13 +148,19 @@ bool ResourceManager::removeSearchPath(const std::string& path)
 void ResourceManager::searchAndAddPackages(const std::string& packagesDir, const std::string& packageExt)
 {
     auto files = listDirectoryFiles(packagesDir);
+    
     for(auto it = files.rbegin(); it != files.rend(); ++it) {
         const std::string& file = *it;
         if(!stdext::ends_with(file, packageExt))
             continue;
-        std::string package = getRealDir(packagesDir) + "/" + file;
-        if(!addSearchPath(package, true))
-            g_logger.error(stdext::format("Unable to read package '%s': %s", package, PHYSFS_getErrorByCode(PHYSFS_getLastErrorCode())));
+            
+        std::string realDir = getRealDir(packagesDir);
+        std::string package = realDir + "/" + file;
+        
+        if(!addSearchPath(package, true)) {
+            const char* error = PHYSFS_getErrorByCode(PHYSFS_getLastErrorCode());
+            g_logger.error(stdext::format("Unable to read package '%s': %s", package, error ? error : "Unknown error"));
+        }
     }
 }
 

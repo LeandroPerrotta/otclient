@@ -27,18 +27,9 @@ void CefConfig::applyGenericSettings(CefSettings& settings) {
 }
 
 void CefConfig::applyGenericCommandLineFlags(CefRefPtr<CefCommandLine> command_line) {
-    // Disable unnecessary features
-    if (m_genericFlags.disable_background_networking)
-        command_line->AppendSwitch("disable-background-networking");
-    if (m_genericFlags.disable_default_apps)
-        command_line->AppendSwitch("disable-default-apps");
-    if (m_genericFlags.disable_extensions)
-        command_line->AppendSwitch("disable-extensions");
-    if (m_genericFlags.no_service_autorun)
-        command_line->AppendSwitch("no-service-autorun");
-    
-    // Disable features that cause noise in logs
-    command_line->AppendSwitch("disable-features=PushMessaging,BackgroundSync,GCM");
+    // Only for debbuging, avoid add switchs that may lead to break builds on Windows
+    // due too much characters on the command parameters
+    // command_line->AppendSwitch("disable-gpu-shader-disk-cache");
 }
 
 CefBrowserSettings CefConfig::createBrowserSettings() {

@@ -5,6 +5,14 @@
 #include <cstdio>
 #include <cstring>
 #include <ctime>
+#include <string>
+
+#ifdef _WIN32
+#include <windows.h>
+#else
+#include <unistd.h>
+#include <climits>
+#endif
 
 namespace cef {
 
@@ -13,8 +21,40 @@ void logMessage(const char* message) {
 }
 
 void logMessage(const char* prefix, const char* message) {
+    // Create log file path in the same directory as the executable
+    static std::string log_path;
+    if (log_path.empty()) {
+#ifdef _WIN32
+        char exe_path[MAX_PATH];
+        if (GetModuleFileNameA(nullptr, exe_path, MAX_PATH) > 0) {
+            std::string exe_dir = exe_path;
+            size_t pos = exe_dir.find_last_of("\\/");
+            if (pos != std::string::npos) {
+                exe_dir = exe_dir.substr(0, pos);
+            }
+            log_path = exe_dir + "\\cef.log";
+        } else {
+            log_path = "cef.log";
+        }
+#else
+        char exe_path[PATH_MAX];
+        ssize_t len = readlink("/proc/self/exe", exe_path, sizeof(exe_path) - 1);
+        if (len != -1) {
+            exe_path[len] = '\0';
+            std::string exe_dir = exe_path;
+            size_t pos = exe_dir.find_last_of('/');
+            if (pos != std::string::npos) {
+                exe_dir = exe_dir.substr(0, pos);
+            }
+            log_path = exe_dir + "/cef.log";
+        } else {
+            log_path = "cef.log";
+        }
+#endif
+    }
+    
     // Open log file for appending
-    FILE* log_file = fopen("cef.log", "a");
+    FILE* log_file = fopen(log_path.c_str(), "a");
     if (log_file) {
         // Get current time
         time_t now = time(0);

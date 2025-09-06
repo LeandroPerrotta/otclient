@@ -5,6 +5,7 @@
 
 #include "cef_helper.h"
 #include <framework/stdext/format.h>
+#include <framework/core/logger.h>
 
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
@@ -40,26 +41,64 @@ std::wstring CefConfigWindows::getExecutableDirectory() const {
 }
 
 void CefConfigWindows::setupDllDirectories() const {
-    const std::wstring cefDir = getExecutableDirectory() + L"\\cef";
+    const std::wstring exeDir = getExecutableDirectory();
+    const std::wstring cefDir = exeDir + L"\\cef";
+    
+    // Log directory depth analysis
+    size_t exeDirDepth = std::count(exeDir.begin(), exeDir.end(), L'\\');
+    logMessage("Windows", stdext::format("Executable directory: %s", 
+        std::string(exeDir.begin(), exeDir.end())).c_str());
+    logMessage("Windows", stdext::format("Directory depth: %zu levels", exeDirDepth).c_str());
+    
+    // Verify CEF directory exists before adding it
+    DWORD fileAttrib = GetFileAttributesW(cefDir.c_str());
+    if (fileAttrib == INVALID_FILE_ATTRIBUTES || !(fileAttrib & FILE_ATTRIBUTE_DIRECTORY)) {
+        logMessage("Windows", stdext::format("WARNING: CEF directory not found at %s", 
+            std::string(cefDir.begin(), cefDir.end())).c_str());
+        return;
+    }
+    
+    // Configure DLL search paths to prioritize the CEF directory
     SetDefaultDllDirectories(LOAD_LIBRARY_SEARCH_DEFAULT_DIRS | LOAD_LIBRARY_SEARCH_USER_DIRS);
-    AddDllDirectory(cefDir.c_str());
+    
+    // Add CEF directory to DLL search path
+    DLL_DIRECTORY_COOKIE cookie = AddDllDirectory(cefDir.c_str());
+    if (cookie == NULL) {
+        DWORD error = GetLastError();
+        logMessage("Windows", stdext::format("WARNING: Failed to add CEF directory to DLL search path (Error: %lu)", error).c_str());
+    } else {
+        logMessage("Windows", stdext::format("CEF DLL directory added successfully: %s", 
+            std::string(cefDir.begin(), cefDir.end())).c_str());
+    }
 }
 
 void CefConfigWindows::configurePaths(CefSettings& settings) {
     setupDllDirectories();
     const std::wstring exeDir = getExecutableDirectory();
-    const std::wstring cefDir = exeDir + L"\\cef";
-    const std::wstring localesDir = cefDir + L"\\locales";
-    const std::wstring cacheDir = cefDir + L"\\cache";
-    const std::wstring subprocessPath = cefDir + L"\\otclient_cef_subproc.exe";
+    
+    // Configure paths
+    std::wstring cefDir = exeDir + L"\\cef";  // DLLs must be in original location
+    std::wstring cacheDir = L"C:\\cef_temp";  // Fixed cache directory
+    std::wstring subprocessPath = cefDir + L"\\sp.exe";
+    
+    // Create cache directory
+    CreateDirectoryW(cacheDir.c_str(), nullptr);
+    
+    logMessage("Windows", "Using fixed cache directory: C:\\cef_temp");
 
-    CefString(&settings.resources_dir_path) = cefDir;
-    CefString(&settings.locales_dir_path) = localesDir;
+    // Verify CEF directory exists and contains required files
+    std::wstring libcefPath = cefDir + L"\\libcef.dll";
+    DWORD fileAttrib = GetFileAttributesW(libcefPath.c_str());
+    if (fileAttrib == INVALID_FILE_ATTRIBUTES) {
+        logMessage("Windows", stdext::format("ERROR: libcef.dll not found at %s", 
+            std::string(libcefPath.begin(), libcefPath.end())).c_str());
+        logMessage("Windows", "Make sure to copy the CEF runtime files to the ./cef/ directory");
+        return;
+    }
+
     CefString(&settings.cache_path) = cacheDir;
     CefString(&settings.root_cache_path) = cacheDir;
     CefString(&settings.browser_subprocess_path) = subprocessPath;
-
-    logMessage("Windows", stdext::format("CEF directory: %s", std::string(cefDir.begin(), cefDir.end())).c_str());
 }
 
 void CefConfigWindows::applySettings(CefSettings& settings) {
@@ -69,7 +108,12 @@ void CefConfigWindows::applySettings(CefSettings& settings) {
 
 void CefConfigWindows::applyCommandLineFlags(CefRefPtr<CefCommandLine> command_line) {
     applyGenericCommandLineFlags(command_line);
-
+    
+    // Use fixed cache directory to avoid path length issues
+    CreateDirectoryA("C:\\cef_temp", nullptr);
+    command_line->AppendSwitchWithValue("disk-cache-dir", "C:\\cef_temp");
+    
+    logMessage("Windows", "Using fixed cache directory: C:\\cef_temp");
     logMessage("Windows", stdext::format("Command line flags: %s",
         command_line->GetCommandLineString().ToString()).c_str());
 }

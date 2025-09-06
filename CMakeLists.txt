@@ -150,7 +150,8 @@ if(USE_CEF)
     
     # Include CEF directories as SYSTEM to suppress warnings from external library
     include_directories(SYSTEM ${CEF_INCLUDE_DIRS})
-    link_directories(${CEF_LIBRARY_DIRS})
+    # NOTE: Removed link_directories to avoid hardcoding paths in the executable
+    # CEF libraries will be found at runtime relative to the executable
     
     # Windows-specific: Configure runtime library search
     if(WIN32)
@@ -291,26 +292,26 @@ if(USE_CEF)
         list(APPEND SUBPROCESS_SOURCES src/cef/core/cef_conflinux.cpp)
     endif()
     
-    add_executable(otclient_cef_subproc ${SUBPROCESS_SOURCES})
-    target_compile_definitions(otclient_cef_subproc PRIVATE USE_CEF CEF_SUBPROCESS_BUILD)
-    set_target_properties(otclient_cef_subproc PROPERTIES CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON)
-    otclient_link_cef(otclient_cef_subproc)
+    add_executable(sp ${SUBPROCESS_SOURCES})
+    target_compile_definitions(sp PRIVATE USE_CEF CEF_SUBPROCESS_BUILD)
+    set_target_properties(sp PROPERTIES CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON)
+    otclient_link_cef(sp)
     
     # Add bcrypt library for Windows 10+ APIs (needed for subprocess too)
     if(WIN32)
-        target_link_libraries(otclient_cef_subproc PRIVATE bcrypt)
+        target_link_libraries(sp PRIVATE bcrypt)
         
         # Add DirectX 11 libraries for CEF subprocess (may be needed for shared textures)
-        target_link_libraries(otclient_cef_subproc PRIVATE 
+        target_link_libraries(sp PRIVATE 
             d3d11
             dxgi
             d3dcompiler
         )
         
-        set_target_properties(otclient_cef_subproc PROPERTIES MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
+        set_target_properties(sp PROPERTIES MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
 
         # Set Windows subsystem for the subprocess executable
-        set_target_properties(otclient_cef_subproc PROPERTIES WIN32_EXECUTABLE TRUE)
+        set_target_properties(sp PROPERTIES WIN32_EXECUTABLE TRUE)
     endif()
 endif()
 
