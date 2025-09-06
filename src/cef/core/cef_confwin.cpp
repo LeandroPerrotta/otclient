@@ -132,7 +132,7 @@ void CefConfigWindows::applyCommandLineFlags(CefRefPtr<CefCommandLine> command_l
     applyGenericCommandLineFlags(command_line);
     
     // Check if we're in a long path and apply specific workarounds
-    std::string exeDir = std::string(getExecutableDirectory().begin(), getExecutableDirectory().end().c_str());
+    std::string exeDir = std::string(getExecutableDirectory().begin(), getExecutableDirectory().end());
     
     // Log exact path length for debugging
     logMessage("=== PATH LENGTH DEBUG ===");
