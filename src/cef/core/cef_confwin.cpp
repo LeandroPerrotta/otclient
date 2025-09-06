@@ -80,7 +80,7 @@ void CefConfigWindows::configurePaths(CefSettings& settings) {
     std::wstring cefDir = exeDir + L"\\cef";  // DLLs must be in original location
     std::wstring localesDir = cefDir + L"\\locales";
     std::wstring cacheDir = L"C:\\cef_temp";  // Fixed cache directory
-    std::wstring subprocessPath = cefDir + L"\\otclient_cef_subproc.exe";
+    std::wstring subprocessPath = cefDir + L"\\sp.exe";
     
     // Create cache directory
     CreateDirectoryW(cacheDir.c_str(), nullptr);

@@ -128,7 +128,7 @@ void CefConfigLinux::configurePaths(CefSettings& settings) {
     
     std::string localesPath = resourcesPath + "locales";
     std::string cache_path = cef_root + "/cache";
-    std::string subprocess_path = cef_root + "/otclient_cef_subproc";
+    std::string subprocess_path = cef_root + "/sp";
     
     logMessage("Linux", stdext::format("CEF found at: %s", cef_root).c_str());
     logMessage("Linux", stdext::format("CEF resources path: %s", resourcesPath).c_str());
