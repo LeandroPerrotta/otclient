@@ -76,27 +76,16 @@ void CefConfigWindows::configurePaths(CefSettings& settings) {
     setupDllDirectories();
     const std::wstring exeDir = getExecutableDirectory();
     
-    // Always use Windows TEMP directory for cache to avoid path length issues
-    wchar_t tempPath[MAX_PATH];
-    GetTempPathW(MAX_PATH, tempPath);
-    std::wstring tempDir = tempPath;
-    
-    // Create unique temp directory for this process
-    DWORD processId = GetCurrentProcessId();
-    std::wstring tempCefDir = tempDir + L"otclient_cef_" + std::to_wstring(processId);
-    
     // Configure paths
     std::wstring cefDir = exeDir + L"\\cef";  // DLLs must be in original location
     std::wstring localesDir = cefDir + L"\\locales";
-    std::wstring cacheDir = tempCefDir + L"\\cache";  // Cache always in TEMP
+    std::wstring cacheDir = L"C:\\cef_temp";  // Fixed cache directory
     std::wstring subprocessPath = cefDir + L"\\otclient_cef_subproc.exe";
     
-    // Create temp cache directory
-    CreateDirectoryW(tempCefDir.c_str(), nullptr);
+    // Create cache directory
     CreateDirectoryW(cacheDir.c_str(), nullptr);
     
-    logMessage("Windows", stdext::format("Using TEMP cache directory: %s", 
-        std::string(cacheDir.begin(), cacheDir.end())).c_str());
+    logMessage("Windows", "Using fixed cache directory: C:\\cef_temp");
 
     // Verify CEF directory exists and contains required files
     std::wstring libcefPath = cefDir + L"\\libcef.dll";
