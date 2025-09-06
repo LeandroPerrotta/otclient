@@ -198,7 +198,7 @@ void CefConfigWindows::applyCommandLineFlags(CefRefPtr<CefCommandLine> command_l
 }
 
 CefMainArgs CefConfigWindows::createMainArgs(int argc, const char* argv[]) {
-    return CefMainArgs(GetModuleHandle(nullptr).c_str());
+    return CefMainArgs(GetModuleHandle(nullptr));
 }
 
 bool CefConfigWindows::handleSubprocessExecution(const CefMainArgs& args, CefRefPtr<CefApp> app) {
