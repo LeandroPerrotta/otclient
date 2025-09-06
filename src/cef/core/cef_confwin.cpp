@@ -78,7 +78,6 @@ void CefConfigWindows::configurePaths(CefSettings& settings) {
     
     // Configure paths
     std::wstring cefDir = exeDir + L"\\cef";  // DLLs must be in original location
-    std::wstring localesDir = cefDir + L"\\locales";
     std::wstring cacheDir = L"C:\\cef_temp";  // Fixed cache directory
     std::wstring subprocessPath = cefDir + L"\\sp.exe";
     
@@ -97,19 +96,9 @@ void CefConfigWindows::configurePaths(CefSettings& settings) {
         return;
     }
 
-    CefString(&settings.resources_dir_path) = cefDir;
-    CefString(&settings.locales_dir_path) = localesDir;
     CefString(&settings.cache_path) = cacheDir;
     CefString(&settings.root_cache_path) = cacheDir;
     CefString(&settings.browser_subprocess_path) = subprocessPath;
-
-    // Detailed logging for debugging path depth issues
-    logMessage("Windows", stdext::format("CEF directory: %s", std::string(cefDir.begin(), cefDir.end())).c_str());
-    logMessage("Windows", stdext::format("CEF subprocess path: %s", std::string(subprocessPath.begin(), subprocessPath.end())).c_str());
-    logMessage("Windows", stdext::format("CEF cache path: %s", std::string(cacheDir.begin(), cacheDir.end())).c_str());
-    logMessage("Windows", stdext::format("CEF locales path: %s", std::string(localesDir.begin(), localesDir.end())).c_str());
-    
-    logMessage("Windows", "CEF configured for portable operation");
 }
 
 void CefConfigWindows::applySettings(CefSettings& settings) {
