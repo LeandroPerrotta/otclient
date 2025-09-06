@@ -184,7 +184,8 @@ void CefConfigWindows::applyCommandLineFlags(CefRefPtr<CefCommandLine> command_l
     
     // The threshold appears to be much lower than MAX_PATH
     // Based on user testing: works at ~30 chars, fails at ~50+ chars
-    bool isLongPath = exeDir.length() > 35; // Very conservative threshold
+    // Even with compressed packages, CEF still fails in long paths!
+    bool isLongPath = exeDir.length() > 30; // VERY conservative threshold
     
     if (isLongPath) {
         logMessage("Windows", stdext::format("Long path detected (%zu chars), applying CEF workarounds", exeDir.length()));
@@ -196,15 +197,13 @@ void CefConfigWindows::applyCommandLineFlags(CefRefPtr<CefCommandLine> command_l
         command_line->AppendSwitch("disable-dev-shm-usage");
         command_line->AppendSwitch("no-zygote");
         
-        // For moderately long paths, try to avoid GPU process issues
-        if (exeDir.length() > 40) {
-            logMessage("Windows", "Moderately long path - disabling GPU process to avoid named pipe issues");
-            command_line->AppendSwitch("disable-gpu");
-            command_line->AppendSwitch("disable-software-rasterizer");
-        }
+        // For paths > 30 chars, immediately disable GPU process
+        logMessage("Windows", "Long path detected - disabling GPU process to avoid named pipe issues");
+        command_line->AppendSwitch("disable-gpu");
+        command_line->AppendSwitch("disable-software-rasterizer");
         
-        // For very long paths, force single process mode as last resort
-        if (exeDir.length() > 60) {
+        // For paths > 50 chars, force single process mode immediately
+        if (exeDir.length() > 50) {
             logMessage("Windows", "Very long path detected, enabling single-process mode");
             command_line->AppendSwitch("single-process");
         }
