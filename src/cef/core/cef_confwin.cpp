@@ -182,10 +182,10 @@ void CefConfigWindows::applyCommandLineFlags(CefRefPtr<CefCommandLine> command_l
     command_line->AppendSwitchWithValue("user-data-dir", tempDir + "otclient_cef_user_data");
     command_line->AppendSwitch("disable-dev-shm-usage"); // Don't use /dev/shm (Linux) or equivalent
     
-    logMessage("Windows", stdext::format("Forcing all temp files to: %s", tempDir.c_str()));
+    logMessage("Windows", stdext::format("Forcing all temp files to: %s", tempDir.c_str()).c_str());
     
     if (isLongPath) {
-        logMessage("Windows", stdext::format("Long path detected (%zu chars), applying CEF workarounds", exeDir.length()));
+        logMessage("Windows", stdext::format("Long path detected (%zu chars), applying CEF workarounds", exeDir.length()).c_str());
         
         // Critical flags for long paths - based on Chromium bug reports
         command_line->AppendSwitch("disable-gpu-process-crash-limit");
@@ -206,7 +206,7 @@ void CefConfigWindows::applyCommandLineFlags(CefRefPtr<CefCommandLine> command_l
         
         logMessage("Windows", "Applied long path workaround flags");
     } else {
-        logMessage("Windows", stdext::format("Normal path length (%zu chars), using standard flags", exeDir.length()));
+        logMessage("Windows", stdext::format("Normal path length (%zu chars), using standard flags", exeDir.length()).c_str());
     }
     
     // Always add these for debugging
