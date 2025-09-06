@@ -47,14 +47,14 @@ void CefConfigWindows::setupDllDirectories() const {
     // Log directory depth analysis
     size_t exeDirDepth = std::count(exeDir.begin(), exeDir.end(), L'\\');
     logMessage("Windows", stdext::format("Executable directory: %s", 
-        std::string(exeDir.begin(), exeDir.end())).c_str().c_str());
-    logMessage("Windows", stdext::format("Directory depth: %zu levels", exeDirDepth).c_str().c_str());
+        std::string(exeDir.begin(), exeDir.end())).c_str());
+    logMessage("Windows", stdext::format("Directory depth: %zu levels", exeDirDepth).c_str());
     
     // Verify CEF directory exists before adding it
-    DWORD fileAttrib = GetFileAttributesW(cefDir.c_str().c_str());
+    DWORD fileAttrib = GetFileAttributesW(cefDir.c_str());
     if (fileAttrib == INVALID_FILE_ATTRIBUTES || !(fileAttrib & FILE_ATTRIBUTE_DIRECTORY)) {
         logMessage("Windows", stdext::format("WARNING: CEF directory not found at %s", 
-            std::string(cefDir.begin(), cefDir.end())).c_str().c_str());
+            std::string(cefDir.begin(), cefDir.end())).c_str());
         return;
     }
     
@@ -62,13 +62,13 @@ void CefConfigWindows::setupDllDirectories() const {
     SetDefaultDllDirectories(LOAD_LIBRARY_SEARCH_DEFAULT_DIRS | LOAD_LIBRARY_SEARCH_USER_DIRS);
     
     // Add CEF directory to DLL search path
-    DLL_DIRECTORY_COOKIE cookie = AddDllDirectory(cefDir.c_str().c_str());
+    DLL_DIRECTORY_COOKIE cookie = AddDllDirectory(cefDir.c_str());
     if (cookie == NULL) {
         DWORD error = GetLastError();
-        logMessage("Windows", stdext::format("WARNING: Failed to add CEF directory to DLL search path (Error: %lu)", error).c_str().c_str());
+        logMessage("Windows", stdext::format("WARNING: Failed to add CEF directory to DLL search path (Error: %lu)", error).c_str());
     } else {
         logMessage("Windows", stdext::format("CEF DLL directory added successfully: %s", 
-            std::string(cefDir.begin(), cefDir.end())).c_str().c_str());
+            std::string(cefDir.begin(), cefDir.end())).c_str());
     }
 }
 
@@ -96,14 +96,14 @@ void CefConfigWindows::configurePaths(CefSettings& settings) {
     CreateDirectoryW(cacheDir.c_str(), nullptr);
     
     logMessage("Windows", stdext::format("Using TEMP cache directory: %s", 
-        std::string(cacheDir.begin(), cacheDir.end())).c_str().c_str());
+        std::string(cacheDir.begin(), cacheDir.end())).c_str());
 
     // Verify CEF directory exists and contains required files
     std::wstring libcefPath = cefDir + L"\\libcef.dll";
-    DWORD fileAttrib = GetFileAttributesW(libcefPath.c_str().c_str());
+    DWORD fileAttrib = GetFileAttributesW(libcefPath.c_str());
     if (fileAttrib == INVALID_FILE_ATTRIBUTES) {
         logMessage("Windows", stdext::format("ERROR: libcef.dll not found at %s", 
-            std::string(libcefPath.begin(), libcefPath.end())).c_str().c_str());
+            std::string(libcefPath.begin(), libcefPath.end())).c_str());
         logMessage("Windows", "Make sure to copy the CEF runtime files to the ./cef/ directory");
         return;
     }
@@ -115,35 +115,10 @@ void CefConfigWindows::configurePaths(CefSettings& settings) {
     CefString(&settings.browser_subprocess_path) = subprocessPath;
 
     // Detailed logging for debugging path depth issues
-    logMessage("Windows", stdext::format("CEF directory: %s", std::string(cefDir.begin(), cefDir.end())).c_str().c_str());
-    logMessage("Windows", stdext::format("CEF subprocess path: %s", std::string(subprocessPath.begin(), subprocessPath.end())).c_str().c_str());
-    logMessage("Windows", stdext::format("CEF cache path: %s", std::string(cacheDir.begin(), cacheDir.end())).c_str().c_str());
-    logMessage("Windows", stdext::format("CEF locales path: %s", std::string(localesDir.begin(), localesDir.end()).c_str().c_str());
-    
-    // Check path lengths - this is critical for CEF functionality
-    std::string exeDirStr = std::string(exeDir.begin(), exeDir.end().c_str());
-    std::string cefDirStr = std::string(cefDir.begin(), cefDir.end().c_str());
-    std::string cacheDirStr = std::string(cacheDir.begin(), cacheDir.end().c_str());
-    std::string subprocessPathStr = std::string(subprocessPath.begin(), subprocessPath.end().c_str());
-    
-    logMessage("Windows", stdext::format("=== PATH LENGTH ANALYSIS ===").c_str());
-    logMessage("Windows", stdext::format("Executable dir: %s (%zu chars)", exeDirStr.c_str(), exeDirStr.length()).c_str().c_str());
-    logMessage("Windows", stdext::format("CEF dir: %s (%zu chars)", cefDirStr.c_str(), cefDirStr.length()).c_str().c_str());
-    logMessage("Windows", stdext::format("Cache dir: %s (%zu chars)", cacheDirStr.c_str(), cacheDirStr.length()).c_str().c_str());
-    logMessage("Windows", stdext::format("Subprocess path: %s (%zu chars)", subprocessPathStr.c_str(), subprocessPathStr.length()).c_str().c_str());
-    
-    // Critical thresholds based on Windows limitations
-    if (exeDirStr.length() > 100) {
-        logMessage("Windows", "WARNING: Executable directory path > 100 chars - CEF GPU process may fail!");
-    }
-    if (subprocessPathStr.length() > 200) {
-        logMessage("Windows", "WARNING: Subprocess path > 200 chars - CEF may fail to start subprocess!");
-    }
-    if (cacheDirStr.length() > 180) {
-        logMessage("Windows", "WARNING: Cache directory path > 180 chars - CEF cache operations may fail!");
-    }
-    
-    logMessage("Windows", stdext::format("=== END PATH ANALYSIS ===").c_str());
+    logMessage("Windows", stdext::format("CEF directory: %s", std::string(cefDir.begin(), cefDir.end())).c_str());
+    logMessage("Windows", stdext::format("CEF subprocess path: %s", std::string(subprocessPath.begin(), subprocessPath.end())).c_str());
+    logMessage("Windows", stdext::format("CEF cache path: %s", std::string(cacheDir.begin(), cacheDir.end())).c_str());
+    logMessage("Windows", stdext::format("CEF locales path: %s", std::string(localesDir.begin(), localesDir.end())).c_str());
     
     logMessage("Windows", "CEF configured for portable operation");
 }
@@ -161,12 +136,12 @@ void CefConfigWindows::applyCommandLineFlags(CefRefPtr<CefCommandLine> command_l
     
     // Log exact path length for debugging
     logMessage("=== PATH LENGTH DEBUG ===");
-    logMessage("Windows", stdext::format("Executable directory: %s", exeDir.c_str()).c_str().c_str());
-    logMessage("Windows", stdext::format("Path length: %zu characters", exeDir.length()).c_str().c_str());
+    logMessage("Windows", stdext::format("Executable directory: %s", exeDir.c_str()).c_str());
+    logMessage("Windows", stdext::format("Path length: %zu characters", exeDir.length()).c_str());
     
     // Count directory depth
     size_t depth = std::count(exeDir.begin(), exeDir.end(), '\\');
-    logMessage("Windows", stdext::format("Directory depth: %zu levels", depth).c_str().c_str());
+    logMessage("Windows", stdext::format("Directory depth: %zu levels", depth).c_str());
     
     // The threshold appears to be much lower than MAX_PATH
     // Based on user testing: works at ~30 chars, fails at ~50+ chars
@@ -176,17 +151,21 @@ void CefConfigWindows::applyCommandLineFlags(CefRefPtr<CefCommandLine> command_l
     // Always add flags to force temporary files to Windows TEMP directory
     wchar_t tempPath[MAX_PATH];
     GetTempPathW(MAX_PATH, tempPath);
-    std::string tempDir = std::string(tempPath, tempPath + wcslen(tempPath).c_str());
+    
+    // Convert wchar_t to std::string
+    char tempPathA[MAX_PATH];
+    WideCharToMultiByte(CP_UTF8, 0, tempPath, -1, tempPathA, MAX_PATH, nullptr, nullptr);
+    std::string tempDir = tempPathA;
     
     // Force CEF to use TEMP directory for all temporary files
     command_line->AppendSwitchWithValue("disk-cache-dir", tempDir + "otclient_cef_disk_cache");
     command_line->AppendSwitchWithValue("user-data-dir", tempDir + "otclient_cef_user_data");
     command_line->AppendSwitch("disable-dev-shm-usage"); // Don't use /dev/shm (Linux) or equivalent
     
-    logMessage("Windows", stdext::format("Forcing all temp files to: %s", tempDir.c_str()).c_str().c_str());
+    logMessage("Windows", stdext::format("Forcing all temp files to: %s", tempDir.c_str()).c_str());
     
     if (isLongPath) {
-        logMessage("Windows", stdext::format("Long path detected (%zu chars), applying CEF workarounds", exeDir.length()).c_str().c_str());
+        logMessage("Windows", stdext::format("Long path detected (%zu chars), applying CEF workarounds", exeDir.length()).c_str());
         
         // Critical flags for long paths - based on Chromium bug reports
         command_line->AppendSwitch("disable-gpu-process-crash-limit");
@@ -207,7 +186,7 @@ void CefConfigWindows::applyCommandLineFlags(CefRefPtr<CefCommandLine> command_l
         
         logMessage("Windows", "Applied long path workaround flags");
     } else {
-        logMessage("Windows", stdext::format("Normal path length (%zu chars), using standard flags", exeDir.length()).c_str().c_str());
+        logMessage("Windows", stdext::format("Normal path length (%zu chars), using standard flags", exeDir.length()).c_str());
     }
     
     // Always add these for debugging
@@ -215,7 +194,7 @@ void CefConfigWindows::applyCommandLineFlags(CefRefPtr<CefCommandLine> command_l
     command_line->AppendSwitchWithValue("log-level", "0");
     
     logMessage("Windows", stdext::format("Command line flags: %s",
-        command_line->GetCommandLineString().ToString()).c_str().c_str());
+        command_line->GetCommandLineString().ToString()).c_str());
 }
 
 CefMainArgs CefConfigWindows::createMainArgs(int argc, const char* argv[]) {
@@ -227,7 +206,7 @@ bool CefConfigWindows::handleSubprocessExecution(const CefMainArgs& args, CefRef
     // Early-subprocess exit (the main executable should never be used as subprocess
     // when browser_subprocess_path is defined, but call CefExecuteProcess for completeness)
     const int code = CefExecuteProcess(args, nullptr, nullptr);
-    logMessage("Windows", stdext::format("CefExecuteProcess returned code: %d", code).c_str().c_str());
+    logMessage("Windows", stdext::format("CefExecuteProcess returned code: %d", code).c_str());
     if (code >= 0) {
         std::exit(code);
         return true; // Never reached
