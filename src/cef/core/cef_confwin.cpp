@@ -148,21 +148,12 @@ void CefConfigWindows::applyCommandLineFlags(CefRefPtr<CefCommandLine> command_l
     // Even with compressed packages, CEF still fails in long paths!
     bool isLongPath = exeDir.length() > 30; // VERY conservative threshold
     
-    // Always add flags to force temporary files to Windows TEMP directory
-    wchar_t tempPath[MAX_PATH];
-    GetTempPathW(MAX_PATH, tempPath);
-    
-    // Convert wchar_t to std::string
-    char tempPathA[MAX_PATH];
-    WideCharToMultiByte(CP_UTF8, 0, tempPath, -1, tempPathA, MAX_PATH, nullptr, nullptr);
-    std::string tempDir = tempPathA;
-    
-    // Force CEF to use TEMP directory for all temporary files
-    command_line->AppendSwitchWithValue("disk-cache-dir", tempDir + "otc_cache");
-    command_line->AppendSwitchWithValue("user-data-dir", tempDir + "otc_data");
+    // Force CEF to use TEMP directory using environment variable (shortest possible path)
+    command_line->AppendSwitchWithValue("disk-cache-dir", "%TEMP%\\otc_cache");
+    command_line->AppendSwitchWithValue("user-data-dir", "%TEMP%\\otc_data");
     command_line->AppendSwitch("disable-dev-shm-usage"); // Don't use /dev/shm (Linux) or equivalent
     
-    logMessage("Windows", stdext::format("Forcing all temp files to: %s", tempDir.c_str()).c_str());
+    logMessage("Windows", "Forcing all temp files to: %TEMP%");
     
     if (isLongPath) {
         logMessage("Windows", stdext::format("Long path detected (%zu chars), applying CEF workarounds", exeDir.length()).c_str());
