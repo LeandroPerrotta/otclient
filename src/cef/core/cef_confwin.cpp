@@ -170,19 +170,39 @@ void CefConfigWindows::applySettings(CefSettings& settings) {
 void CefConfigWindows::applyCommandLineFlags(CefRefPtr<CefCommandLine> command_line) {
     applyGenericCommandLineFlags(command_line);
     
-    // Additional Windows-specific flags to handle path depth issues
-    command_line->AppendSwitch("disable-gpu-process-crash-limit");
-    command_line->AppendSwitch("disable-gpu-process-prelaunch");
-    command_line->AppendSwitch("disable-gpu-early-init");
-    command_line->AppendSwitch("ignore-gpu-blocklist");
+    // Check if we're in a long path and apply specific workarounds
+    std::string exeDir = std::string(getExecutableDirectory().begin(), getExecutableDirectory().end());
+    bool isLongPath = exeDir.length() > 50; // Conservative threshold
+    
+    if (isLongPath) {
+        logMessage("Windows", stdext::format("Long path detected (%zu chars), applying CEF workarounds", exeDir.length()));
+        
+        // Critical flags for long paths - based on Chromium bug reports
+        command_line->AppendSwitch("disable-gpu-process-crash-limit");
+        command_line->AppendSwitch("disable-gpu-process-prelaunch");  
+        command_line->AppendSwitch("disable-gpu-early-init");
+        command_line->AppendSwitch("disable-dev-shm-usage");
+        command_line->AppendSwitch("no-zygote");
+        
+        // Force single process mode as last resort for very long paths
+        if (exeDir.length() > 80) {
+            logMessage("Windows", "Very long path detected, enabling single-process mode");
+            command_line->AppendSwitch("single-process");
+        }
+        
+        // Use software rendering if GPU process keeps crashing
+        command_line->AppendSwitch("disable-gpu");
+        command_line->AppendSwitch("disable-software-rasterizer");
+        
+        logMessage("Windows", "Applied long path workaround flags");
+    } else {
+        logMessage("Windows", stdext::format("Normal path length (%zu chars), using standard flags", exeDir.length()));
+    }
+    
+    // Always add these for debugging
     command_line->AppendSwitch("enable-logging");
     command_line->AppendSwitchWithValue("log-level", "0");
     
-    // Try to work around potential path length/depth issues
-    command_line->AppendSwitch("disable-dev-shm-usage");
-    command_line->AppendSwitch("no-zygote");
-    
-    logMessage("Windows", "Applied additional Windows-specific CEF flags for path depth compatibility");
     logMessage("Windows", stdext::format("Command line flags: %s",
         command_line->GetCommandLineString().ToString()).c_str());
 }
