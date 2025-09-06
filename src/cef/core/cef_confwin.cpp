@@ -74,10 +74,43 @@ void CefConfigWindows::setupDllDirectories() const {
 void CefConfigWindows::configurePaths(CefSettings& settings) {
     setupDllDirectories();
     const std::wstring exeDir = getExecutableDirectory();
-    const std::wstring cefDir = exeDir + L"\\cef";
-    const std::wstring localesDir = cefDir + L"\\locales";
-    const std::wstring cacheDir = cefDir + L"\\cache";
-    const std::wstring subprocessPath = cefDir + L"\\otclient_cef_subproc.exe";
+    
+    // Check if path is too long and implement workaround
+    std::string exeDirStr = std::string(exeDir.begin(), exeDir.end());
+    bool usePathWorkaround = exeDirStr.length() > 80; // Conservative threshold
+    
+    std::wstring cefDir, localesDir, cacheDir, subprocessPath;
+    
+    if (usePathWorkaround) {
+        logMessage("Windows", stdext::format("Path too long (%zu chars), implementing workaround", exeDirStr.length()));
+        
+        // Use shorter cache path in TEMP directory
+        wchar_t tempPath[MAX_PATH];
+        GetTempPathW(MAX_PATH, tempPath);
+        std::wstring tempDir = tempPath;
+        
+        // Create unique temp directory for this instance
+        DWORD processId = GetCurrentProcessId();
+        std::wstring tempCefDir = tempDir + L"otclient_cef_" + std::to_wstring(processId);
+        
+        cefDir = exeDir + L"\\cef";  // DLLs still need to be in original location
+        localesDir = cefDir + L"\\locales";
+        cacheDir = tempCefDir + L"\\cache";  // Cache in temp directory
+        subprocessPath = cefDir + L"\\otclient_cef_subproc.exe";  // Subprocess in original location
+        
+        // Create temp cache directory
+        CreateDirectoryW(tempCefDir.c_str(), nullptr);
+        CreateDirectoryW(cacheDir.c_str(), nullptr);
+        
+        logMessage("Windows", stdext::format("Using temp cache directory: %s", 
+            std::string(cacheDir.begin(), cacheDir.end()).c_str()));
+    } else {
+        // Normal paths when length is acceptable
+        cefDir = exeDir + L"\\cef";
+        localesDir = cefDir + L"\\locales";
+        cacheDir = cefDir + L"\\cache";
+        subprocessPath = cefDir + L"\\otclient_cef_subproc.exe";
+    }
 
     // Verify CEF directory exists and contains required files
     std::wstring libcefPath = cefDir + L"\\libcef.dll";
@@ -101,13 +134,30 @@ void CefConfigWindows::configurePaths(CefSettings& settings) {
     logMessage("Windows", stdext::format("CEF cache path: %s", std::string(cacheDir.begin(), cacheDir.end())).c_str());
     logMessage("Windows", stdext::format("CEF locales path: %s", std::string(localesDir.begin(), localesDir.end())).c_str());
     
-    // Check path lengths
-    size_t subprocessPathLen = std::string(subprocessPath.begin(), subprocessPath.end()).length();
-    logMessage("Windows", stdext::format("Subprocess path length: %zu characters", subprocessPathLen));
+    // Check path lengths - this is critical for CEF functionality
+    std::string exeDirStr = std::string(exeDir.begin(), exeDir.end());
+    std::string cefDirStr = std::string(cefDir.begin(), cefDir.end());
+    std::string cacheDirStr = std::string(cacheDir.begin(), cacheDir.end());
+    std::string subprocessPathStr = std::string(subprocessPath.begin(), subprocessPath.end());
     
-    if (subprocessPathLen > 200) {
-        logMessage("Windows", "WARNING: Subprocess path is very long, this might cause issues");
+    logMessage("Windows", stdext::format("=== PATH LENGTH ANALYSIS ==="));
+    logMessage("Windows", stdext::format("Executable dir: %s (%zu chars)", exeDirStr.c_str(), exeDirStr.length()));
+    logMessage("Windows", stdext::format("CEF dir: %s (%zu chars)", cefDirStr.c_str(), cefDirStr.length()));
+    logMessage("Windows", stdext::format("Cache dir: %s (%zu chars)", cacheDirStr.c_str(), cacheDirStr.length()));
+    logMessage("Windows", stdext::format("Subprocess path: %s (%zu chars)", subprocessPathStr.c_str(), subprocessPathStr.length()));
+    
+    // Critical thresholds based on Windows limitations
+    if (exeDirStr.length() > 100) {
+        logMessage("Windows", "WARNING: Executable directory path > 100 chars - CEF GPU process may fail!");
     }
+    if (subprocessPathStr.length() > 200) {
+        logMessage("Windows", "WARNING: Subprocess path > 200 chars - CEF may fail to start subprocess!");
+    }
+    if (cacheDirStr.length() > 180) {
+        logMessage("Windows", "WARNING: Cache directory path > 180 chars - CEF cache operations may fail!");
+    }
+    
+    logMessage("Windows", stdext::format("=== END PATH ANALYSIS ==="));
     
     logMessage("Windows", "CEF configured for portable operation");
 }
