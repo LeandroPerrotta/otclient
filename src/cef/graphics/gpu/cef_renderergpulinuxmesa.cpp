@@ -80,18 +80,19 @@ void CefRendererGPULinuxMesa::onAcceleratedPaint(const CefAcceleratedPaintInfo& 
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_R, GL_BLUE);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_B, GL_RED);
 
+        // Drain any pending GL errors left by the game's rendering pipeline
+        // (lightview FBOs, shaders, etc.) before our own GL calls, otherwise
+        // glGetError() will report a stale error as if our call failed.
+        while(glGetError() != GL_NO_ERROR) {}
+
         bool done = false;
         GLuint memoryObject = 0;
-        
-        // Clear any existing GL errors before proceeding
-        while(glGetError() != GL_NO_ERROR) { /* clear errors */ }
-        
         m_glCreateMemoryObjectsEXT(1, &memoryObject);
-        GLenum err = glGetError();
-        if(err == GL_NO_ERROR && memoryObject != 0) {
+        // glCreateMemoryObjectsEXT signals failure by returning 0, not via GL errors.
+        if(memoryObject != 0) {
             GLuint64 size = (GLuint64)height * stride;
             m_glImportMemoryFdEXT(memoryObject, size, GL_HANDLE_TYPE_OPAQUE_FD_EXT, memFd);
-            err = glGetError();
+            GLenum err = glGetError();
             if(err == GL_NO_ERROR) {
                 m_glTexStorageMem2DEXT(GL_TEXTURE_2D, 1, GL_RGBA8, width, height, memoryObject, offset);
                 err = glGetError();
@@ -106,7 +107,7 @@ void CefRendererGPULinuxMesa::onAcceleratedPaint(const CefAcceleratedPaintInfo& 
             }
             m_glDeleteMemoryObjectsEXT(1, &memoryObject);
         } else {
-            g_logger.error(stdext::format("CefRendererGPULinuxMesa: glCreateMemoryObjectsEXT failed with error 0x%x", err));
+            g_logger.error("CefRendererGPULinuxMesa: glCreateMemoryObjectsEXT failed (returned 0)");
         }
 
         glBindTexture(GL_TEXTURE_2D, 0);
