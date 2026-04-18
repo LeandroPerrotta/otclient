@@ -2,9 +2,14 @@
 
 #ifdef USE_CEF
 
+#include <client/thingtypemanager.h>
+#include <client/const.h>
 #include <framework/core/resourcemanager.h>
+#include <framework/graphics/image.h>
+#include <mutex>
 #include <unordered_map>
 #include <algorithm>
+#include <cstdlib>
 #include <cstring>
 
 CefPhysFsResourceHandler::CefPhysFsResourceHandler(const std::string& path)
@@ -19,6 +24,76 @@ CefPhysFsResourceHandler::CefPhysFsResourceHandler(const std::string& path)
         }
     }
 }
+
+CefPhysFsResourceHandler::CefPhysFsResourceHandler(std::string data, std::string mimeType)
+    : m_data(std::move(data)), m_mimeType(std::move(mimeType)), m_offset(0) {
+}
+
+namespace {
+static std::mutex g_creaturePngMutex;
+static std::unordered_map<uint16_t, std::string> g_creaturePngCache;
+static constexpr size_t CREATURE_PNG_CACHE_MAX = 256;
+
+static bool parseCreatureTypePath(const std::string& path, uint16_t& outLookType)
+{
+    static const char kPrefix[] = "/creature/type/";
+    if(path.compare(0, sizeof(kPrefix) - 1, kPrefix) != 0)
+        return false;
+    const char* start = path.c_str() + (sizeof(kPrefix) - 1);
+    if(*start == '\0')
+        return false;
+    char* end = nullptr;
+    unsigned long v = std::strtoul(start, &end, 10);
+    if(end == start || v == 0UL || v > 65535UL)
+        return false;
+    if(*end != '\0' && *end != '/')
+        return false;
+    outLookType = static_cast<uint16_t>(v);
+    return true;
+}
+
+static std::string buildCreatureTypePng(uint16_t lookType)
+{
+    if(!g_things.isDatLoaded())
+        return {};
+    if(!g_things.isValidDatId(lookType, ThingCategoryCreature))
+        return {};
+    const ThingTypePtr& tt = g_things.getThingType(lookType, ThingCategoryCreature);
+    if(!tt || tt->isNull())
+        return {};
+    ImagePtr img = tt->toImageFrame(Otc::South, 0, 0, 0);
+    if(!img)
+        return {};
+    return img->encodePNG();
+}
+
+static CefRefPtr<CefResourceHandler> tryCreateCreatureTypeHandler(const std::string& path)
+{
+    uint16_t lookType = 0;
+    if(!parseCreatureTypePath(path, lookType))
+        return nullptr;
+
+    std::string png;
+    {
+        std::lock_guard<std::mutex> lock(g_creaturePngMutex);
+        auto it = g_creaturePngCache.find(lookType);
+        if(it != g_creaturePngCache.end()) {
+            png = it->second;
+        } else {
+            png = buildCreatureTypePng(lookType);
+            if(!png.empty()) {
+                if(g_creaturePngCache.size() >= CREATURE_PNG_CACHE_MAX)
+                    g_creaturePngCache.clear();
+                g_creaturePngCache[lookType] = png;
+            }
+        }
+    }
+
+    if(!png.empty())
+        return new CefPhysFsResourceHandler(std::move(png), "image/png");
+    return new CefPhysFsResourceHandler(std::string(), "image/png");
+}
+} // namespace
 
 bool CefPhysFsResourceHandler::ProcessRequest(CefRefPtr<CefRequest> request, CefRefPtr<CefCallback> callback) {
     m_isOptionsRequest = false;
@@ -106,6 +181,9 @@ static std::string resolvePathFromUrl(const std::string& url) {
 
     if (!path.empty() && path[0] != '/')
         path.insert(path.begin(), '/');
+    const auto q = path.find_first_of("?#");
+    if(q != std::string::npos)
+        path.resize(q);
     return path;
 }
 
@@ -114,8 +192,11 @@ CefRefPtr<CefResourceHandler> CefPhysFsResourceRequestHandler::GetResourceHandle
     CefRefPtr<CefFrame> /*frame*/,
     CefRefPtr<CefRequest> request) {
     const std::string path = resolvePathFromUrl(request->GetURL());
-    if (!path.empty())
+    if (!path.empty()) {
+        if(CefRefPtr<CefResourceHandler> h = tryCreateCreatureTypeHandler(path))
+            return h;
         return new CefPhysFsResourceHandler(path);
+    }
     return nullptr;
 }
 
@@ -125,8 +206,11 @@ CefRefPtr<CefResourceHandler> CefPhysFsSchemeHandlerFactory::Create(
     const CefString& /*scheme_name*/,
     CefRefPtr<CefRequest> request) {
     const std::string path = resolvePathFromUrl(request->GetURL());
-    if (!path.empty())
+    if (!path.empty()) {
+        if(CefRefPtr<CefResourceHandler> h = tryCreateCreatureTypeHandler(path))
+            return h;
         return new CefPhysFsResourceHandler(path);
+    }
     return nullptr;
 }
 #endif // USE_CEF

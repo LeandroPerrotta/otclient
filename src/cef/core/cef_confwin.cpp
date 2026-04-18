@@ -11,6 +11,7 @@
 #endif
 #include <windows.h>
 #include <libloaderapi.h>
+#include <string>
 
 // Only include scheme handler in main process, not subprocess
 #ifndef CEF_SUBPROCESS_BUILD
@@ -50,8 +51,11 @@ void CefConfigWindows::configurePaths(CefSettings& settings) {
     const std::wstring exeDir = getExecutableDirectory();
     const std::wstring cefDir = exeDir + L"\\cef";
     const std::wstring localesDir = cefDir + L"\\locales";
-    const std::wstring cacheDir = cefDir + L"\\cache";
+    // Per-process cache avoids Chromium singleton lock when running multiple clients.
+    const std::wstring cacheDir = cefDir + L"\\cache-" + std::to_wstring(GetCurrentProcessId());
     const std::wstring subprocessPath = cefDir + L"\\otclient_cef_subproc.exe";
+
+    CreateDirectoryW(cacheDir.c_str(), nullptr);
 
     CefString(&settings.resources_dir_path) = cefDir;
     CefString(&settings.locales_dir_path) = localesDir;
@@ -60,6 +64,7 @@ void CefConfigWindows::configurePaths(CefSettings& settings) {
     CefString(&settings.browser_subprocess_path) = subprocessPath;
 
     logMessage("Windows", stdext::format("CEF directory: %s", std::string(cefDir.begin(), cefDir.end())).c_str());
+    logMessage("Windows", stdext::format("CEF cache path: %s", std::string(cacheDir.begin(), cacheDir.end())).c_str());
 }
 
 void CefConfigWindows::applySettings(CefSettings& settings) {

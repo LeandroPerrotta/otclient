@@ -10,7 +10,7 @@
 
 std::unique_ptr<CefRenderer> CefRendererFactory::createRenderer(UICEFWebView& view)
 {
-    
+
 #if defined(USE_CEF)
 #if defined(_WIN32) && defined(OPENGL_ES) && OPENGL_ES == 2
     g_logger.info("CefRendererFactory: Checking for GPU Windows renderer");

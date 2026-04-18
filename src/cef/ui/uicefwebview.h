@@ -6,15 +6,27 @@
 #include <atomic>
 #include <map>
 #include <functional>
+#include <memory>
 
 #ifdef USE_CEF
 #include "include/cef_browser.h"
 #include "include/cef_render_handler.h"
+#include <framework/graphics/graphics.h>
 
 // Forward declarations
 class CefClient;
 class CefRenderer;
 class SimpleCEFClient;
+
+/**
+ * Outlives CefRenderer. GPU accelerated-paint lambdas must only touch this (via shared_ptr),
+ * never the renderer object, which may be destroyed while events are still queued.
+ */
+struct CefGpuPaintChannel {
+    std::atomic<bool> alive{true};
+    TexturePtr texture;
+    std::atomic<bool> textureReady{false};
+};
 #endif
 
 // @bindclass
@@ -61,7 +73,11 @@ public:
     void onPaint(const void* buffer, int width, int height, const CefRenderHandler::RectList& dirtyRects);
     void onAcceleratedPaint(const CefAcceleratedPaintInfo& info, const CefRenderHandler::RectList* dirtyRects = nullptr);
     void onBrowserCreated(CefRefPtr<CefBrowser> browser);
-    
+
+#ifdef USE_CEF
+    std::shared_ptr<CefGpuPaintChannel> getGpuPaintChannel() const { return m_gpuPaintChannel; }
+#endif
+
     // Static methods for managing all WebViews
     static void closeAllWebViews();
     static size_t getActiveWebViewCount();
@@ -113,7 +129,9 @@ private:
     CefRefPtr<CefClient> m_client;
     std::string m_pendingHtml; // Store HTML to load after browser creation
     std::string m_pendingUrl;  // Store URL to load after browser creation
-    
+
+    std::shared_ptr<CefGpuPaintChannel> m_gpuPaintChannel;
+
     // Renderer abstraction
     std::unique_ptr<CefRenderer> m_renderer;
     Point m_lastMousePos;

@@ -12,6 +12,7 @@
 class CefPhysFsResourceHandler : public CefResourceHandler {
 public:
     explicit CefPhysFsResourceHandler(const std::string& path);
+    CefPhysFsResourceHandler(std::string data, std::string mimeType);
 
     bool ProcessRequest(CefRefPtr<CefRequest> request, CefRefPtr<CefCallback> callback) override;
     void GetResponseHeaders(CefRefPtr<CefResponse> response, int64_t& response_length, CefString& redirectUrl) override;

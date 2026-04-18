@@ -44,6 +44,10 @@ public:
     // Thread-safe method for CEF callbacks
     void addEventFromOtherThread(const std::function<void()>& callback, bool pushFront = false);
 
+    /** Run pending addEventFromOtherThread callbacks now on the calling thread (must be main thread).
+     *  Used when tearing down CEF so GPU paint work is not deferred until an unrelated UI close/poll. */
+    void executeThreadSafeQueueImmediately();
+
 private:
     std::deque<EventPtr> m_eventList;
     int m_pollEventsSize;

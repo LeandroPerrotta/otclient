@@ -22,6 +22,9 @@ public:
     explicit SimpleCEFClient(UICEFWebView* webview);
     ~SimpleCEFClient() override;
 
+    /** Call from ~UICEFWebView before CloseBrowser so CEF paint callbacks stop using this widget. */
+    void detachWebView();
+
     CefRefPtr<CefRenderHandler> GetRenderHandler() override;
     CefRefPtr<CefRequestHandler> GetRequestHandler() override;
     CefRefPtr<CefLifeSpanHandler> GetLifeSpanHandler() override;

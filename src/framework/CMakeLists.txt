@@ -209,6 +209,19 @@ if(WIN32)
 endif()
 set(Boost_USE_MULTITHREADED ON)
 set(Boost_USE_STATIC_LIBS ${USE_STATIC_LIBS})
+# Force legacy FindBoost module (Boost 1.88+ provides cmake config files that
+# CMake 3.31+ prefers, but they split components into separate packages)
+set(Boost_NO_BOOST_CMAKE ON)
+# Boost 1.88 ships without the boost_thread .so symlink on Ubuntu 25.04+;
+# fall back to the versioned library when the unversioned symlink is absent.
+if(UNIX AND NOT APPLE AND NOT Boost_THREAD_LIBRARY)
+    file(GLOB _boost_thread_libs "/usr/lib/${CMAKE_LIBRARY_ARCHITECTURE}/libboost_thread.so.*")
+    if(_boost_thread_libs)
+        list(GET _boost_thread_libs 0 _boost_thread_lib)
+        set(Boost_THREAD_LIBRARY "${_boost_thread_lib}" CACHE FILEPATH "Boost thread library" FORCE)
+        set(Boost_THREAD_LIBRARY_RELEASE "${_boost_thread_lib}" CACHE FILEPATH "Boost thread library (release)" FORCE)
+    endif()
+endif()
 find_package(Boost 1.48.0 COMPONENTS ${REQUIRED_BOOST_COMPONENTS} REQUIRED)
 
 #find lua
@@ -374,6 +387,15 @@ if(FRAMEWORK_GRAPHICS)
             if(UNIX AND NOT APPLE)
                 find_package(EGL REQUIRED)
                 set(framework_INCLUDE_DIRS ${framework_INCLUDE_DIRS} ${EGL_INCLUDE_DIR})
+                # When CEF is enabled, prefer the Angle libEGL.so shipped inside cef/.
+                # CEF's GPU subprocess uses Angle/Swiftshader EGL; mixing the system NVIDIA
+                # libEGL.so.1 in the main process produces "Unable to initialize SkSurface"
+                # because GPU handles passed across processes are incompatible.
+                # CMake >= 3.16 keeps absolute paths in the link line (CMP0060 NEW), which
+                # resolves to /usr/lib/.../libEGL.so (NVIDIA), so we override it explicitly.
+                if(USE_CEF AND EXISTS "${CMAKE_SOURCE_DIR}/cef/libEGL.so")
+                    set(EGL_LIBRARY "${CMAKE_SOURCE_DIR}/cef/libEGL.so")
+                endif()
                 set(framework_LIBRARIES ${framework_LIBRARIES} ${EGL_LIBRARY})
             endif()
         endif()

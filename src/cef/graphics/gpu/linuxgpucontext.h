@@ -16,6 +16,7 @@ public:
 
 #if defined(USE_CEF) && defined(__linux__)
     static Display* x11Display();
+    static bool glxReady();
     static GLXContext sharedContext();
     static GLXContext mainContext();
     static GLXDrawable drawable();

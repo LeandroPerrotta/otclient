@@ -8,6 +8,11 @@
 #include "cef_luahandler.h"
 #include "include/base/cef_logging.h"
 
+void SimpleCEFClient::detachWebView()
+{
+    m_webview = nullptr;
+}
+
 SimpleCEFClient::SimpleCEFClient(UICEFWebView* webview) : m_webview(webview)
 {
     CefMessageRouterConfig config;

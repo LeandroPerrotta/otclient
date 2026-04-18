@@ -22,6 +22,7 @@
 
 #include "uicefwebview.h"
 #include <framework/core/logger.h>
+#include <framework/core/eventdispatcher.h>
 #include <framework/core/application.h>
 #include <framework/core/resourcemanager.h>
 #include <framework/luaengine/luainterface.h>
@@ -55,6 +56,7 @@ UICEFWebView::UICEFWebView()
     : UIWidget()
     , m_browser(nullptr)
     , m_client(nullptr)
+    , m_gpuPaintChannel(std::make_shared<CefGpuPaintChannel>())
     , m_renderer(nullptr)
     , m_lastMousePos(0, 0)
     , m_isValid(true)
@@ -81,6 +83,7 @@ UICEFWebView::UICEFWebView(UIWidgetPtr parent)
     : UIWidget()
     , m_browser(nullptr)
     , m_client(nullptr)
+    , m_gpuPaintChannel(std::make_shared<CefGpuPaintChannel>())
     , m_renderer(nullptr)
     , m_lastMousePos(0, 0)
     , m_isValid(true)
@@ -110,6 +113,20 @@ UICEFWebView::~UICEFWebView()
 {
     g_logger.info("UICEFWebView: Destructor called");
 
+    if (m_gpuPaintChannel) {
+        m_gpuPaintChannel->alive.store(false);
+    }
+
+    if (m_client) {
+        if (auto* sc = dynamic_cast<SimpleCEFClient*>(m_client.get())) {
+            sc->detachWebView();
+        }
+    }
+
+    // CEF posts GPU import work via addEventFromOtherThread; without this, it only runs on the next
+    // poll() (e.g. when closing another window), which is too late and can crash with invalid GLX state.
+    g_dispatcher.executeThreadSafeQueueImmediately();
+
     for (auto& pair : m_jsCallbacks) {
         if (pair.second.luaRef != -1)
             g_lua.unref(pair.second.luaRef);
@@ -129,6 +146,7 @@ UICEFWebView::~UICEFWebView()
         m_browser->GetHost()->CloseBrowser(true);
         m_browser = nullptr;
     }
+    g_dispatcher.executeThreadSafeQueueImmediately();
     m_client = nullptr;
 }
 
@@ -399,9 +417,10 @@ void UICEFWebView::onPaint(const void* buffer, int width, int height,
 
 void UICEFWebView::onAcceleratedPaint(const CefAcceleratedPaintInfo& info, const CefRenderHandler::RectList* dirtyRects)
 {
-    if (m_renderer) {
-        m_renderer->onAcceleratedPaint(info, dirtyRects);
+    if (!m_renderer || !m_gpuPaintChannel || !m_gpuPaintChannel->alive.load()) {
+        return;
     }
+    m_renderer->onAcceleratedPaint(info, dirtyRects);
 }
 void UICEFWebView::onBrowserCreated(CefRefPtr<CefBrowser> browser)
 {

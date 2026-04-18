@@ -15,6 +15,8 @@
 #include <vector>
 #include <algorithm>
 #include <cstring>
+#include <atomic>
+#include <memory>
 
 #ifndef GLeglImageOES
 typedef void* GLeglImageOES;
@@ -71,10 +73,19 @@ static bool isDmaBufModifierSupported(EGLDisplay display, EGLint format, uint64_
 
 CefRendererGPULinuxNonMesa::CefRendererGPULinuxNonMesa(UICEFWebView& view)
     : CefRenderer(view)
-    , m_lastWidth(0)
-    , m_lastHeight(0)
 {
     LinuxGPUContext::initialize();
+}
+
+void CefRendererGPULinuxNonMesa::draw(Fw::DrawPane drawPane)
+{
+    auto ch = m_view.getGpuPaintChannel();
+    if(ch && ch->textureReady.load() && ch->texture) {
+        Rect rect = m_view.getRect();
+        g_painter->setOpacity(1.0f);
+        g_painter->drawTexturedRect(rect, ch->texture);
+    }
+    (void)drawPane;
 }
 
 void CefRendererGPULinuxNonMesa::onPaint(const void* buffer, int width, int height,
@@ -103,9 +114,23 @@ void CefRendererGPULinuxNonMesa::onAcceleratedPaint(const CefAcceleratedPaintInf
     if(eglFd < 0)
         return;
 
-    g_dispatcher.addEventFromOtherThread([this, eglFd, width, height, stride, offset, modifier]() mutable {
+    std::shared_ptr<CefGpuPaintChannel> ch = m_view.getGpuPaintChannel();
+    if(!ch) {
+        ::close(eglFd);
+        return;
+    }
+
+    g_dispatcher.addEventFromOtherThread([ch, eglFd, width, height, stride, offset, modifier]() mutable {
         auto close_fd = [](int& x){ if(x>=0){ ::close(x); x=-1; } };
+        if(!ch->alive.load()) {
+            close_fd(eglFd);
+            return;
+        }
         if(!ensureGlEglImageProcResolved()) { close_fd(eglFd); return; }
+        if(!LinuxGPUContext::glxReady()) {
+            close_fd(eglFd);
+            return;
+        }
         Display* x11Display = LinuxGPUContext::x11Display();
         if(!x11Display) { close_fd(eglFd); return; }
         if(glXGetCurrentContext() != LinuxGPUContext::mainContext()) {
@@ -119,12 +144,15 @@ void CefRendererGPULinuxNonMesa::onAcceleratedPaint(const CefAcceleratedPaintInf
             close_fd(eglFd); return;
         }
 
-        m_cefTexture = TexturePtr(new Texture(Size(width, height)));
-        m_textureCreated = true;
-        m_lastWidth = width;
-        m_lastHeight = height;
+        if(!ch->alive.load()) {
+            close_fd(eglFd);
+            return;
+        }
 
-        glBindTexture(GL_TEXTURE_2D, m_cefTexture->getId());
+        ch->textureReady.store(false);
+        ch->texture = TexturePtr(new Texture(Size(width, height)));
+
+        glBindTexture(GL_TEXTURE_2D, ch->texture->getId());
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
@@ -185,7 +213,14 @@ void CefRendererGPULinuxNonMesa::onAcceleratedPaint(const CefAcceleratedPaintInf
         glBindTexture(GL_TEXTURE_2D, 0);
         close_fd(eglFd);
         if(!done) {
+            ch->texture.reset();
+            ch->textureReady.store(false);
             g_logger.error("CefRendererGPULinuxNonMesa: GPU import failed");
+        } else if(ch->alive.load()) {
+            ch->textureReady.store(true);
+        } else {
+            ch->texture.reset();
+            ch->textureReady.store(false);
         }
     });
   #else

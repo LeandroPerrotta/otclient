@@ -111,6 +111,25 @@ void EventDispatcher::addEventFromOtherThread(const std::function<void()>& callb
     m_threadSafeEventQueue.emplace_back(callback, pushFront);
 }
 
+void EventDispatcher::executeThreadSafeQueueImmediately()
+{
+    if(m_disabled)
+        return;
+    for(int pass = 0; pass < 16; ++pass) {
+        std::deque<std::pair<std::function<void()>, bool>> drained;
+        {
+            std::lock_guard<std::mutex> lock(m_threadSafeMutex);
+            if(m_threadSafeEventQueue.empty())
+                break;
+            drained.swap(m_threadSafeEventQueue);
+        }
+        for(auto& entry : drained) {
+            if(entry.first)
+                entry.first();
+        }
+    }
+}
+
 ScheduledEventPtr EventDispatcher::scheduleEvent(const std::function<void()>& callback, int delay)
 {
     if(m_disabled)

@@ -353,6 +353,75 @@ void ThingType::exportImage(std::string fileName)
     image->savePNG(fileName);
 }
 
+ImagePtr ThingType::toImageFrame(int xPattern, int yPattern, int zPattern, int animationPhase)
+{
+    if(m_null || m_spritesIndex.empty())
+        return nullptr;
+
+    if(animationPhase < 0 || animationPhase >= m_animationPhases)
+        return nullptr;
+    if(xPattern < 0 || xPattern >= m_numPatternX || yPattern < 0 || yPattern >= m_numPatternY || zPattern < 0 || zPattern >= m_numPatternZ)
+        return nullptr;
+
+    if(animationPhase == 0 && !m_customImage.empty())
+        return Image::load(m_customImage);
+
+    int numLayers = m_layers;
+    if(m_category == ThingCategoryCreature && numLayers >= 2)
+        numLayers = 5;
+
+    const int tw = m_size.width() * Otc::TILE_PIXELS;
+    const int th = m_size.height() * Otc::TILE_PIXELS;
+    ImagePtr fullImage(new Image(Size(tw, th)));
+
+    for(int l = 0; l < numLayers; ++l) {
+        const bool spriteMask = (m_category == ThingCategoryCreature && l > 0);
+        for(int h = 0; h < m_size.height(); ++h) {
+            for(int w = 0; w < m_size.width(); ++w) {
+                const uint spriteIndex = getSpriteIndex(w, h, spriteMask ? 1 : l, xPattern, yPattern, zPattern, animationPhase);
+                if(spriteIndex >= m_spritesIndex.size())
+                    continue;
+                ImagePtr spriteImage = g_sprites.getSpriteImage(m_spritesIndex[spriteIndex]);
+                if(!spriteImage)
+                    continue;
+                if(spriteMask) {
+                    static Color maskColors[] = { Color::red, Color::green, Color::blue, Color::yellow };
+                    spriteImage->overwriteMask(maskColors[l - 1]);
+                }
+                Point spritePos = Point(m_size.width() - w - 1, m_size.height() - h - 1) * Otc::TILE_PIXELS;
+                fullImage->blit(spritePos, spriteImage);
+            }
+        }
+    }
+
+    const Point framePos(0, 0);
+    Rect drawRect(framePos + Point(m_size.width(), m_size.height()) * Otc::TILE_PIXELS - Point(1, 1), framePos);
+    for(int fx = 0; fx < tw; ++fx) {
+        for(int fy = 0; fy < th; ++fy) {
+            uint8 *p = fullImage->getPixel(fx, fy);
+            if(p[3] != 0x00) {
+                drawRect.setTop(std::min<int>(fy, (int)drawRect.top()));
+                drawRect.setLeft(std::min<int>(fx, (int)drawRect.left()));
+                drawRect.setBottom(std::max<int>(fy, (int)drawRect.bottom()));
+                drawRect.setRight(std::max<int>(fx, (int)drawRect.right()));
+            }
+        }
+    }
+
+    if(!drawRect.isValid())
+        return fullImage;
+
+    const int cw = drawRect.width();
+    const int ch = drawRect.height();
+    ImagePtr cropped(new Image(Size(cw, ch)));
+    for(int y = 0; y < ch; ++y) {
+        const size_t srcRow = static_cast<size_t>((drawRect.top() + y) * tw + drawRect.left()) * 4;
+        const size_t dstRow = static_cast<size_t>(y * cw) * 4;
+        memcpy(&cropped->getPixels()[dstRow], &fullImage->getPixels()[srcRow], static_cast<size_t>(cw) * 4);
+    }
+    return cropped;
+}
+
 void ThingType::unserializeOtml(const OTMLNodePtr& node)
 {
     for(const OTMLNodePtr& node2 : node->children()) {

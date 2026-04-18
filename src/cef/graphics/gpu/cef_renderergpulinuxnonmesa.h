@@ -7,6 +7,7 @@ class CefRendererGPULinuxNonMesa : public CefRenderer
 {
 public:
     explicit CefRendererGPULinuxNonMesa(UICEFWebView& view);
+    void draw(Fw::DrawPane drawPane) override;
     void onPaint(const void* buffer, int width, int height,
                  const CefRenderHandler::RectList& dirtyRects) override;
     void onAcceleratedPaint(const CefAcceleratedPaintInfo& info, const CefRenderHandler::RectList* dirtyRects = nullptr) override;
@@ -14,6 +15,4 @@ public:
     void onRenderSupported(CefWindowInfo& windowInfo) const override;
 
 private:
-    int m_lastWidth;
-    int m_lastHeight;
 };

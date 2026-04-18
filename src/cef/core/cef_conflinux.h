@@ -18,7 +18,7 @@ public:
     bool handleSubprocessExecution(const CefMainArgs& args, CefRefPtr<CefApp> app) override;
     void registerSchemeHandlers() override;
     std::string getPlatformName() const override { return "Linux"; }
-    bool shouldUseSharedTexture() const override { return true; }
+    bool shouldUseSharedTexture() const override;
 
 private:
     std::string findCefDirectory() const;

@@ -8,8 +8,11 @@
 
 #include <unistd.h>
 #include <dirent.h>
+#include <sys/stat.h>
+#include <cerrno>
 #include <climits>
 #include <cstdlib>
+#include <cstring>
 #include <vector>
 
 // Only include scheme handler in main process, not subprocess
@@ -113,7 +116,9 @@ void CefConfigLinux::configurePaths(CefSettings& settings) {
     }
     
     std::string localesPath = resourcesPath + "locales";
-    std::string cache_path = cef_root + "/cache";
+    // Per-process cache so multiple client instances do not fight Chromium's singleton lock
+    // (otherwise CefInitialize fails and a stray Chromium window may open).
+    std::string cache_path = cef_root + "/cache-" + std::to_string(getpid());
     std::string subprocess_path = cef_root + "/otclient_cef_subproc";
     
     logMessage("Linux", stdext::format("CEF found at: %s", cef_root).c_str());
@@ -129,19 +134,31 @@ void CefConfigLinux::configurePaths(CefSettings& settings) {
         return;
     }
     
+    if (::mkdir(cache_path.c_str(), 0755) != 0 && errno != EEXIST) {
+        logMessage("Linux", stdext::format("Could not create CEF cache dir %s: %s", cache_path, std::strerror(errno)).c_str());
+        return;
+    }
+
     // Convert relative paths to absolute paths
     char abs_cache_path[PATH_MAX];
     char abs_resources_path[PATH_MAX];
     char abs_locales_path[PATH_MAX];
-    
-    realpath(cache_path.c_str(), abs_cache_path);
+    char abs_cef_root[PATH_MAX];
+
+    std::string abs_cache_str = cache_path;
+    if (realpath(cache_path.c_str(), abs_cache_path)) {
+        abs_cache_str.assign(abs_cache_path);
+    } else if (realpath(cef_root.c_str(), abs_cef_root)) {
+        abs_cache_str = std::string(abs_cef_root) + "/cache-" + std::to_string(getpid());
+    }
+
     realpath(resourcesPath.c_str(), abs_resources_path);
     realpath(localesPath.c_str(), abs_locales_path);
-    
-    logMessage("Linux", stdext::format("CEF cache path: %s", abs_cache_path).c_str());
 
-    CefString(&settings.cache_path) = abs_cache_path;
-    CefString(&settings.root_cache_path) = abs_cache_path;
+    logMessage("Linux", stdext::format("CEF cache path: %s", abs_cache_str).c_str());
+
+    CefString(&settings.cache_path) = abs_cache_str;
+    CefString(&settings.root_cache_path) = abs_cache_str;
     CefString(&settings.resources_dir_path) = abs_resources_path;
     CefString(&settings.locales_dir_path) = abs_locales_path;
     CefString(&settings.browser_subprocess_path) = subprocess_path;
@@ -177,6 +194,16 @@ bool CefConfigLinux::handleSubprocessExecution(const CefMainArgs& args, CefRefPt
         return true; // Never reached
     }
     return false;
+}
+
+bool CefConfigLinux::shouldUseSharedTexture() const
+{
+    // Default GPU path on. Set DARGHOS_CEF_SHARED_TEXTURE=0 to force software OnPaint for tests.
+    const char* env = std::getenv("DARGHOS_CEF_SHARED_TEXTURE");
+    if(env != nullptr && std::strcmp(env, "0") == 0) {
+        return false;
+    }
+    return true;
 }
 
 void CefConfigLinux::registerSchemeHandlers() {
