@@ -24,24 +24,31 @@
 namespace cef {
 
 std::string CefConfigLinux::findCefDirectory() const {
-    std::string work_dir;
-    
-    // Get current working directory (works in both main process and subprocess)
-    char cwd[PATH_MAX];
-    if (getcwd(cwd, sizeof(cwd)) != nullptr) {
-        work_dir = cwd;
+    std::string exe_dir;
+
+    // Prefer the directory of the running executable (more reliable than the
+    // current working directory: works for both main process and subprocess
+    // regardless of how the user launched the binary).
+    char exe_path[PATH_MAX];
+    ssize_t len = readlink("/proc/self/exe", exe_path, sizeof(exe_path) - 1);
+    if (len != -1) {
+        exe_path[len] = '\0';
+        std::string exe_full_path = exe_path;
+        size_t pos = exe_full_path.find_last_of('/');
+        exe_dir = (pos != std::string::npos) ? exe_full_path.substr(0, pos) : ".";
     } else {
-        work_dir = ".";
+        char cwd[PATH_MAX];
+        exe_dir = (getcwd(cwd, sizeof(cwd)) != nullptr) ? cwd : ".";
     }
-    
-    logMessage("Linux", stdext::format("Work directory: %s", work_dir).c_str());
+
+    logMessage("Linux", stdext::format("Executable directory: %s", exe_dir).c_str());
 
     // Look for CEF in the local runtime directory (where setup_cef.sh copies everything)
     std::vector<std::string> search_paths = {
-        work_dir + "/cef",                      // Local runtime directory
+        exe_dir + "/cef",                       // Local runtime directory (relative to executable)
         "./cef",                                // Current directory fallback
-        work_dir + "/cef_binary_*",             // Legacy locations (fallback)
-        work_dir + "/../cef_binary_*",
+        exe_dir + "/cef_binary_*",              // Legacy locations (fallback)
+        exe_dir + "/../cef_binary_*",
         "./cef_binary_*",
         "/usr/local/cef",
         "/opt/cef"
@@ -119,7 +126,9 @@ void CefConfigLinux::configurePaths(CefSettings& settings) {
     // Per-process cache so multiple client instances do not fight Chromium's singleton lock
     // (otherwise CefInitialize fails and a stray Chromium window may open).
     std::string cache_path = cef_root + "/cache-" + std::to_string(getpid());
-    std::string subprocess_path = cef_root + "/otclient_cef_subproc";
+    // Short subprocess name 'sp' avoids Windows MAX_PATH issues on long install
+    // paths (kept symmetric across Linux/Windows for build/distribution scripts).
+    std::string subprocess_path = cef_root + "/sp";
     
     logMessage("Linux", stdext::format("CEF found at: %s", cef_root).c_str());
     logMessage("Linux", stdext::format("CEF resources path: %s", resourcesPath).c_str());

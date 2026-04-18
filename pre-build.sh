@@ -160,19 +160,19 @@ if [ "$BUILD_READY" = true ]; then
             echo "   Warning: otclient executable not found"
         fi
         
-        if [ -f "$BUILD_DEST/otclient_cef_subproc" ]; then
+        if [ -f "$BUILD_DEST/sp" ]; then
             # Create cef directory if it doesn't exist
             mkdir -p "./cef"
-            cp "$BUILD_DEST/otclient_cef_subproc" "./cef/"
-            echo "   otclient_cef_subproc copied to ./cef/"
+            cp "$BUILD_DEST/sp" "./cef/"
+            echo "   sp (CEF subprocess) copied to ./cef/"
         else
-            echo "   Warning: otclient_cef_subproc executable not found"
+            echo "   Warning: sp (CEF subprocess) executable not found"
         fi
         
         echo ""
         echo "[SUCCESS] Build completed successfully!"
         echo "   Main executable: ./otclient"
-        echo "   CEF subprocess: ./cef/otclient_cef_subproc"
+        echo "   CEF subprocess: ./cef/sp"
         echo "   Cache location: $BUILD_DEST"
         
     else
