@@ -219,6 +219,11 @@ function setOption(key, value, force)
     if value <= 0 or value >= 61 then  text = 'max' v = 0 end
     graphicsPanel:getChildById('foregroundFrameRateLabel'):setText(tr('Interface framerate limit: %s', text))
     g_app.setForegroundPaneMaxFps(v)
+    local cefFps = v
+    if cefFps <= 0 then cefFps = 60 end
+    if UICEFWebView and UICEFWebView.setAllWindowlessFrameRate then
+      UICEFWebView.setAllWindowlessFrameRate(cefFps)
+    end
   elseif key == 'enableLights' then
     gameMapPanel:setDrawLights(value and options['ambientLight'] < 100)
     graphicsPanel:getChildById('ambientLight'):setEnabled(value)

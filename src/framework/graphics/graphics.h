@@ -72,6 +72,7 @@ public:
     bool canUseMipmaps();
     bool canUseHardwareMipmaps();
     bool canUseClampToEdge();
+    bool canUseBGRA();
     bool canUseBlendFuncSeparate();
     bool canUseBlendEquation();
     bool canCacheBackbuffer();
@@ -92,6 +93,7 @@ private:
     stdext::boolean<true> m_useMipmaps;
     stdext::boolean<true> m_useHardwareMipmaps;
     stdext::boolean<true> m_useClampToEdge;
+    stdext::boolean<true> m_useBGRA;
     stdext::boolean<true> m_shouldUseShaders;
     stdext::boolean<true> m_cacheBackbuffer;
     PainterEngine m_prefferedPainterEngine;

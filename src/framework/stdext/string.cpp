@@ -180,7 +180,11 @@ std::string latin1_to_utf8(const std::string& src)
 }
 
 #ifdef WIN32
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
 #include <winsock2.h>
+#include <ws2tcpip.h>
+#endif
 #include <windows.h>
 std::wstring utf8_to_utf16(const std::string& src)
 {

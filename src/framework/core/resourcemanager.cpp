@@ -313,7 +313,9 @@ std::string ResourceManager::resolvePath(const std::string& path)
     if(stdext::starts_with(path, "/"))
         fullPath = path;
     else {
-        std::string scriptPath = "/" + g_lua.getCurrentSourcePath();
+        std::string scriptPath;
+        if(g_lua.isInCppCallback())
+            scriptPath = "/" + g_lua.getCurrentSourcePath();
         if(!scriptPath.empty())
             fullPath += scriptPath + "/";
         fullPath += path;
@@ -345,7 +347,19 @@ std::string ResourceManager::getBaseDir()
 
 std::string ResourceManager::getUserDir()
 {
-    return PHYSFS_getUserDir();
+    // PHYSFS_getUserDir() is deprecated but we need to maintain compatibility
+    // Suppress the deprecation warning for this specific usage
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+    const char* userDir = PHYSFS_getUserDir();
+#pragma GCC diagnostic pop
+    
+    if (userDir) {
+        return std::string(userDir);
+    }
+    
+    // Fallback to base directory if getUserDir fails
+    return PHYSFS_getBaseDir();
 }
 
 std::string ResourceManager::guessFilePath(const std::string& filename, const std::string& type)

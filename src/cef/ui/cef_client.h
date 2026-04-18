@@ -1,0 +1,80 @@
+#pragma once
+
+#include "include/cef_client.h"
+#include "include/cef_render_handler.h"
+#include "include/cef_request_handler.h"
+#include "include/cef_life_span_handler.h"
+#include "include/wrapper/cef_message_router.h"
+#include "include/cef_display_handler.h"
+#include "include/cef_base.h"
+#include <memory>
+
+class UICEFWebView;
+class CefLuaHandler;
+
+// Simple CEF Client implementation
+class SimpleCEFClient : public CefClient,
+                        public CefRenderHandler,
+                        public CefRequestHandler,
+                        public CefLifeSpanHandler,
+                        public CefDisplayHandler {
+public:
+    explicit SimpleCEFClient(UICEFWebView* webview);
+    ~SimpleCEFClient() override;
+
+    /** Call from ~UICEFWebView before CloseBrowser so CEF paint callbacks stop using this widget. */
+    void detachWebView();
+
+    CefRefPtr<CefRenderHandler> GetRenderHandler() override;
+    CefRefPtr<CefRequestHandler> GetRequestHandler() override;
+    CefRefPtr<CefLifeSpanHandler> GetLifeSpanHandler() override;
+    CefRefPtr<CefDisplayHandler> GetDisplayHandler() override { return this; }
+    CefRefPtr<CefResourceRequestHandler> GetResourceRequestHandler(
+        CefRefPtr<CefBrowser> browser,
+        CefRefPtr<CefFrame> frame,
+        CefRefPtr<CefRequest> request,
+        bool is_navigation,
+        bool is_download,
+        const CefString& request_initiator,
+        bool& disable_default_handling) override;
+
+    bool OnProcessMessageReceived(CefRefPtr<CefBrowser> browser,
+                                  CefRefPtr<CefFrame> frame,
+                                  CefProcessId source_process,
+                                  CefRefPtr<CefProcessMessage> message) override;
+
+    bool OnBeforeBrowse(CefRefPtr<CefBrowser> browser,
+                        CefRefPtr<CefFrame> frame,
+                        CefRefPtr<CefRequest> request,
+                        bool user_gesture,
+                        bool is_redirect) override;
+
+    void OnAfterCreated(CefRefPtr<CefBrowser> browser) override;
+
+    void GetViewRect(CefRefPtr<CefBrowser> browser, CefRect& rect) override;
+
+    void OnPaint(CefRefPtr<CefBrowser> browser,
+                 PaintElementType type,
+                 const RectList& dirtyRects,
+                 const void* buffer,
+                 int width, int height) override;
+
+    void OnAcceleratedPaint(CefRefPtr<CefBrowser> browser,
+                            PaintElementType type,
+                            const RectList& dirtyRects,
+                            const CefAcceleratedPaintInfo& info) override;
+
+    // Forward console.log messages from renderer to OTClient logger
+    bool OnConsoleMessage(CefRefPtr<CefBrowser> browser,
+                          cef_log_severity_t level,
+                          const CefString& message,
+                          const CefString& source,
+                          int line) override;
+
+private:
+    UICEFWebView* m_webview;
+    CefRefPtr<CefMessageRouterBrowserSide> m_messageRouter;
+    std::unique_ptr<CefLuaHandler> m_luaHandler;
+
+    IMPLEMENT_REFCOUNTING(SimpleCEFClient);
+};

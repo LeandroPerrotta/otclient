@@ -1,46 +1,30 @@
 [![Build Status](https://github.com/edubart/otclient/actions/workflows/build-vcpkg.yml/badge.svg)](https://github.com/edubart/otclient/actions/workflows/build-vcpkg.yml) [![Join the chat at https://gitter.im/edubart/otclient](https://img.shields.io/badge/GITTER-join%20chat-green.svg)](https://gitter.im/edubart/otclient?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge) [![Open Source Helpers](https://www.codetriage.com/edubart/otclient/badges/users.svg)](https://www.codetriage.com/edubart/otclient)
 
-### What is otclient?
+### OTClient + WebView with Chromium Embedded Framework (CEF)
 
-Otclient is an alternative Tibia client for usage with otserv. It aims to be complete and flexible,
-for that it uses LUA scripting for all game interface functionality and configurations files with a syntax
-similar to CSS for the client interface design. Otclient works with a modular system, this means
-that each functionality is a separated module, giving the possibility to users modify and customize
-anything easily. Users can also create new mods and extend game interface for their own purposes.
-Otclient is written in C++11 and heavily scripted in lua.
+This is the default OTClient with the addition of a powerful WebView feature. It allows building UI 
+components in OTClient using web technologies and is fully compatible with HTML, CSS, and JavaScript.
 
-For a server to connect to, you can build your own with the [forgottenserver](https://github.com/otland/forgottenserver)
-or connect to one listed on [otservlist](https://otservlist.org/).
+The WebViews are provided by CEF using OSR (off-screen rendering), which renders the buffer that would
+normally be displayed by the browser.
 
-### Where do I download?
+## How to build 
 
-Compiled for Windows can be found here (but can be outdated):
-* [Windows Builds](http://otland.net/threads/otclient-builds-windows.217977/)
+### Ubuntu 24
 
-**NOTE:** You will need to download spr/dat files on your own and place them in `data/things/VERSION/` (i.e: `data/things/1098/Tibia.spr`)
+**Prerequisites:**
+- Same procedure as build regular OTClient, but when preparing the build with cmake you need to activate CEF:
+  - `cmake -DUSE_CEF=ON ..`
+- Download and install CEF. It's needed to be specific version 139.0 (automated script is available `setup_cef.sh`)
 
-### Features
-
-Beyond of it's flexibility with scripts, otclient comes with tons of other features that make possible
-the creation of new client side stuff in otserv that was not possible before. These include,
-sound system, graphics effects with shaders, modules/addons system, animated textures,
-styleable user interface, transparency, multi language, in game lua terminal, an OpenGL 1.1/2.0 ES engine that make possible
-to port to mobile platforms. Otclient is also flexible enough to
-create tibia tools like map editors just using scripts, because it wasn't designed to be just a
-client, instead otclient was designed to be a combination of a framework and tibia APIs.
-
-### Compiling
-
-In short, if you need to compile OTClient, follow these tutorials:
-* [Compiling on Linux](https://github.com/edubart/otclient/wiki/Compiling-on-Linux)
-* [Compiling on OS X](https://github.com/edubart/otclient/wiki/Compiling-on-Mac-OS-X)
-
-### Windows Builds with vcpkg and Visual Studio 2022 (Updated)
+### Windows Builds with vcpkg and Visual Studio 2022
 
 **Prerequisites:**
 - Visual Studio 2022 with v142 toolset (MSVC 2019 build tools)
+- Windows 11 SDK (for CEF build compatibility)
 - CMake 3.16+
 - Git
+- Download and install CEF. It's need to be specifric version 139 (automated PowerShell script is available `setup_cef.ps1`)
 
 **Setup vcpkg:**
 ```bash
@@ -66,55 +50,52 @@ vcpkg install --triplet=x64-windows-v142
 **Build:**
 ```bash
 mkdir build && cd build
-cmake .. -G "Visual Studio 17 2022" -A x64 -T v142 -DCMAKE_TOOLCHAIN_FILE="%VCPKG_ROOT%/scripts/buildsystems/vcpkg.cmake" -DVCPKG_TARGET_TRIPLET=x64-windows-v142
+
+# For build with OpenGL (wihtout GPU acceleration!)
+cmake .. -G "Visual Studio 17 2022" -A x64 -T v142 -DCMAKE_TOOLCHAIN_FILE="%VCPKG_ROOT%/scripts/buildsystems/vcpkg.cmake" -DVCPKG_TARGET_TRIPLET=x64-windows-v142 -DUSE_CEF=ON
+
+# For build with OPENGLES=2.0 (support GPU acceleration)
+cmake .. -G "Visual Studio 17 2022" -A x64 -T v142 -DCMAKE_TOOLCHAIN_FILE="%VCPKG_ROOT%/scripts/buildsystems/vcpkg.cmake" -DVCPKG_TARGET_TRIPLET=x64-windows-v142 -DUSE_CEF=ON -DOPENGLES="2.0"
+
 cmake --build . --config RelWithDebInfo --parallel
 ```
 
 **Note:** The v142 toolset is required for compatibility. VS 2022 defaults to v143 which has linking issues with this project.
 
-### Build and run with Docker
+## TODO
 
-To build the image:
+### Completed
 
-```sh
-docker build -t edubart/otclient .
-```
+- [x] Basic CEF integration in OTClient
+- [x] Basic HTML/CSS rendering
+- [x] CEF installation and compilation helpers
+- [x] Mouse interaction with the component
+- [x] Keyboard interaction with the component
+- [x] Performance optimization (texture caching, frame rate control)
+- [x] Integrate webviews with otclient filesystem through otclient://
+- [x] Basic integration through callbacks between Lua and JS
+- [x] Windows builds (vcpkg probably)
+- [x] Code readibility (clean-code geeks happy)
+- [x] GPU acceleration (Linux is always active, Windows must OPENGLES=2.0)
 
-To run the built image:
+### Pending
 
-```sh
-# Disable access control for the X server.
-xhost +
+- [ ] Dynamically build components to be expose for webviews on otclient://webviews
+- [ ] Touchscreen interaction with the component
+- [ ] Support GPU acceleration on Windows when using OpenGL 
+- [ ] Implementation (bridge) of all available callbacks/methods in Lua also for JavaScript
+- [ ] Developer tools integration (F12 debugger)
 
-# Run the container image with the required bindings to the host devices and volumes.
-docker run -it --rm \
-  --env DISPLAY \
-  --volume /tmp/.X11-unix:/tmp/.X11-unix \
-  --device /dev/dri \
-  --device /dev/snd edubart/otclient /bin/bash
+### HTTP Login Component
 
-# Enable access control for the X server.
-xhost -
-```
+The HTTP Login component demonstrates WebView capabilities by replacing the traditional TCP login with HTTP-based authentication. It supports JWT tokens (if server supports) with fallback to username/password for the final game connection.
 
-### Need help?
+**Requirements:**
+- [OTClient HTTP Login Server](https://github.com/LeandroPerrotta/otclient-http-login-server) (Node.js application)
 
-Try to ask questions in [otland](http://otland.net/f494/), now we have a board for the project there,
-or talk with us at the gitter chat.
+**Configuration:**
+- Enable/disable in `init.lua`: `useLoginHttp = true/false`
+- Configure API URL in `modules/client_http_entergame/http_entergame.lua`: `baseUrl = "https://your-api-url"`
 
-### Bugs
-
-Have found a bug? Please create an issue in our [bug tracker](https://github.com/edubart/otclient/issues)
-
-### Contributing
-
-We encourage you to contribute to otclient! You can make pull requests of any improvement in our github page, alternatively, see [Contributing Wiki Page](https://github.com/edubart/otclient/wiki/Contributing).
-
-### Contact
-
-Talk directly with us at the gitter chat [![Join the chat at https://gitter.im/edubart/otclient](https://img.shields.io/badge/GITTER-join%20chat-green.svg)](https://gitter.im/edubart/otclient?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge).
-
-### License
-
-Otclient is made available under the MIT License, thus this means that you are free
-to do whatever you want, commercial, non-commercial, closed or open.
+![HTTP Login Screenshot](images/httplogin_1.png "HTTP Login Component")
+![HTTP Login Screenshot](images/httplogin_2.png "Character Selection")

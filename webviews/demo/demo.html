@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="utf-8">
+        <link rel="stylesheet" type="text/css" href="demo.css">
+        <link rel="stylesheet" type="text/css" href="../shared/otclient.css">
+        <script type="text/javascript" src="../shared/otclient.js"></script>
+        <script type="text/javascript" src="demo.js"></script>
+    </head>
+    <body>
+      <div class="container">
+        <h1>Keyboard Input Test</h1>
+        <div class="form-group">
+          <label>Custom Dropdown (Fixed):</label>
+          <div class="custom-dropdown" id="customDropdown">
+            <button class="dropdown-button" id="dropdownButton" type="button">
+              <span id="dropdownText">Select an option...</span>
+              <span class="dropdown-arrow"></span>
+            </button>
+            <div class="dropdown-options" id="dropdownOptions">
+              <div class="dropdown-option" data-value="">Select an option...</div>
+              <div class="dropdown-option" data-value="1">Option 1</div>
+              <div class="dropdown-option" data-value="2">Option 2</div>
+              <div class="dropdown-option" data-value="3">Option 3</div>
+            </div>
+          </div>
+        </div>
+        <input id="testInput" type="text" placeholder="Test input">
+      </div>
+    </body>
+</html>

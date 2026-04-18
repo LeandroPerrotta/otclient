@@ -1,0 +1,207 @@
+body {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+}
+
+.container {
+    width: 100%;
+    max-width: 400px;
+    margin: 16px;
+}
+
+.form-group input.error {
+    border-color: #722222;
+    box-shadow: 
+        inset 1px 1px 2px rgba(0, 0, 0, 0.7),
+        inset -1px -1px 0 rgba(255, 255, 255, 0.8),
+        0 0 0 1px #722222;
+}
+
+.login-button {
+    width: 100%;
+}
+
+.remember-me {
+    margin-bottom: var(--otc-margin-normal);
+}
+
+/* Character List using OTClient native styles */
+.character-list {
+    max-height: 300px;
+    overflow-y: auto;
+    margin-bottom: var(--otc-margin-normal);
+    /* Styled as otc-panel-flat */
+}
+
+.character-item {
+    padding: var(--otc-padding-small);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    min-height: 40px;
+    border-bottom: 1px solid var(--otc-border-color);
+    background: var(--otc-background-flat);
+    color: var(--otc-text-primary);
+    font-family: var(--otc-font-primary);
+    font-size: var(--otc-font-size-normal);
+}
+
+/* Styles for disabled elements when player is online */
+.character-item.disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
+    background: var(--otc-background-disabled);
+}
+
+.character-item.disabled:hover {
+    background: var(--otc-background-disabled);
+}
+
+/* Styles for disabled fields */
+.form-group input:disabled,
+.form-group input[disabled] {
+    background: var(--otc-background-disabled);
+    color: var(--otc-text-disabled);
+    cursor: not-allowed;
+    opacity: 0.7;
+}
+
+.form-group input:disabled::placeholder {
+    color: var(--otc-text-disabled);
+}
+
+/* Styles for disabled checkbox */
+.remember-me input[type="checkbox"]:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* Styles for disabled buttons */
+.otc-button:disabled,
+.otc-button[disabled] {
+    background: var(--otc-background-disabled);
+    color: var(--otc-text-disabled);
+    cursor: not-allowed;
+    opacity: 0.7;
+    border-color: var(--otc-border-disabled);
+}
+
+.otc-button:disabled:hover,
+.otc-button[disabled]:hover {
+    background: var(--otc-background-disabled);
+    color: var(--otc-text-disabled);
+    border-color: var(--otc-border-disabled);
+}
+
+.character-item:hover {
+    background: var(--otc-button-hover);
+}
+
+.character-item.selected {
+    background: var(--otc-button-pressed);
+    box-shadow: inset 1px 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+.character-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.character-name {
+    font-weight: bold;
+    font-size: var(--otc-font-size-normal);
+    margin: 0;
+    color: var(--otc-text-primary);
+}
+
+.character-details {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--otc-padding-small);
+    align-items: center;
+    font-size: var(--otc-font-size-small);
+    color: var(--otc-text-disabled);
+}
+
+.character-world {
+    font-weight: normal;
+    color: var(--otc-text-primary);
+}
+
+.character-level {
+    color: var(--otc-text-disabled);
+}
+
+.character-vocation {
+    color: var(--otc-text-disabled);
+    font-style: normal;
+}
+
+.character-outfit {
+    width: 24px;
+    height: 24px;
+    background-color: var(--otc-border-color);
+    border-radius: var(--otc-border-radius);
+    margin-left: var(--otc-padding-normal);
+    border: 1px solid var(--otc-border-color);
+}
+
+.empty-state {
+    text-align: center;
+    padding: var(--otc-padding-normal) * 2;
+    color: var(--otc-text-disabled);
+    font-style: italic;
+}
+
+.account-status {
+    margin-bottom: var(--otc-margin-normal);
+}
+
+.account-status h4 {
+    margin: 0 0 var(--otc-margin-small) 0;
+    color: var(--otc-text-primary);
+    font-size: var(--otc-font-size-large);
+    font-family: var(--otc-font-primary);
+}
+
+.account-status p {
+    margin: var(--otc-margin-small) 0;
+    color: var(--otc-text-primary);
+    font-size: var(--otc-font-size-normal);
+    font-family: var(--otc-font-primary);
+}
+
+
+
+/* Different styles for account status */
+.premium-status {
+    color: #FFD700 !important; /* Gold */
+    font-weight: bold;
+    text-shadow: 0 0 5px rgba(255, 215, 0, 0.5);
+    background: linear-gradient(45deg, #FFD700, #FFA500);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    animation: premium-glow 2s ease-in-out infinite alternate;
+}
+
+.free-status {
+    color: var(--otc-text-disabled) !important;
+    font-style: italic;
+    opacity: 0.8;
+}
+
+@keyframes premium-glow {
+    from {
+        text-shadow: 0 0 5px rgba(255, 215, 0, 0.5);
+    }
+    to {
+        text-shadow: 0 0 10px rgba(255, 215, 0, 0.8), 0 0 20px rgba(255, 215, 0, 0.3);
+    }
+}
+

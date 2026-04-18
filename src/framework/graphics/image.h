@@ -35,6 +35,7 @@ public:
     static ImagePtr loadPNG(const std::string& file);
 
     void savePNG(const std::string& fileName);
+    std::string encodePNG();
 
     void overwriteMask(const Color& maskedColor, const Color& insideColor = Color::white, const Color& outsideColor = Color::alpha);
     void blit(const Point& dest, const ImagePtr& other);

@@ -17,7 +17,8 @@
       "boost-uuid",
       "lua51",
       "opengl",
-      "glew"
+      "glew",
+      "angle"
     ],
     "builtin-baseline": "787fe1418ea968913cc6daf11855ffd8b0b5e9d4"
   }

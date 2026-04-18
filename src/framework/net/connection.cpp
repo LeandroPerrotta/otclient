@@ -28,7 +28,7 @@
 #include <boost/asio.hpp>
 #include <memory>
 
-asio::io_service g_ioService;
+asio::io_context g_ioService;
 std::list<std::shared_ptr<asio::streambuf>> Connection::m_outputStreams;
 
 Connection::Connection() :
@@ -52,8 +52,8 @@ Connection::~Connection()
 
 void Connection::poll()
 {
-    // reset must always be called prior to poll
-    g_ioService.reset();
+    // restart must always be called prior to poll (io_context replaces io_service::reset)
+    g_ioService.restart();
     g_ioService.poll();
 }
 
@@ -97,9 +97,8 @@ void Connection::connect(const std::string& host, uint16 port, const std::functi
     m_error.clear();
     m_connectCallback = connectCallback;
 
-    asio::ip::tcp::resolver::query query(host, stdext::unsafe_cast<std::string>(port));
-    m_resolver.async_resolve(query, [connection = asConnection()] (auto error, auto iterator) {
-        connection->onResolve(error, iterator);
+    m_resolver.async_resolve(host, stdext::unsafe_cast<std::string>(port), [connection = asConnection()] (auto error, auto results) {
+        connection->onResolve(error, results);
     });
 
     m_readTimer.cancel();
@@ -109,9 +108,9 @@ void Connection::connect(const std::string& host, uint16 port, const std::functi
     });
 }
 
-void Connection::internal_connect(asio::ip::basic_resolver<asio::ip::tcp>::iterator endpointIterator)
+void Connection::internal_connect(const asio::ip::tcp::resolver::results_type& results)
 {
-    m_socket.async_connect(*endpointIterator, [connection = asConnection()] (auto error) {
+    asio::async_connect(m_socket, results, [connection = asConnection()] (auto error, auto) {
         connection->onConnect(error);
     });
 
@@ -220,7 +219,7 @@ void Connection::read_some(const RecvCallback& callback)
     });
 }
 
-void Connection::onResolve(const boost::system::error_code& error, asio::ip::basic_resolver<asio::ip::tcp>::iterator endpointIterator)
+void Connection::onResolve(const boost::system::error_code& error, const asio::ip::tcp::resolver::results_type& results)
 {
     m_readTimer.cancel();
 
@@ -228,7 +227,7 @@ void Connection::onResolve(const boost::system::error_code& error, asio::ip::bas
         return;
 
     if(!error)
-        internal_connect(endpointIterator);
+        internal_connect(results);
     else
         handleError(error);
 }
@@ -293,7 +292,7 @@ void Connection::onRecv(const boost::system::error_code& error, size_t recvSize)
     if(m_connected) {
         if(!error) {
             if(m_recvCallback) {
-                const char* header = boost::asio::buffer_cast<const char*>(m_inputStream.data());
+                const char* header = static_cast<const char*>(m_inputStream.data().data());
                 m_recvCallback((uint8*)header, recvSize);
             }
         } else
@@ -329,7 +328,7 @@ int Connection::getIp()
     boost::system::error_code error;
     const boost::asio::ip::tcp::endpoint ip = m_socket.remote_endpoint(error);
     if(!error)
-        return boost::asio::detail::socket_ops::host_to_network_long(ip.address().to_v4().to_ulong());
+        return boost::asio::detail::socket_ops::host_to_network_long(ip.address().to_v4().to_uint());
 
     g_logger.error("Getting remote ip");
     return 0;

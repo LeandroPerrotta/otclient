@@ -1,0 +1,4 @@
+Panel
+  UICEFWebView
+    id: demoWebView
+    anchors.fill: parent

@@ -8,9 +8,19 @@
 # add framework cmake modules
 set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/cmake;${CMAKE_MODULE_PATH}")
 
+# Don't reset framework_LIBRARIES - it may contain values from parent CMakeLists.txt
+if(NOT DEFINED framework_LIBRARIES)
 set(framework_LIBRARIES "")
+endif()
+# Don't reset framework_DEFINITIONS - it may contain values from parent CMakeLists.txt
+if(NOT DEFINED framework_DEFINITIONS)
 set(framework_DEFINITIONS "")
-set(framework_INCLUDE_DIRS "${CMAKE_CURRENT_LIST_DIR}/..")
+endif()
+# Don't reset framework_INCLUDE_DIRS - it may contain values from parent CMakeLists.txt
+if(NOT DEFINED framework_INCLUDE_DIRS)
+    set(framework_INCLUDE_DIRS "")
+endif()
+list(APPEND framework_INCLUDE_DIRS "${CMAKE_CURRENT_LIST_DIR}/..")
 set(framework_SOURCES ${framework_SOURCES}
     ${CMAKE_CURRENT_LIST_DIR}/const.h
     ${CMAKE_CURRENT_LIST_DIR}/global.h
@@ -199,6 +209,19 @@ if(WIN32)
 endif()
 set(Boost_USE_MULTITHREADED ON)
 set(Boost_USE_STATIC_LIBS ${USE_STATIC_LIBS})
+# Force legacy FindBoost module (Boost 1.88+ provides cmake config files that
+# CMake 3.31+ prefers, but they split components into separate packages)
+set(Boost_NO_BOOST_CMAKE ON)
+# Boost 1.88 ships without the boost_thread .so symlink on Ubuntu 25.04+;
+# fall back to the versioned library when the unversioned symlink is absent.
+if(UNIX AND NOT APPLE AND NOT Boost_THREAD_LIBRARY)
+    file(GLOB _boost_thread_libs "/usr/lib/${CMAKE_LIBRARY_ARCHITECTURE}/libboost_thread.so.*")
+    if(_boost_thread_libs)
+        list(GET _boost_thread_libs 0 _boost_thread_lib)
+        set(Boost_THREAD_LIBRARY "${_boost_thread_lib}" CACHE FILEPATH "Boost thread library" FORCE)
+        set(Boost_THREAD_LIBRARY_RELEASE "${_boost_thread_lib}" CACHE FILEPATH "Boost thread library (release)" FORCE)
+    endif()
+endif()
 find_package(Boost 1.48.0 COMPONENTS ${REQUIRED_BOOST_COMPONENTS} REQUIRED)
 
 #find lua
@@ -316,7 +339,9 @@ if(WIN32)
         set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -mthreads")
     endif()
 
-    set(framework_DEFINITIONS ${framework_DEFINITIONS} -D_WIN32_WINNT=0x0501 -DWIN32)
+    # Update Windows version for modern GPU detection (was 0x0501 = WinXP)
+    # 0x0A00 = Windows 10, better for CEF GPU detection in VMs
+    set(framework_DEFINITIONS ${framework_DEFINITIONS} -D_WIN32_WINNT=0x0A00 -DWIN32)
     #set(CMAKE_CXX_LINK_FLAGS "${CMAKE_CXX_LINK_FLAGS} -Wl,--large-address-aware") # strip all debug information
     set(SYSTEM_LIBRARIES "")
 else()
@@ -359,6 +384,20 @@ if(FRAMEWORK_GRAPHICS)
             SET(OPENGL_LIBRARIES GL)
         else()
             find_package(OpenGL REQUIRED)
+            if(UNIX AND NOT APPLE)
+                find_package(EGL REQUIRED)
+                set(framework_INCLUDE_DIRS ${framework_INCLUDE_DIRS} ${EGL_INCLUDE_DIR})
+                # When CEF is enabled, prefer the Angle libEGL.so shipped inside cef/.
+                # CEF's GPU subprocess uses Angle/Swiftshader EGL; mixing the system NVIDIA
+                # libEGL.so.1 in the main process produces "Unable to initialize SkSurface"
+                # because GPU handles passed across processes are incompatible.
+                # CMake >= 3.16 keeps absolute paths in the link line (CMP0060 NEW), which
+                # resolves to /usr/lib/.../libEGL.so (NVIDIA), so we override it explicitly.
+                if(USE_CEF AND EXISTS "${CMAKE_SOURCE_DIR}/cef/libEGL.so")
+                    set(EGL_LIBRARY "${CMAKE_SOURCE_DIR}/cef/libEGL.so")
+                endif()
+                set(framework_LIBRARIES ${framework_LIBRARIES} ${EGL_LIBRARY})
+            endif()
         endif()
         find_package(GLEW REQUIRED)
         set(framework_LIBRARIES ${framework_LIBRARIES} ${GLEW_LIBRARY} ${OPENGL_LIBRARIES})
@@ -613,5 +652,12 @@ if(EXTRA_LIBS)
     set(framework_LIBRARIES ${framework_LIBRARIES} ${EXTRA_LIBS})
 endif()
 
+# Add DirectX 11 libraries for CEF accelerated paint on Windows
+if(WIN32 AND USE_CEF)
+    set(framework_LIBRARIES ${framework_LIBRARIES} d3d11 dxgi d3dcompiler)
+    message(STATUS "Added DirectX 11 libraries to framework for CEF accelerated paint")
+endif()
+
 include_directories(${framework_INCLUDE_DIRS})
+message(STATUS "framework_DEFINITIONS: ${framework_DEFINITIONS}")
 add_definitions(${framework_DEFINITIONS})

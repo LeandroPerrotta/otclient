@@ -36,6 +36,11 @@
 #include <framework/sound/soundmanager.h>
 #endif
 
+#ifdef USE_CEF
+#include "include/cef_app.h"
+#include <cef/ui/uicefwebview.h>
+#endif
+
 GraphicalApplication g_app;
 
 void GraphicalApplication::init(std::vector<std::string>& args)
@@ -130,6 +135,11 @@ void GraphicalApplication::run()
     while(!m_stopping) {
         // poll all events before rendering
         poll();
+
+#ifdef USE_CEF
+        // With multi_threaded_message_loop = true, CEF manages its own message loop and rendering
+        // No manual intervention needed in main loop
+#endif
 
         if(g_window.isVisible()) {
             // the screen consists of two panes

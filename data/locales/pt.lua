@@ -427,6 +427,32 @@ locale = {
     ["Your character mana is %d out of %d."] = "A mana do seu personagem é %d de %d.",
     ["Your connection has been lost. (err: %d)"] = "A sua conexão foi perdida. (err: %d)",
     ["Your Money"] = "Seu dinheiro",
+
+    -- Traduções para o sistema de login HTTP
+    ["Characters"] = "Personagens",
+    ["Email or Account ID"] = "Email ou ID da Conta",
+    ["Remember me"] = "Lembrar de mim",
+    ["Select a character to enter the game"] = "Selecione um personagem para entrar no jogo",
+    ["Enter with your credentials to access the game"] = "Entre com suas credenciais para acessar o jogo",
+    ["Back"] = "Voltar",
+    ["Connecting..."] = "Conectando...",
+    ["Enter the Game"] = "Entrar no Jogo",
+    ["Status"] = "Status",
+    ["Normal"] = "Normal",
+    ["Normal Account"] = "Conta Normal",
+    ["Free account"] = "Conta gratuita",
+    
+    ["Premium Account"] = "Conta Premium",
+    ["days"] = "dias",
+    ["Please fill in all fields."] = "Por favor, preencha todos os campos.",
+    ["Email or password incorrect"] = "Email ou senha incorretos",
+    ["Connection error"] = "Erro de conexão",
+    ["Error connecting to game"] = "Erro ao conectar ao jogo",
+    ["No characters found"] = "Nenhum personagem encontrado",
+    ["Level"] = "Nível",
+    ["N/A"] = "N/A",
+    ["Enter your email or account ID"] = "Digite seu email ou ID da conta",
+    ["Enter your password"] = "Digite sua senha",
   }
 }
 

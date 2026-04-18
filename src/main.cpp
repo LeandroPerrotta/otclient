@@ -24,9 +24,25 @@
 #include <framework/core/resourcemanager.h>
 #include <framework/luaengine/luainterface.h>
 #include <client/client.h>
+#include <vector>
+
+#ifdef USE_CEF
+#include <cef/core/cef_init.h>
+#include <cef/core/cef_helper.h>
+#endif
 
 int main(int argc, const char* argv[])
 {
+#ifdef USE_CEF
+    // Initialize CEF FIRST, before anything else
+    if (!InitializeCEF(argc, argv)) {
+        cef::logMessage("InitializeCEF returned FALSE - exiting");
+        return 1;
+    }
+
+    cef::logMessage("InitializeCEF returned TRUE - continuing with application startup");
+#endif
+
     std::vector<std::string> args(argv, argv + argc);
 
     // setup application name and version
@@ -48,11 +64,17 @@ int main(int argc, const char* argv[])
     // the run application main loop
     g_app.run();
 
+#ifdef USE_CEF
+    // Shutdown CEF BEFORE terminating the application
+    ShutdownCEF();
+#endif
+
     // unload modules
     g_app.deinit();
 
     // terminate everything and free memory
     g_client.terminate();
     g_app.terminate();
+
     return 0;
 }

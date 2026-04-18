@@ -1,0 +1,34 @@
+MainWindow
+  id: webViewDemoWindow
+  !text: tr('WebView Demo')
+  size: 600 400
+  @onEscape: modules.client_webviewdemo.toggle()
+
+  TabBar
+    id: webViewTabBar
+    anchors.top: parent.top
+    anchors.left: parent.left
+    anchors.right: parent.right
+    height: 24
+
+  Panel
+    id: webViewTabContent
+    anchors.top: webViewTabBar.bottom
+    anchors.left: parent.left
+    anchors.right: parent.right
+    anchors.bottom: parent.bottom
+
+  ResizeBorder
+    id: bottomResizeBorder
+    anchors.bottom: parent.bottom
+    anchors.left: parent.left
+    anchors.right: parent.right
+    enabled: true
+
+  ResizeBorder
+    id: rightResizeBorder
+    anchors.right: parent.right
+    anchors.top: parent.top
+    anchors.bottom: parent.bottom
+    enabled: true
+

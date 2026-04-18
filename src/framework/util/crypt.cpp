@@ -52,7 +52,11 @@ Crypt::Crypt()
     mpz_init(m_e);
     mpz_init(m_n);
 #else
+    // Suppress OpenSSL 3.0 deprecation warning for RSA_new
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
     m_rsa = RSA_new();
+#pragma GCC diagnostic pop
 #endif
 }
 
@@ -65,7 +69,11 @@ Crypt::~Crypt()
     mpz_clear(m_d);
     mpz_clear(m_e);
 #else
+    // Suppress OpenSSL 3.0 deprecation warning for RSA_free
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
     RSA_free(m_rsa);
+#pragma GCC diagnostic pop
 #endif
 }
 
@@ -251,10 +259,14 @@ void Crypt::rsaSetPublicKey(const std::string& n, const std::string& e)
         m_rsa->_method_mod_n = nullptr;
     }
 #else
+    // Suppress OpenSSL 3.0 deprecation warnings for RSA functions
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
     BIGNUM *bn = nullptr, *be = nullptr;
     BN_dec2bn(&bn, n.c_str());
     BN_dec2bn(&be, e.c_str());
     RSA_set0_key(m_rsa, bn, be, nullptr);
+#pragma GCC diagnostic pop
 #endif
 #endif
 }
@@ -283,12 +295,16 @@ void Crypt::rsaSetPrivateKey(const std::string& p, const std::string& q, const s
         m_rsa->_method_mod_q = nullptr;
     }
 #else
+    // Suppress OpenSSL 3.0 deprecation warnings for RSA functions
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
     BIGNUM *bp = nullptr, *bq = nullptr, *bd = nullptr;
     BN_dec2bn(&bp, p.c_str());
     BN_dec2bn(&bq, q.c_str());
     BN_dec2bn(&bd, d.c_str());
     RSA_set0_key(m_rsa, nullptr, nullptr, bd);
     RSA_set0_factors(m_rsa, bp, bq);
+#pragma GCC diagnostic pop
 #endif
 #endif
 }
@@ -316,7 +332,11 @@ bool Crypt::rsaEncrypt(unsigned char *msg, int size)
 
     return true;
 #else
+    // Suppress OpenSSL 3.0 deprecation warning for RSA_public_encrypt
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
     return RSA_public_encrypt(size, msg, msg, m_rsa, RSA_NO_PADDING) != -1;
+#pragma GCC diagnostic pop
 #endif
 }
 
@@ -343,7 +363,11 @@ bool Crypt::rsaDecrypt(unsigned char *msg, int size)
 
     return true;
 #else
+    // Suppress OpenSSL 3.0 deprecation warning for RSA_private_decrypt
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
     return RSA_private_decrypt(size, msg, msg, m_rsa, RSA_NO_PADDING) != -1;
+#pragma GCC diagnostic pop
 #endif
 }
 
@@ -353,6 +377,10 @@ int Crypt::rsaGetSize()
     size_t count = (mpz_sizeinbase(m_n, 2) + 7) / 8;
     return ((int)count / 128) * 128;
 #else
+    // Suppress OpenSSL 3.0 deprecation warning for RSA_size
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
     return RSA_size(m_rsa);
+#pragma GCC diagnostic pop
 #endif
 }

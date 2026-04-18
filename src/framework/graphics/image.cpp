@@ -77,6 +77,13 @@ void Image::savePNG(const std::string& fileName)
     fin->close();
 }
 
+std::string Image::encodePNG()
+{
+    std::stringstream data;
+    save_png(data, m_size.width(), m_size.height(), 4, (unsigned char*)getPixelData());
+    return data.str();
+}
+
 void Image::overwriteMask(const Color& maskedColor, const Color& insideColor, const Color& outsideColor)
 {
     assert(m_bpp == 4);

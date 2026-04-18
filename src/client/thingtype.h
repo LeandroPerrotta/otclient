@@ -130,6 +130,7 @@ public:
 
     void serialize(const FileStreamPtr& fin);
     void exportImage(std::string fileName);
+    ImagePtr toImageFrame(int xPattern, int yPattern, int zPattern, int animationPhase);
 
     void draw(const Point& dest, float scaleFactor, int layer, int xPattern, int yPattern, int zPattern, int animationPhase, LightView *lightView = nullptr);
 
